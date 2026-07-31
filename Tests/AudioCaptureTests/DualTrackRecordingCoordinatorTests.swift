@@ -8,7 +8,11 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         let system = FakeTrackCapture(source: .system)
         let coordinator = DualTrackRecordingCoordinator(
             microphoneCapture: microphone,
-            systemCapture: system
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
         )
         let directory = testDirectory()
         defer {
@@ -57,7 +61,11 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         )
         let coordinator = DualTrackRecordingCoordinator(
             microphoneCapture: microphone,
-            systemCapture: system
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
         )
 
         let directory = testDirectory()
@@ -93,7 +101,11 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         )
         let coordinator = DualTrackRecordingCoordinator(
             microphoneCapture: microphone,
-            systemCapture: system
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
         )
 
         let directory = testDirectory()
@@ -117,6 +129,121 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(microphoneStops, 1)
     }
 
+    func testEstimatesWorstCaseExpectedSessionStorage() {
+        let configuration = RecordingDiskSpaceConfiguration(
+            expectedDuration: 60 * 60,
+            minimumFreeSpaceReserveBytes: 100
+        )
+
+        XCTAssertEqual(
+            configuration.estimatedRecordingBytes,
+            1_152_000_000
+        )
+        XCTAssertEqual(
+            configuration.requiredFreeSpaceBeforeRecordingBytes,
+            1_152_000_100
+        )
+        let cappedConfiguration = RecordingDiskSpaceConfiguration(
+            expectedDuration: .greatestFiniteMagnitude,
+            minimumFreeSpaceReserveBytes: .max
+        )
+        XCTAssertEqual(cappedConfiguration.estimatedRecordingBytes, .max)
+        XCTAssertEqual(
+            cappedConfiguration.requiredFreeSpaceBeforeRecordingBytes,
+            .max
+        )
+    }
+
+    func testRefusesToStartBeforeEitherTrackWhenSpaceIsInsufficient()
+        async
+    {
+        let microphone = FakeTrackCapture(source: .microphone)
+        let system = FakeTrackCapture(source: .system)
+        let configuration = RecordingDiskSpaceConfiguration(
+            expectedDuration: 60,
+            minimumFreeSpaceReserveBytes: 1_000,
+            monitoringInterval: .seconds(3_600)
+        )
+        let required = configuration.requiredFreeSpaceBeforeRecordingBytes
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: required - 1
+            ),
+            diskSpaceConfiguration: configuration
+        )
+
+        do {
+            _ = try await coordinator.startRecording(in: testDirectory())
+            XCTFail("Expected disk-space preflight to refuse recording.")
+        } catch let error as AudioCaptureError {
+            XCTAssertEqual(
+                error,
+                .insufficientRecordingDiskSpace(
+                    requiredBytes: required,
+                    availableBytes: required - 1
+                )
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let microphoneStarts = await microphone.startCount
+        let systemStarts = await system.startCount
+        XCTAssertEqual(microphoneStarts, 0)
+        XCTAssertEqual(systemStarts, 0)
+    }
+
+    func testMonitoringFloorStopsAndFinalizesBothTracks() async throws {
+        let microphone = FakeTrackCapture(source: .microphone)
+        let system = FakeTrackCapture(source: .system)
+        let provider = MutableFreeSpaceProvider(availableBytes: 10_000)
+        let configuration = RecordingDiskSpaceConfiguration(
+            expectedDuration: 0,
+            minimumFreeSpaceReserveBytes: 1_000,
+            monitoringInterval: .seconds(3_600)
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: provider,
+            diskSpaceConfiguration: configuration
+        )
+        let directory = testDirectory()
+        defer {
+            removeTestDirectory(directory)
+        }
+        _ = try await coordinator.startRecording(in: directory)
+        await provider.setAvailableBytes(1_000)
+
+        let result = try await coordinator.checkAvailableDiskSpace()
+
+        XCTAssertEqual(
+            result?.stopReason,
+            .lowDiskSpace(availableBytes: 1_000, reserveBytes: 1_000)
+        )
+        let microphoneStops = await microphone.stopCount
+        let systemStops = await system.stopCount
+        XCTAssertEqual(microphoneStops, 1)
+        XCTAssertEqual(systemStops, 1)
+        let state = await coordinator.state
+        guard case let .stopped(stoppedResult) = state else {
+            return XCTFail("Expected a clean stopped state.")
+        }
+        XCTAssertEqual(stoppedResult, result)
+    }
+
+    private func testDiskConfiguration()
+        -> RecordingDiskSpaceConfiguration
+    {
+        RecordingDiskSpaceConfiguration(
+            expectedDuration: 0,
+            minimumFreeSpaceReserveBytes: 0,
+            monitoringInterval: .seconds(3_600)
+        )
+    }
+
     private func testDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(
             "ScribeDualTrackTests-\(UUID().uuidString)",
@@ -133,6 +260,22 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         } catch {
             XCTFail("Unable to remove test directory: \(error)")
         }
+    }
+}
+
+private actor MutableFreeSpaceProvider: RecordingFreeSpaceProviding {
+    private var availableBytes: Int64
+
+    init(availableBytes: Int64) {
+        self.availableBytes = availableBytes
+    }
+
+    func availableCapacity(at _: URL) -> Int64 {
+        availableBytes
+    }
+
+    func setAvailableBytes(_ availableBytes: Int64) {
+        self.availableBytes = availableBytes
     }
 }
 

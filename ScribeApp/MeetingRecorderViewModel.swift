@@ -70,6 +70,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private var liveTranscriptionPipeline:
         LiveTranscriptionPipeline?
     private var stateMonitorTask: Task<Void, Never>?
+    private var handledAutomaticStopSessionDirectory: URL?
 
     init() {
         let microphonePermissionAuthorizer =
@@ -241,6 +242,14 @@ final class MeetingRecorderViewModel: ObservableObject {
         case .stopping:
             return "Finishing both WAV files"
         case let .stopped(result):
+            switch result.stopReason {
+            case .lowDiskSpace:
+                return "Both tracks saved before storage filled"
+            case .diskSpaceMonitoringFailed:
+                return "Both tracks saved after storage monitoring failed"
+            case .requested:
+                break
+            }
             let dropped = result.microphone.droppedSampleCount
                 + result.system.droppedSampleCount
             return dropped == 0
@@ -390,6 +399,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         liveTranscriptionPipeline = nil
         liveTranscriptionPipelineState = .idle
         liveTranscriptRows = []
+        handledAutomaticStopSessionDirectory = nil
         Task {
             do {
                 let sessionDirectory = try makeSessionDirectory()
@@ -697,7 +707,11 @@ final class MeetingRecorderViewModel: ObservableObject {
                     guard let self else {
                         return
                     }
-                    captureState = await coordinator.state
+                    let observedCaptureState = await coordinator.state
+                    captureState = observedCaptureState
+                    await handleAutomaticStopIfNeeded(
+                        observedCaptureState
+                    )
                     microphoneCaptureState = await microphoneCapture.state
                     systemAudioCaptureState = await systemAudioCapture.state
                     if let liveTransport {
@@ -724,6 +738,56 @@ final class MeetingRecorderViewModel: ObservableObject {
                 self?.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func handleAutomaticStopIfNeeded(
+        _ observedState: DualTrackRecordingState
+    ) async {
+        guard case let .stopped(result) = observedState else {
+            return
+        }
+        guard result.stopReason != .requested else {
+            return
+        }
+        let sessionDirectory = result.paths.sessionDirectory
+        guard handledAutomaticStopSessionDirectory != sessionDirectory else {
+            return
+        }
+
+        handledAutomaticStopSessionDirectory = sessionDirectory
+        isBusy = true
+        microphoneURL = result.microphone.outputURL
+        systemURL = result.system.outputURL
+        transcriptSegments = []
+        transcriptionState = .idle
+        var messages: [String] = []
+        switch result.stopReason {
+        case let .lowDiskSpace(availableBytes, reserveBytes):
+            let available = ByteCountFormatter.string(
+                fromByteCount: availableBytes,
+                countStyle: .file
+            )
+            let reserve = ByteCountFormatter.string(
+                fromByteCount: reserveBytes,
+                countStyle: .file
+            )
+            messages.append(
+                "Recording stopped safely because free space reached the configured reserve (\(available) available; \(reserve) reserved)."
+            )
+        case let .diskSpaceMonitoringFailed(message):
+            messages.append(
+                "Recording stopped safely because free space could no longer be checked: \(message)"
+            )
+        case .requested:
+            break
+        }
+        if let liveProcessingMessage = await finishAndDiscardLiveProcessing() {
+            messages.append(liveProcessingMessage)
+        }
+        errorMessage = messages.isEmpty
+            ? nil
+            : messages.joined(separator: " ")
+        isBusy = false
     }
 
     private func makeSessionDirectory() throws -> URL {

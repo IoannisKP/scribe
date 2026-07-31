@@ -26,6 +26,8 @@ recording, and the complete first-run permission experience:
 - an explicit system-audio permission check that briefly starts a Core Audio
   tap, discards its samples, and writes no file;
 - visible per-track starting, recording, recovery, stopping, and failure state;
+- disk-space preflight and monitoring that finalize both WAVs before the
+  configured safety reserve is consumed;
 - a working two-track record/stop UI that reveals both WAVs in Finder;
 - unit tests for FIFO behavior, planar mixdown, permission paths, resampling a
   known sine sweep, aggregate composition, partial-failure coordination, and
@@ -280,6 +282,15 @@ Microphone recordings are stored under:
 The JSON file contains only canonical format metadata, relative audio paths,
 and the two track-start offsets. It contains no transcript or captured audio.
 
+Before capture starts, Scribe checks the recording volume against a configurable
+expected duration (two hours by default) and a configurable 512 MiB free-space
+reserve. The estimate is deliberately conservative: 320,000 bytes per second
+allows for both durable Int16 tracks and worst-case simultaneous raw and speech
+window Float32 spools. That is about 1.15 GB per hour while the durable WAVs
+alone total about 230 MB per hour. During capture Scribe checks every five
+seconds; reaching the reserve stops both tracks through their normal finalizers.
+Failure to query free space also triggers the same safe stop.
+
 While recording, Milestone 3A creates source-specific transient files under:
 
 ```text
@@ -299,6 +310,12 @@ Milestone 3B also creates speech-window records under:
 Those records contain only VAD-selected canonical samples and window metadata.
 They bound memory until live ASR is attached in Milestone 3C and are removed
 when the session stops. They do not replace the WAV files.
+
+The source checkout can itself occupy several gigabytes because SwiftPM keeps a
+FluidAudio checkout and compiled dependencies under `.build`; Xcode keeps a
+separate DerivedData cache outside the checkout. Those caches can grow after
+new configurations or toolchain versions are built. Model downloads and meeting
+sessions live under Application Support, not inside the source checkout.
 
 WAV tests write only to a unique temporary directory and remove it after each
 test.
