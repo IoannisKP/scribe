@@ -206,8 +206,7 @@ size_t scribe_float_ring_buffer_write_audio_buffer_list_mix(
     ) {
         const AudioBuffer *audio_buffer = &buffer_list->mBuffers[buffer_index];
         if (
-            audio_buffer->mData == NULL
-            || audio_buffer->mNumberChannels == 0
+            audio_buffer->mNumberChannels == 0
             || audio_buffer->mDataByteSize < sizeof(float)
         ) {
             continue;

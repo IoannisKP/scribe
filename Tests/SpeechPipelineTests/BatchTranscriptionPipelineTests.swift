@@ -154,6 +154,33 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
         )
     }
 
+    func testHeaderOnlySystemTrackIsAValidSilentMeetingSide()
+        async throws
+    {
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        try await writeDualTrackSession(
+            directory: directory,
+            microphoneSamples: [0.1, 0.2, 0.3, 0.4],
+            systemSamples: [],
+            systemStartTime: 0.25
+        )
+        let engine = LifecycleMockEngine(
+            preferredWindowDuration: 1,
+            preferredOverlap: 0
+        )
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
+
+        let segments = try await pipeline.transcribeSession(at: directory)
+        let finalState = await pipeline.state
+
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.source, .microphone)
+        XCTAssertEqual(finalState, .finished(segmentCount: 1))
+    }
+
     private func writeDualTrackSession(
         directory: URL,
         microphoneSamples: [Float],

@@ -85,6 +85,11 @@ public final class FloatRingBuffer: @unchecked Sendable {
     }
 
     /// Mixes Float32 buffers, including interleaved layouts, to mono.
+    ///
+    /// Core Audio reports disabled input streams with a nil data pointer while
+    /// retaining the byte count that would have been rendered. Those frames
+    /// are committed as silence so source sample indices remain wall-clock
+    /// linear through system-rendering gaps.
     @discardableResult
     public func writeAudioBufferListMix(
         _ bufferList: UnsafePointer<AudioBufferList>

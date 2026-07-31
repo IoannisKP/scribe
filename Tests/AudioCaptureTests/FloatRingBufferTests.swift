@@ -146,6 +146,32 @@ final class FloatRingBufferTests: XCTestCase {
         XCTAssertEqual(output, [0, 0.5, 1])
     }
 
+    func testDisabledCoreAudioBufferWritesReportedFramesAsSilence()
+        throws
+    {
+        let buffer = try FloatRingBuffer(capacity: 8)
+        var audioBufferList = AudioBufferList(
+            mNumberBuffers: 1,
+            mBuffers: AudioBuffer(
+                mNumberChannels: 1,
+                mDataByteSize: 8 * UInt32(MemoryLayout<Float>.size),
+                mData: nil
+            )
+        )
+
+        let written = withUnsafePointer(to: &audioBufferList) {
+            buffer.writeAudioBufferListMix($0)
+        }
+
+        XCTAssertEqual(written, 8)
+        var output = Array(repeating: Float.nan, count: 8)
+        XCTAssertEqual(
+            output.withUnsafeMutableBufferPointer { buffer.read(into: $0) },
+            8
+        )
+        XCTAssertEqual(output, Array(repeating: 0, count: 8))
+    }
+
     func testClearDiscardsBufferedSamplesWhileIdle() throws {
         let buffer = try FloatRingBuffer(capacity: 4)
         let input: [Float] = [1, 2, 3]

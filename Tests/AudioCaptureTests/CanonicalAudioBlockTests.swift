@@ -1,4 +1,5 @@
 @testable import AudioCapture
+import CoreAudioTypes
 import Foundation
 import XCTest
 
@@ -72,12 +73,159 @@ final class CanonicalAudioBlockTests: XCTestCase {
         )
     }
 
+    func testThirtySecondSystemRenderGapKeepsTimelineAligned()
+        async throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "ScribeSystemGapTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let microphoneRing = try FloatRingBuffer(capacity: 20_000)
+        let systemRing = try FloatRingBuffer(capacity: 20_000)
+        let microphoneSink = CanonicalBlockCollector()
+        let systemSink = CanonicalBlockCollector()
+        let microphoneConsumer = try CanonicalAudioFileConsumer(
+            source: .microphone,
+            ringBuffer: microphoneRing,
+            inputSampleRate: CanonicalAudioFormat.sampleRate,
+            outputURL: directory.appendingPathComponent("microphone.wav"),
+            liveSink: microphoneSink
+        )
+        let systemConsumer = try CanonicalAudioFileConsumer(
+            source: .system,
+            ringBuffer: systemRing,
+            inputSampleRate: CanonicalAudioFormat.sampleRate,
+            outputURL: directory.appendingPathComponent("system.wav"),
+            liveSink: systemSink
+        )
+        let samplesPerSecond = Int(CanonicalAudioFormat.sampleRate)
+        let microphoneSecond = Array(
+            repeating: Float(0.25),
+            count: samplesPerSecond
+        )
+        let systemSpeechSecond = Array(
+            repeating: Float(0.75),
+            count: samplesPerSecond
+        )
+
+        for second in 0..<32 {
+            XCTAssertEqual(
+                writeRender(microphoneSecond, to: microphoneRing),
+                samplesPerSecond
+            )
+            while try await microphoneConsumer.processAvailable() > 0 {}
+
+            let systemRender = second == 0 || second == 31
+                ? systemSpeechSecond
+                : nil
+            XCTAssertEqual(
+                writeRender(
+                    systemRender,
+                    silentFrameCount: samplesPerSecond,
+                    to: systemRing
+                ),
+                samplesPerSecond
+            )
+            while try await systemConsumer.processAvailable() > 0 {}
+        }
+        try await microphoneConsumer.finish()
+        try await systemConsumer.finish()
+
+        let microphoneBlocks = await microphoneSink.snapshot()
+        let systemBlocks = await systemSink.snapshot()
+        let expectedSampleCount = UInt64(32 * samplesPerSecond)
+        XCTAssertEqual(
+            microphoneBlocks.reduce(UInt64(0)) {
+                $0 + UInt64($1.samples.count)
+            },
+            expectedSampleCount
+        )
+        XCTAssertEqual(
+            systemBlocks.reduce(UInt64(0)) {
+                $0 + UInt64($1.samples.count)
+            },
+            expectedSampleCount
+        )
+        let postGapSampleIndex = UInt64(31 * samplesPerSecond)
+        let microphoneAfterGap = try XCTUnwrap(
+            microphoneBlocks.first {
+                $0.firstSampleIndex == postGapSampleIndex
+            }
+        )
+        let systemAfterGap = try XCTUnwrap(
+            systemBlocks.first {
+                $0.firstSampleIndex == postGapSampleIndex
+                    && $0.samples.contains { $0 != 0 }
+            }
+        )
+        let manifest = CaptureSessionManifest.dualTrack(
+            microphoneStartTime: 0,
+            systemStartTime: 0.375
+        )
+        let microphoneTimelineTime =
+            try XCTUnwrap(manifest.track(for: .microphone)?.startTime)
+            + microphoneAfterGap.startTime
+        let systemTimelineTime =
+            try XCTUnwrap(manifest.track(for: .system)?.startTime)
+            + systemAfterGap.startTime
+        XCTAssertEqual(microphoneTimelineTime, 31, accuracy: 0.000_001)
+        XCTAssertEqual(systemTimelineTime, 31.375, accuracy: 0.000_001)
+        XCTAssertEqual(
+            systemTimelineTime - microphoneTimelineTime,
+            0.375,
+            accuracy: 0.000_001
+        )
+    }
+
     private func write(
         _ samples: [Float],
         to ringBuffer: FloatRingBuffer
     ) -> Int {
         samples.withUnsafeBufferPointer {
             ringBuffer.write($0)
+        }
+    }
+
+    private func writeRender(
+        _ samples: [Float]?,
+        silentFrameCount: Int? = nil,
+        to ringBuffer: FloatRingBuffer
+    ) -> Int {
+        if var samples {
+            return samples.withUnsafeMutableBytes { bytes in
+                var bufferList = AudioBufferList(
+                    mNumberBuffers: 1,
+                    mBuffers: AudioBuffer(
+                        mNumberChannels: 1,
+                        mDataByteSize: UInt32(bytes.count),
+                        mData: bytes.baseAddress
+                    )
+                )
+                return withUnsafePointer(to: &bufferList) {
+                    ringBuffer.writeAudioBufferListMix($0)
+                }
+            }
+        }
+        let frameCount = silentFrameCount ?? 0
+        var bufferList = AudioBufferList(
+            mNumberBuffers: 1,
+            mBuffers: AudioBuffer(
+                mNumberChannels: 1,
+                mDataByteSize:
+                    UInt32(frameCount * MemoryLayout<Float>.size),
+                mData: nil
+            )
+        )
+        return withUnsafePointer(to: &bufferList) {
+            ringBuffer.writeAudioBufferListMix($0)
         }
     }
 }
