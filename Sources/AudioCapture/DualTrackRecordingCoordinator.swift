@@ -1,0 +1,205 @@
+import Foundation
+
+public struct DualTrackRecordingPaths: Equatable, Sendable {
+    public let sessionDirectory: URL
+    public let microphoneURL: URL
+    public let systemURL: URL
+    public let manifestURL: URL
+
+    public init(sessionDirectory: URL) {
+        self.sessionDirectory = sessionDirectory
+        self.microphoneURL = sessionDirectory.appendingPathComponent(
+            "microphone.wav",
+            isDirectory: false
+        )
+        self.systemURL = sessionDirectory.appendingPathComponent(
+            "system.wav",
+            isDirectory: false
+        )
+        self.manifestURL = sessionDirectory.appendingPathComponent(
+            CaptureSessionManifest.fileName,
+            isDirectory: false
+        )
+    }
+}
+
+public struct DualTrackCaptureResult: Equatable, Sendable {
+    public let paths: DualTrackRecordingPaths
+    public let microphone: AudioTrackCaptureResult
+    public let system: AudioTrackCaptureResult
+
+    public init(
+        paths: DualTrackRecordingPaths,
+        microphone: AudioTrackCaptureResult,
+        system: AudioTrackCaptureResult
+    ) {
+        self.paths = paths
+        self.microphone = microphone
+        self.system = system
+    }
+}
+
+public enum DualTrackRecordingState: Equatable, Sendable {
+    case idle
+    case starting(paths: DualTrackRecordingPaths)
+    case recording(paths: DualTrackRecordingPaths)
+    case stopping(paths: DualTrackRecordingPaths)
+    case stopped(result: DualTrackCaptureResult)
+    case failed(message: String, paths: DualTrackRecordingPaths?)
+
+    public var isActive: Bool {
+        switch self {
+        case .starting, .recording, .stopping:
+            true
+        case .idle, .stopped, .failed:
+            false
+        }
+    }
+}
+
+public actor DualTrackRecordingCoordinator {
+    public private(set) var state: DualTrackRecordingState = .idle
+
+    private let microphoneCapture: any AudioTrackCapturing
+    private let systemCapture: any AudioTrackCapturing
+    private var activePaths: DualTrackRecordingPaths?
+
+    public init(
+        microphoneCapture: any AudioTrackCapturing =
+            MicrophoneCaptureService(),
+        systemCapture: any AudioTrackCapturing =
+            SystemAudioCaptureService()
+    ) {
+        self.microphoneCapture = microphoneCapture
+        self.systemCapture = systemCapture
+    }
+
+    @discardableResult
+    public func startRecording(
+        in sessionDirectory: URL
+    ) async throws -> DualTrackRecordingPaths {
+        guard !state.isActive else {
+            throw AudioCaptureError.dualTrackStartFailed(
+                "A recording is already active."
+            )
+        }
+
+        let paths = DualTrackRecordingPaths(
+            sessionDirectory: sessionDirectory
+        )
+        activePaths = paths
+        state = .starting(paths: paths)
+        let clock = ContinuousClock()
+
+        do {
+            try await microphoneCapture.startRecording(
+                to: paths.microphoneURL
+            )
+        } catch {
+            activePaths = nil
+            state = .failed(
+                message: error.localizedDescription,
+                paths: paths
+            )
+            throw AudioCaptureError.dualTrackStartFailed(
+                error.localizedDescription
+            )
+        }
+        let microphoneStart = clock.now
+
+        do {
+            try await systemCapture.startRecording(to: paths.systemURL)
+        } catch {
+            var message = error.localizedDescription
+            do {
+                _ = try await microphoneCapture.stopCapture()
+            } catch {
+                message += " Stopping the microphone track also failed: \(error.localizedDescription)"
+            }
+            activePaths = nil
+            state = .failed(message: message, paths: paths)
+            throw AudioCaptureError.dualTrackStartFailed(message)
+        }
+        let systemStartTime = Self.timeInterval(
+            microphoneStart.duration(to: clock.now)
+        )
+
+        do {
+            let manifest = CaptureSessionManifest.dualTrack(
+                microphoneStartTime: 0,
+                systemStartTime: systemStartTime
+            )
+            try manifest.write(to: paths.sessionDirectory)
+        } catch {
+            var message =
+                "Writing capture-session timing metadata failed: \(error.localizedDescription)"
+            do {
+                _ = try await systemCapture.stopCapture()
+            } catch {
+                message += " Stopping system audio also failed: \(error.localizedDescription)"
+            }
+            do {
+                _ = try await microphoneCapture.stopCapture()
+            } catch {
+                message += " Stopping the microphone also failed: \(error.localizedDescription)"
+            }
+            activePaths = nil
+            state = .failed(message: message, paths: paths)
+            throw AudioCaptureError.dualTrackStartFailed(message)
+        }
+
+        state = .recording(paths: paths)
+        return paths
+    }
+
+    public func stopRecording() async throws -> DualTrackCaptureResult {
+        guard state.isActive, let paths = activePaths else {
+            throw AudioCaptureError.dualTrackStopFailed(
+                "There is no active two-track recording."
+            )
+        }
+
+        state = .stopping(paths: paths)
+        var failures: [String] = []
+        var systemResult: AudioTrackCaptureResult?
+        var microphoneResult: AudioTrackCaptureResult?
+
+        do {
+            systemResult = try await systemCapture.stopCapture()
+        } catch {
+            failures.append(error.localizedDescription)
+        }
+        do {
+            microphoneResult = try await microphoneCapture.stopCapture()
+        } catch {
+            failures.append(error.localizedDescription)
+        }
+
+        activePaths = nil
+        guard
+            failures.isEmpty,
+            let microphoneResult,
+            let systemResult
+        else {
+            let message = failures.isEmpty
+                ? "One or both capture services returned no result."
+                : failures.joined(separator: " ")
+            state = .failed(message: message, paths: paths)
+            throw AudioCaptureError.dualTrackStopFailed(message)
+        }
+
+        let result = DualTrackCaptureResult(
+            paths: paths,
+            microphone: microphoneResult,
+            system: systemResult
+        )
+        state = .stopped(result: result)
+        return result
+    }
+
+    private static func timeInterval(_ duration: Duration) -> TimeInterval {
+        let components = duration.components
+        return Double(components.seconds)
+            + Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+}
