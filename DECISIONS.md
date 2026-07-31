@@ -492,3 +492,20 @@ even when words identify a tighter interval; invent timing for untimed text.
 spoken. Word-derived bounds make microphone/system interleaving and visible row
 timestamps reflect speech while retaining a safe fallback for sparse backend
 results.
+
+## 2026-08-01 — Materialize documented Core Audio render gaps as silence
+
+**Decision:** When a system-tap `AudioBuffer` has a nil data pointer but a
+nonzero reported byte size, append that frame count as zero-valued samples to
+the canonical fan-out. Keep an actually empty, header-only system track valid.
+
+**Alternatives:** Compress gaps out of the WAV; add per-gap corrections to the
+manifest; reject an empty remote-side track; generate silence from a wall-clock
+timer independently of Core Audio.
+
+**Reasoning:** Core Audio documents nil data with retained byte size for a
+disabled input stream. That byte count is the render timeline information the
+old mixer discarded. Materializing it before WAV/live fan-out preserves one
+linear sample-index mapping for persistence, VAD, and transcription without a
+second timing model. A timer would race the device clock, while manifest gap
+records would leave the durable audio itself temporally compressed.

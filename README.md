@@ -44,6 +44,9 @@ transcription:
   source through seam de-duplication before the shared timeline is merged;
 - chronological dispatch and deterministic merging across microphone and
   system tracks;
+- Core Audio nil-data render buffers use their reported frame count to append
+  silence, preserving system-track elapsed time through rendering gaps; a
+  genuinely header-only system track remains a valid silent meeting side;
 - strict validation of engine timing and source attribution;
 - FluidAudio 0.15.5, pinned exactly for reproducible Core ML behavior;
 - Parakeet TDT 0.6B v3 for 25 European languages, including English, Swedish,
