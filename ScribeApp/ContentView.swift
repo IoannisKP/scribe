@@ -407,7 +407,7 @@ private struct RecordingView: View {
                 transcriptionBox
 
                 Label(
-                    "Two isolated \(Int(CanonicalAudioFormat.sampleRate / 1_000)) kHz mono Float32 WAVs · stored locally",
+                    "Two isolated \(Int(CanonicalAudioFormat.sampleRate / 1_000)) kHz mono Int16 WAVs · Float32 processing · stored locally",
                     systemImage: "internaldrive"
                 )
                 .font(.callout)

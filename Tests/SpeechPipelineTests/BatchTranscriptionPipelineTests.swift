@@ -219,11 +219,11 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
         systemSamples: [Float],
         systemStartTime: TimeInterval
     ) async throws {
-        try await writeCanonicalWAV(
+        try await writeDurableSessionWAV(
             samples: microphoneSamples,
             to: directory.appendingPathComponent("microphone.wav")
         )
-        try await writeCanonicalWAV(
+        try await writeDurableSessionWAV(
             samples: systemSamples,
             to: directory.appendingPathComponent("system.wav")
         )

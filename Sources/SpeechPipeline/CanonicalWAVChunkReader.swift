@@ -39,17 +39,21 @@ public actor CanonicalWAVChunkReader {
 
         let audioFile = try AVAudioFile(forReading: url)
         let fileFormat = audioFile.fileFormat
+        let isSupportedStorage = fileFormat.commonFormat == .pcmFormatInt16
+            || fileFormat.commonFormat == .pcmFormatFloat32
         let isCanonical = fileFormat.sampleRate
                 == CanonicalAudioFormat.sampleRate
             && fileFormat.channelCount
                 == CanonicalAudioFormat.channelCount
-            && fileFormat.commonFormat == .pcmFormatFloat32
+            && isSupportedStorage
         guard isCanonical else {
             throw SpeechPipelineError.unsupportedAudioFormat(
                 url: url,
                 sampleRate: fileFormat.sampleRate,
                 channelCount: fileFormat.channelCount,
-                isFloat: fileFormat.commonFormat == .pcmFormatFloat32
+                formatDescription: String(
+                    describing: fileFormat.commonFormat
+                )
             )
         }
 

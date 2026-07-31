@@ -12,7 +12,7 @@ recording, and the complete first-run permission experience:
 - a preallocated single-producer, single-consumer Float32 ring buffer;
 - allocation-free planar-channel mono mixdown in the realtime callback;
 - mono Float32 sample-rate conversion through `AVAudioConverter`;
-- a streaming 16 kHz mono Float32 WAV writer with recoverable headers;
+- a streaming 16 kHz mono Int16 PCM WAV writer with recoverable headers;
 - microphone permission handling with actionable denied/restricted states;
 - `AVAudioEngine` microphone capture with device-change and sleep/wake recovery;
 - a Core Audio mono process tap that excludes Scribe's own process;
@@ -153,10 +153,14 @@ On first launch, complete **Set up recording**:
 
 Press **Record meeting**, play system audio, speak at the same time, then press
 **Stop recording** and use **Show WAVs in Finder**. The results are separate
-16 kHz mono Float32 files:
+16 kHz mono Int16 PCM files:
 
 - `microphone.wav` contains the local microphone;
 - `system.wav` contains other processes routed to the current output device.
+
+Capture, VAD, and transcription continue to process Float32 samples. Only the
+durable files are quantized to Int16, halving their audio payload. Existing
+16 kHz mono Float32 Scribe recordings remain readable and transcribable.
 
 To transcribe:
 
@@ -320,7 +324,7 @@ manual:
    confirm the system track briefly reports recovery and returns to Recording.
 5. Stop and reveal the WAV files.
 6. Inspect both files in an audio editor:
-   - both are 16,000 Hz, mono, 32-bit Float WAV;
+   - both are 16,000 Hz, mono, 16-bit PCM WAV;
    - `microphone.wav` contains the local voice but not direct digital playback;
    - `system.wav` contains browser playback but not Scribe's own output;
    - both files remain independently seekable and playable.

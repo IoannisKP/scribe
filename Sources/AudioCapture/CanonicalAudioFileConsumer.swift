@@ -4,7 +4,7 @@ import Foundation
 actor CanonicalAudioFileConsumer {
     private let source: AudioSource
     private let ringBuffer: FloatRingBuffer
-    private let writer: Float32WAVWriter
+    private let writer: Int16WAVWriter
     private let liveSink: (any CanonicalAudioBlockSink)?
     private var resampler: AudioResampler
     private var readBuffer = Array(repeating: Float.zero, count: 4_096)
@@ -22,7 +22,7 @@ actor CanonicalAudioFileConsumer {
         self.source = source
         self.ringBuffer = ringBuffer
         self.resampler = try AudioResampler(inputSampleRate: inputSampleRate)
-        self.writer = try Float32WAVWriter(url: outputURL)
+        self.writer = try Int16WAVWriter(url: outputURL)
         self.liveSink = liveSink
     }
 
