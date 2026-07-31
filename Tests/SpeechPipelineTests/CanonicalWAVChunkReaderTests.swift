@@ -67,7 +67,8 @@ final class CanonicalWAVChunkReaderTests: XCTestCase {
             try CanonicalWAVChunkReader(
                 url: url,
                 source: .microphone,
-                trackStartTime: 0
+                trackStartTime: 0,
+                chunkDuration: 14
             )
         )
     }

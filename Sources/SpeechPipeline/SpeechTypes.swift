@@ -77,12 +77,19 @@ public protocol TranscriptionEngine: Sendable {
     var supportsStreaming: Bool { get }
     var requiresNetwork: Bool { get }
     var supportedLanguages: [String] { get }
+    var preferredWindowDuration: TimeInterval { get }
+    var preferredOverlap: TimeInterval { get }
 
     func prepare() async throws
     func transcribe(_ chunk: AudioChunk) async throws
         -> [TranscriptSegment]
     func finish() async throws -> [TranscriptSegment]
     func unload() async
+}
+
+public extension TranscriptionEngine {
+    var preferredWindowDuration: TimeInterval { 14 }
+    var preferredOverlap: TimeInterval { 1.5 }
 }
 
 public enum SpeechPipelineError:

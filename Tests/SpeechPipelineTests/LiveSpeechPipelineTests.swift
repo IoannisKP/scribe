@@ -4,6 +4,53 @@ import Foundation
 import XCTest
 
 final class LiveSpeechPipelineTests: XCTestCase {
+    func testSelectedEngineControlsLiveWindowGeometry() async throws {
+        let engine = GeometryTranscriptionEngine(
+            preferredWindowDuration: 4,
+            preferredOverlap: 1
+        )
+        let configuration = LiveSpeechSegmentationConfiguration.default
+            .usingWindowGeometry(from: engine)
+        var processor = LiveSpeechSourceProcessor(
+            source: .microphone,
+            trackStartTime: 0,
+            configuration: configuration
+        )
+        let detector = EnergyVoiceActivityDetector()
+        let samplesPerSecond = Int(CanonicalAudioFormat.sampleRate)
+        var windows: [LiveSpeechWindow] = []
+
+        for second in 0..<9 {
+            let result = try await processor.ingest(
+                CanonicalAudioBlock(
+                    source: .microphone,
+                    firstSampleIndex: UInt64(second * samplesPerSecond),
+                    samples: Array(
+                        repeating: Float(0.8),
+                        count: samplesPerSecond
+                    )
+                ),
+                detector: detector
+            )
+            windows.append(contentsOf: result.windows)
+        }
+        let finish = try await processor.finish(detector: detector)
+        windows.append(contentsOf: finish.windows)
+
+        XCTAssertEqual(
+            windows.map(\.firstSampleIndex),
+            [0, 48_000, 96_000]
+        )
+        XCTAssertEqual(
+            windows.map(\.overlapSampleCount),
+            [0, 16_000, 16_000]
+        )
+        XCTAssertEqual(
+            windows.map(\.samples.count),
+            [64_000, 64_000, 48_000]
+        )
+    }
+
     func testContinuousSpeechUsesThirtySecondCeilingAndOverlappingWindows()
         async throws
     {
@@ -255,6 +302,32 @@ final class LiveSpeechPipelineTests: XCTestCase {
             )
         )
     }
+}
+
+private actor GeometryTranscriptionEngine: TranscriptionEngine {
+    nonisolated let identifier = "test.geometry"
+    nonisolated let supportsStreaming = false
+    nonisolated let requiresNetwork = false
+    nonisolated let supportedLanguages = ["en"]
+    nonisolated let preferredWindowDuration: TimeInterval
+    nonisolated let preferredOverlap: TimeInterval
+
+    init(
+        preferredWindowDuration: TimeInterval,
+        preferredOverlap: TimeInterval
+    ) {
+        self.preferredWindowDuration = preferredWindowDuration
+        self.preferredOverlap = preferredOverlap
+    }
+
+    func prepare() async throws {}
+    func transcribe(_ chunk: AudioChunk) async throws
+        -> [TranscriptSegment]
+    {
+        []
+    }
+    func finish() async throws -> [TranscriptSegment] { [] }
+    func unload() async {}
 }
 
 private actor EnergyVoiceActivityDetector:

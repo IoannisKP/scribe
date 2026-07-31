@@ -448,3 +448,18 @@ repeatable regression guard without network activity or licensing ambiguity.
 Skipping names the exact missing local model. Synthetic speech cannot represent
 room noise, accents, disfluency, or meeting cross-talk, so it is not presented
 as an accuracy benchmark and the optional recorded fixture remains available.
+
+## 2026-08-01 — Let each transcription engine own window geometry
+
+**Decision:** Add `preferredWindowDuration` and `preferredOverlap` to the
+transcription-engine contract. Batch WAV reads and live VAD windowing resolve
+their geometry from the selected engine; Parakeet declares 14 seconds with a
+1.5-second overlap.
+
+**Alternatives:** Keep values independently hardcoded in both pipelines; make
+the UI select geometry; infer the engine type with runtime casts.
+
+**Reasoning:** Window requirements are model capabilities. Keeping them on the
+engine prevents batch and live behavior from drifting and allows a later
+Whisper engine to request its required 30-second window without model-specific
+conditionals in either pipeline.

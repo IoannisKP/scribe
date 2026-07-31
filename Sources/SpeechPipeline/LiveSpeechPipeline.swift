@@ -35,6 +35,15 @@ public struct LiveSpeechSegmentationConfiguration:
         self.windowDuration = windowDuration
         self.windowOverlap = windowOverlap
     }
+
+    func usingWindowGeometry(
+        from engine: any TranscriptionEngine
+    ) -> Self {
+        var resolved = self
+        resolved.windowDuration = engine.preferredWindowDuration
+        resolved.windowOverlap = engine.preferredOverlap
+        return resolved
+    }
 }
 
 public struct LiveSpeechWindow: Equatable, Sendable {
@@ -191,12 +200,16 @@ public actor LiveSpeechPipeline {
     public init(
         audioTransport: LiveAudioTransport,
         sileroModelURL: URL,
+        transcriptionEngine: any TranscriptionEngine,
         configuration: LiveSpeechSegmentationConfiguration = .default
     ) throws {
-        try Self.validate(configuration)
+        let resolvedConfiguration = configuration.usingWindowGeometry(
+            from: transcriptionEngine
+        )
+        try Self.validate(resolvedConfiguration)
         self.audioTransport = audioTransport
         self.detector = FluidAudioSileroVAD(modelURL: sileroModelURL)
-        self.configuration = configuration
+        self.configuration = resolvedConfiguration
         self.storageFactory = { directory, source, trackStartTime in
             try FileLiveSpeechWindowSpoolStorage(
                 directory: directory,
@@ -216,6 +229,23 @@ public actor LiveSpeechPipeline {
         self.audioTransport = audioTransport
         self.detector = detector
         self.configuration = configuration
+        self.storageFactory = storageFactory
+    }
+
+    init(
+        audioTransport: LiveAudioTransport,
+        detector: any LiveVoiceActivityDetecting,
+        transcriptionEngine: any TranscriptionEngine,
+        configuration: LiveSpeechSegmentationConfiguration = .default,
+        storageFactory: @escaping LiveSpeechWindowSpoolFactory
+    ) throws {
+        let resolvedConfiguration = configuration.usingWindowGeometry(
+            from: transcriptionEngine
+        )
+        try Self.validate(resolvedConfiguration)
+        self.audioTransport = audioTransport
+        self.detector = detector
+        self.configuration = resolvedConfiguration
         self.storageFactory = storageFactory
     }
 

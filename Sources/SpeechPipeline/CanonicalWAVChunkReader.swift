@@ -18,7 +18,7 @@ public actor CanonicalWAVChunkReader {
         url: URL,
         source: AudioSource,
         trackStartTime: TimeInterval,
-        chunkDuration: TimeInterval = 14
+        chunkDuration: TimeInterval
     ) throws {
         guard chunkDuration.isFinite, chunkDuration > 0 else {
             throw SpeechPipelineError.invalidChunkDuration(chunkDuration)

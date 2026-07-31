@@ -23,6 +23,8 @@ final class ParakeetTranscriptionEngineTests: XCTestCase {
         XCTAssertFalse(engine.requiresNetwork)
         XCTAssertEqual(engine.supportedLanguages.count, 25)
         XCTAssertTrue(engine.supportedLanguages.contains("el"))
+        XCTAssertEqual(engine.preferredWindowDuration, 14)
+        XCTAssertEqual(engine.preferredOverlap, 1.5)
     }
 
     func testMapsChunkLocalWordTimingsOntoSharedTimeline() async throws {

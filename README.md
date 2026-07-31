@@ -34,12 +34,12 @@ recording, and the complete first-run permission experience:
 Milestone 2 adds the `SpeechPipeline` foundation and local Parakeet batch
 transcription:
 
-- the public `TranscriptionEngine` contract plus audio, word-timing, and
-  transcript-segment value types;
+- the public `TranscriptionEngine` contract, including engine-selected window
+  duration and overlap, plus audio, word-timing, and transcript-segment values;
 - `capture-session.json`, which records each source's offset on the shared
   monotonic session timeline;
-- bounded canonical-WAV reads in 14-second chunks instead of loading an entire
-  long meeting into memory;
+- bounded canonical-WAV reads sized by the selected engine instead of loading
+  an entire long meeting into memory;
 - chronological dispatch and deterministic merging across microphone and
   system tracks;
 - strict validation of engine timing and source attribution;
@@ -85,7 +85,8 @@ preparation:
   threshold hysteresis;
 - silence-aware segments use 150 ms minimum speech, 750 ms trailing silence,
   100 ms padding, and an exact 30-second continuous-speech ceiling;
-- speech is emitted as 14-second windows with 1.5 seconds of overlap;
+- speech is emitted with the selected engine's window and overlap geometry
+  (14 seconds and 1.5 seconds for Parakeet);
 - windows are written to source-specific transient files, so waiting for the
   next live stage does not create an unbounded memory queue;
 - source- and timeline-aware overlap de-duplication prefers word timings and

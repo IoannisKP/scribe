@@ -20,11 +20,11 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
             systemStartTime: 2.0 / CanonicalAudioFormat.sampleRate
         )
 
-        let engine = LifecycleMockEngine()
-        let pipeline = try BatchTranscriptionPipeline(
-            engine: engine,
-            chunkDuration: 4.0 / CanonicalAudioFormat.sampleRate
+        let engine = LifecycleMockEngine(
+            preferredWindowDuration:
+                4.0 / CanonicalAudioFormat.sampleRate
         )
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
         let segments = try await pipeline.transcribeSession(at: directory)
 
         XCTAssertEqual(
@@ -71,11 +71,11 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
             systemStartTime: 0
         )
 
-        let engine = LifecycleMockEngine(returnsWrongSource: true)
-        let pipeline = try BatchTranscriptionPipeline(
-            engine: engine,
-            chunkDuration: 1
+        let engine = LifecycleMockEngine(
+            returnsWrongSource: true,
+            preferredWindowDuration: 1
         )
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
 
         do {
             _ = try await pipeline.transcribeSession(at: directory)
@@ -162,6 +162,8 @@ private actor LifecycleMockEngine: TranscriptionEngine {
     nonisolated let supportsStreaming = false
     nonisolated let requiresNetwork = false
     nonisolated let supportedLanguages = ["en"]
+    nonisolated let preferredWindowDuration: TimeInterval
+    nonisolated let preferredOverlap: TimeInterval
 
     private let returnsWrongSource: Bool
     private var prepareCount = 0
@@ -169,8 +171,14 @@ private actor LifecycleMockEngine: TranscriptionEngine {
     private var finishCount = 0
     private var unloadCount = 0
 
-    init(returnsWrongSource: Bool = false) {
+    init(
+        returnsWrongSource: Bool = false,
+        preferredWindowDuration: TimeInterval = 14,
+        preferredOverlap: TimeInterval = 1.5
+    ) {
         self.returnsWrongSource = returnsWrongSource
+        self.preferredWindowDuration = preferredWindowDuration
+        self.preferredOverlap = preferredOverlap
     }
 
     func prepare() {

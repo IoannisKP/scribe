@@ -89,7 +89,8 @@ final class ParakeetGoldenFileTests: XCTestCase {
         let reader = try CanonicalWAVChunkReader(
             url: wavURL,
             source: .microphone,
-            trackStartTime: 0
+            trackStartTime: 0,
+            chunkDuration: engine.preferredWindowDuration
         )
 
         try await engine.prepare()
