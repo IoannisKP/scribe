@@ -371,24 +371,28 @@ public actor ParakeetTranscriptionEngine: TranscriptionEngine {
             )
         }
 
-        let localStart = words.first.map { $0.startTime - chunk.startTime } ?? 0
-        let fallbackDuration = min(max(result.duration, 0), chunk.duration)
-        let localEnd =
-            words.last.map { $0.endTime - chunk.startTime }
-            ?? fallbackDuration
-        guard localStart.isFinite,
-            localEnd.isFinite,
-            localStart >= 0,
-            localEnd >= localStart
+        let startTime: TimeInterval
+        let endTime: TimeInterval
+        if let firstWord = words.first, let lastWord = words.last {
+            startTime = firstWord.startTime
+            endTime = lastWord.endTime
+        } else {
+            let fallbackDuration = min(
+                max(result.duration, 0),
+                chunk.duration
+            )
+            startTime = chunk.startTime
+            endTime = chunk.startTime + fallbackDuration
+        }
+        guard
+            startTime.isFinite,
+            endTime.isFinite,
+            startTime >= chunk.startTime,
+            endTime >= startTime,
+            endTime <= chunk.endTime
         else {
             throw ParakeetEngineError.invalidResultTiming
         }
-
-        let startTime = min(chunk.endTime, chunk.startTime + localStart)
-        let endTime = min(
-            chunk.endTime,
-            max(startTime, chunk.startTime + localEnd)
-        )
         return [
             TranscriptSegment(
                 text: text,

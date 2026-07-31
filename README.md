@@ -54,6 +54,8 @@ transcription:
   cache and enables FluidAudio offline mode before loading Core ML;
 - timestamp mapping from Parakeet's chunk-local words onto the shared
   two-source session timeline;
+- utterance rows use the first and last mapped word as their visible bounds;
+  backend duration is used only when word timing is unavailable;
 - local model selection, download progress, batch progress, and an interleaved
   timestamped transcript in the app;
 - mock-engine, adapter, missing-model, fixture-backed WAV, and opt-in Core ML

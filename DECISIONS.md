@@ -478,3 +478,17 @@ into memory.
 by a batch seam. Reusing the timing-aware live deduplicator keeps each word once
 without mixing microphone and system speech, while bounded reads preserve the
 long-recording memory guarantee.
+
+## 2026-08-01 — Bound timed utterances by their words
+
+**Decision:** When Parakeet returns word timings, set each transcript segment's
+start to the first mapped word and its end to the last mapped word. Use backend
+duration from the chunk start only when no valid word timing is available.
+
+**Alternatives:** Display the complete ASR window bounds; use backend duration
+even when words identify a tighter interval; invent timing for untimed text.
+
+**Reasoning:** Chunk bounds describe inference input, not when the utterance was
+spoken. Word-derived bounds make microphone/system interleaving and visible row
+timestamps reflect speech while retaining a safe fallback for sparse backend
+results.
