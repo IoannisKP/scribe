@@ -1,15 +1,46 @@
 import AudioCapture
+import Foundation
 @testable import SpeechPipeline
 import XCTest
 
 final class ParakeetGoldenFileTests: XCTestCase {
-    func testOptInGoldenWAVWithinWordErrorRateTolerance()
+    func testCommittedSyntheticFixtureWithinWordErrorRateTolerance()
+        async throws
+    {
+        let environment = ProcessInfo.processInfo.environment
+        let model = Self.configuredModel(environment: environment)
+        let wavURL = try Self.fixtureURL(
+            resource: "parakeet-golden",
+            extension: "wav"
+        )
+        let referenceURL = try Self.fixtureURL(
+            resource: "parakeet-golden-reference",
+            extension: "txt"
+        )
+        let expectedText = try String(
+            contentsOf: referenceURL,
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        try await assertGoldenFixture(
+            wavURL: wavURL,
+            expectedText: expectedText,
+            model: model,
+            tolerance: Self.tolerance(
+                environment: environment,
+                defaultValue: 0.20
+            ),
+            label: "committed synthetic fixture"
+        )
+    }
+
+    func testOptionalRecordedFixtureWithinWordErrorRateTolerance()
         async throws
     {
         let environment = ProcessInfo.processInfo.environment
         guard environment["SCRIBE_RUN_PARAKEET_GOLDEN"] == "1" else {
             throw XCTSkip(
-                "Set SCRIBE_RUN_PARAKEET_GOLDEN=1 to run local Core ML acceptance."
+                "Optional recorded-audio golden fixture was not requested; set SCRIBE_RUN_PARAKEET_GOLDEN=1 to enable it."
             )
         }
         guard
@@ -23,13 +54,30 @@ final class ParakeetGoldenFileTests: XCTestCase {
             return
         }
 
-        let model: ParakeetModel =
-            environment["SCRIBE_GOLDEN_MODEL"] == "v2"
-            ? .v2English : .v3Multilingual
+        try await assertGoldenFixture(
+            wavURL: URL(fileURLWithPath: wavPath),
+            expectedText: expectedText,
+            model: Self.configuredModel(environment: environment),
+            tolerance: Self.tolerance(
+                environment: environment,
+                defaultValue: 0.25
+            ),
+            label: "optional recorded fixture"
+        )
+    }
+
+    private func assertGoldenFixture(
+        wavURL: URL,
+        expectedText: String,
+        model: ParakeetModel,
+        tolerance: Double,
+        label: String
+    ) async throws {
         let store = try ParakeetModelStore()
         guard await store.availability(of: model) == .available else {
+            let directory = await store.directory(for: model)
             throw XCTSkip(
-                "\(model.displayName) is not present in Scribe's model directory."
+                "\(label) requires \(model.displayName), which is missing from \(directory.path). Download that model in Scribe to run this regression."
             )
         }
 
@@ -39,7 +87,7 @@ final class ParakeetGoldenFileTests: XCTestCase {
             modelDirectory: directory
         )
         let reader = try CanonicalWAVChunkReader(
-            url: URL(fileURLWithPath: wavPath),
+            url: wavURL,
             source: .microphone,
             trackStartTime: 0
         )
@@ -60,17 +108,56 @@ final class ParakeetGoldenFileTests: XCTestCase {
         }
 
         let actualText = segments.map(\.text).joined(separator: " ")
-        let tolerance = Double(
-            environment["SCRIBE_GOLDEN_MAX_WER"] ?? "0.25"
-        ) ?? 0.25
+        let measuredWER = Self.wordErrorRate(
+            expected: expectedText,
+            actual: actualText
+        )
+        print(
+            "Parakeet golden WER [\(model.rawValue), \(label)]: "
+                + String(format: "%.4f", measuredWER)
+        )
         XCTAssertLessThanOrEqual(
-            Self.wordErrorRate(
-                expected: expectedText,
-                actual: actualText
-            ),
+            measuredWER,
             tolerance,
             "Expected “\(expectedText)”; received “\(actualText)”."
         )
+    }
+
+    private static func configuredModel(
+        environment: [String: String]
+    ) -> ParakeetModel {
+        environment["SCRIBE_GOLDEN_MODEL"] == "v2"
+            ? .v2English : .v3Multilingual
+    }
+
+    private static func tolerance(
+        environment: [String: String],
+        defaultValue: Double
+    ) -> Double {
+        guard
+            let value = environment["SCRIBE_GOLDEN_MAX_WER"],
+            let tolerance = Double(value),
+            tolerance.isFinite,
+            tolerance >= 0
+        else {
+            return defaultValue
+        }
+        return tolerance
+    }
+
+    private static func fixtureURL(
+        resource: String,
+        extension fileExtension: String
+    ) throws -> URL {
+        guard
+            let url = Bundle.module.url(
+                forResource: resource,
+                withExtension: fileExtension
+            )
+        else {
+            throw SpeechPipelineTestSupportError.fixtureMissing
+        }
+        return url
     }
 
     private static func wordErrorRate(
