@@ -25,9 +25,9 @@ public actor BatchTranscriptionPipeline {
     private let chunkDuration: TimeInterval
 
     public init(
-        engine: any TranscriptionEngine,
-        chunkDuration: TimeInterval = 14
+        engine: any TranscriptionEngine
     ) throws {
+        let chunkDuration = engine.preferredWindowDuration
         guard chunkDuration.isFinite, chunkDuration > 0 else {
             throw SpeechPipelineError.invalidChunkDuration(chunkDuration)
         }

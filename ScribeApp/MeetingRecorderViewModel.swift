@@ -826,9 +826,17 @@ final class MeetingRecorderViewModel: ObservableObject {
             let manifest = try CaptureSessionManifest.load(
                 from: sessionDirectory
             )
+            let model = selectedParakeetModel
+            let modelDirectory = await modelStore?.directory(for: model)
+                ?? sessionDirectory
+            let engine = ParakeetTranscriptionEngine(
+                model: model,
+                modelDirectory: modelDirectory
+            )
             let pipeline = try LiveSpeechPipeline(
                 audioTransport: transport,
-                sileroModelURL: modelURL
+                sileroModelURL: modelURL,
+                transcriptionEngine: engine
             )
             try await pipeline.beginSession(
                 in: sessionDirectory,
@@ -839,7 +847,7 @@ final class MeetingRecorderViewModel: ObservableObject {
 
             guard
                 modelAvailability == .available,
-                let modelStore
+                modelStore != nil
             else {
                 liveTranscriptionPipeline = nil
                 liveTranscriptionPipelineState = .modelUnavailable
@@ -847,14 +855,6 @@ final class MeetingRecorderViewModel: ObservableObject {
             }
 
             do {
-                let model = selectedParakeetModel
-                let modelDirectory = await modelStore.directory(
-                    for: model
-                )
-                let engine = ParakeetTranscriptionEngine(
-                    model: model,
-                    modelDirectory: modelDirectory
-                )
                 let transcriptionPipeline =
                     try LiveTranscriptionPipeline(
                         speechPipeline: pipeline,

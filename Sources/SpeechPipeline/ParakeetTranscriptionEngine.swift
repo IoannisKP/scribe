@@ -293,6 +293,8 @@ public actor ParakeetTranscriptionEngine: TranscriptionEngine {
 
     public nonisolated let supportsStreaming = false
     public nonisolated let requiresNetwork = false
+    public nonisolated let preferredWindowDuration: TimeInterval = 14
+    public nonisolated let preferredOverlap: TimeInterval = 1.5
 
     public nonisolated var supportedLanguages: [String] {
         model.supportedLanguages
