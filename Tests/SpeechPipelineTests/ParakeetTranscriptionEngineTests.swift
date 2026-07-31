@@ -97,6 +97,76 @@ final class ParakeetTranscriptionEngineTests: XCTestCase {
         XCTAssertEqual(segments, [])
     }
 
+    func testUtteranceBoundsComeFromFirstAndLastWord() async throws {
+        let backend = ParakeetBackendSpy(
+            result: ParakeetBackendResult(
+                text: "Precise timing",
+                confidence: 0.9,
+                duration: 18,
+                words: [
+                    ParakeetBackendWord(
+                        text: "Precise",
+                        startTime: 4,
+                        endTime: 4.5
+                    ),
+                    ParakeetBackendWord(
+                        text: "timing",
+                        startTime: 5,
+                        endTime: 5.75
+                    ),
+                ]
+            )
+        )
+        let engine = ParakeetTranscriptionEngine(
+            model: .v3Multilingual,
+            modelDirectory: URL(fileURLWithPath: "/tmp/model"),
+            backend: backend
+        )
+        let chunk = AudioChunk(
+            samples: Array(repeating: 0, count: 320_000),
+            startTime: 10,
+            source: .microphone
+        )
+
+        let segments = try await engine.transcribe(chunk)
+        let segment = try XCTUnwrap(segments.first)
+
+        XCTAssertEqual(segment.startTime, 14)
+        XCTAssertEqual(segment.endTime, 15.75)
+        XCTAssertNotEqual(segment.startTime, chunk.startTime)
+        XCTAssertNotEqual(segment.endTime, chunk.endTime)
+    }
+
+    func testResultDurationRemainsFallbackWhenWordsAreUnavailable()
+        async throws
+    {
+        let backend = ParakeetBackendSpy(
+            result: ParakeetBackendResult(
+                text: "Untimed text",
+                confidence: 0.8,
+                duration: 1.25,
+                words: []
+            )
+        )
+        let engine = ParakeetTranscriptionEngine(
+            model: .v2English,
+            modelDirectory: URL(fileURLWithPath: "/tmp/model"),
+            backend: backend
+        )
+        let chunk = AudioChunk(
+            samples: Array(repeating: 0, count: 32_000),
+            startTime: 7,
+            source: .system
+        )
+
+        let segments = try await engine.transcribe(chunk)
+        let segment = try XCTUnwrap(segments.first)
+
+        XCTAssertEqual(segment.startTime, 7)
+        XCTAssertEqual(segment.endTime, 8.25)
+        XCTAssertNil(segment.words)
+    }
+
     func testUnloadReleasesBackend() async {
         let backend = ParakeetBackendSpy(
             result: ParakeetBackendResult(
