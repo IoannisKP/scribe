@@ -212,21 +212,26 @@ public enum TranscriptTimeline {
     public static func merge(
         _ segments: [TranscriptSegment]
     ) -> [TranscriptSegment] {
-        segments.sorted { lhs, rhs in
-            if lhs.startTime != rhs.startTime {
-                return lhs.startTime < rhs.startTime
-            }
-            if lhs.endTime != rhs.endTime {
-                return lhs.endTime < rhs.endTime
-            }
-            if lhs.source != rhs.source {
-                return sourceOrder(lhs.source) < sourceOrder(rhs.source)
-            }
-            return lhs.text < rhs.text
-        }
+        segments.sorted(by: precedes)
     }
 
-    private static func sourceOrder(_ source: AudioSource) -> Int {
+    static func precedes(
+        _ lhs: TranscriptSegment,
+        _ rhs: TranscriptSegment
+    ) -> Bool {
+        if lhs.startTime != rhs.startTime {
+            return lhs.startTime < rhs.startTime
+        }
+        if lhs.source != rhs.source {
+            return sourceOrder(lhs.source) < sourceOrder(rhs.source)
+        }
+        if lhs.endTime != rhs.endTime {
+            return lhs.endTime < rhs.endTime
+        }
+        return lhs.text < rhs.text
+    }
+
+    static func sourceOrder(_ source: AudioSource) -> Int {
         switch source {
         case .microphone:
             0

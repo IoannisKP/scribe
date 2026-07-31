@@ -44,6 +44,9 @@ transcription:
   source through seam de-duplication before the shared timeline is merged;
 - chronological dispatch and deterministic merging across microphone and
   system tracks;
+- equal absolute starts always order **You** (microphone) before **Others**
+  (system), regardless of utterance length; the system manifest offset is
+  applied before that comparison;
 - Core Audio nil-data render buffers use their reported frame count to append
   silence, preserving system-track elapsed time through rendering gaps; a
   genuinely header-only system track remains a valid silent meeting side;

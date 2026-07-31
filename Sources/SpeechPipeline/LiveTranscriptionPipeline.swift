@@ -538,11 +538,11 @@ public actor LiveTranscriptionPipeline {
         _ rows: Dictionary<SpeechSegmentKey, LiveTranscriptRow>.Values
     ) -> [LiveTranscriptRow] {
         rows.sorted { lhs, rhs in
-            if lhs.segment.startTime != rhs.segment.startTime {
-                return lhs.segment.startTime < rhs.segment.startTime
+            if TranscriptTimeline.precedes(lhs.segment, rhs.segment) {
+                return true
             }
-            if lhs.segment.endTime != rhs.segment.endTime {
-                return lhs.segment.endTime < rhs.segment.endTime
+            if TranscriptTimeline.precedes(rhs.segment, lhs.segment) {
+                return false
             }
             return lhs.id < rhs.id
         }
