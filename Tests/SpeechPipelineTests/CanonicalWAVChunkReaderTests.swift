@@ -72,4 +72,66 @@ final class CanonicalWAVChunkReaderTests: XCTestCase {
             )
         )
     }
+
+    func testOverlappingChunksAdvanceByWindowMinusOverlap() async throws {
+        let fixture = try CanonicalWAVFixture.load()
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let url = directory.appendingPathComponent("overlap.wav")
+        try await writeCanonicalWAV(samples: fixture.samples, to: url)
+        let sampleDuration = 1 / CanonicalAudioFormat.sampleRate
+        let reader = try CanonicalWAVChunkReader(
+            url: url,
+            source: .microphone,
+            trackStartTime: 0,
+            chunkDuration: 4 * sampleDuration,
+            overlapDuration: 2 * sampleDuration
+        )
+
+        var chunks: [AudioChunk] = []
+        while let chunk = try await reader.nextChunk() {
+            chunks.append(chunk)
+        }
+
+        XCTAssertEqual(
+            chunks.map(\.samples),
+            [
+                Array(fixture.samples[0..<4]),
+                Array(fixture.samples[2..<6]),
+                Array(fixture.samples[4..<8]),
+                Array(fixture.samples[6..<9]),
+            ]
+        )
+        XCTAssertEqual(
+            chunks.map { $0.startTime },
+            [0, 2 * sampleDuration, 4 * sampleDuration, 6 * sampleDuration]
+        )
+    }
+
+
+    func testRejectsOverlapThatDoesNotAdvance() async throws {
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let url = directory.appendingPathComponent("invalid-overlap.wav")
+        try await writeCanonicalWAV(samples: [0, 0], to: url)
+
+        XCTAssertThrowsError(
+            try CanonicalWAVChunkReader(
+                url: url,
+                source: .microphone,
+                trackStartTime: 0,
+                chunkDuration: 1,
+                overlapDuration: 1
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? SpeechPipelineError,
+                .invalidChunkOverlap(1)
+            )
+        }
+    }
 }

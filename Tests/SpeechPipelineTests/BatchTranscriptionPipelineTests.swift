@@ -22,7 +22,8 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
 
         let engine = LifecycleMockEngine(
             preferredWindowDuration:
-                4.0 / CanonicalAudioFormat.sampleRate
+                4.0 / CanonicalAudioFormat.sampleRate,
+            preferredOverlap: 0
         )
         let pipeline = try BatchTranscriptionPipeline(engine: engine)
         let segments = try await pipeline.transcribeSession(at: directory)
@@ -73,7 +74,8 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
 
         let engine = LifecycleMockEngine(
             returnsWrongSource: true,
-            preferredWindowDuration: 1
+            preferredWindowDuration: 1,
+            preferredOverlap: 0
         )
         let pipeline = try BatchTranscriptionPipeline(engine: engine)
 
@@ -129,6 +131,29 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
         )
     }
 
+    func testOverlappingBatchWindowsKeepBoundaryWordOnce() async throws {
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        try await writeDualTrackSession(
+            directory: directory,
+            microphoneSamples: Array(repeating: 0.5, count: 10),
+            systemSamples: [0],
+            systemStartTime: 0
+        )
+        let engine = BatchSeamMockEngine()
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
+
+        let segments = try await pipeline.transcribeSession(at: directory)
+
+        XCTAssertEqual(segments.map(\.text), ["alpha boundary", "omega"])
+        XCTAssertEqual(
+            segments.flatMap { $0.words ?? [] }.map(\.text),
+            ["alpha", "boundary", "omega"]
+        )
+    }
+
     private func writeDualTrackSession(
         directory: URL,
         microphoneSamples: [Float],
@@ -148,6 +173,73 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
             systemStartTime: systemStartTime
         ).write(to: directory)
     }
+}
+
+private actor BatchSeamMockEngine: TranscriptionEngine {
+    nonisolated let identifier = "test.batch-seam"
+    nonisolated let supportsStreaming = false
+    nonisolated let requiresNetwork = false
+    nonisolated let supportedLanguages = ["en"]
+    nonisolated let preferredWindowDuration =
+        6 / CanonicalAudioFormat.sampleRate
+    nonisolated let preferredOverlap =
+        2 / CanonicalAudioFormat.sampleRate
+
+    func prepare() async throws {}
+
+    func transcribe(_ chunk: AudioChunk) async throws
+        -> [TranscriptSegment]
+    {
+        guard chunk.source == .microphone else {
+            return []
+        }
+        let sampleDuration = 1 / CanonicalAudioFormat.sampleRate
+        if chunk.startTime < sampleDuration {
+            return [
+                TranscriptSegment(
+                    text: "alpha boundary",
+                    startTime: 0,
+                    endTime: 6 * sampleDuration,
+                    source: .microphone,
+                    words: [
+                        WordTiming(
+                            text: "alpha",
+                            startTime: 0,
+                            endTime: 4 * sampleDuration
+                        ),
+                        WordTiming(
+                            text: "boundary",
+                            startTime: 4 * sampleDuration,
+                            endTime: 6 * sampleDuration
+                        ),
+                    ]
+                )
+            ]
+        }
+        return [
+            TranscriptSegment(
+                text: "boundary omega",
+                startTime: 4 * sampleDuration,
+                endTime: 10 * sampleDuration,
+                source: .microphone,
+                words: [
+                    WordTiming(
+                        text: "boundary",
+                        startTime: 4 * sampleDuration,
+                        endTime: 6 * sampleDuration
+                    ),
+                    WordTiming(
+                        text: "omega",
+                        startTime: 6 * sampleDuration,
+                        endTime: 10 * sampleDuration
+                    ),
+                ]
+            )
+        ]
+    }
+
+    func finish() async throws -> [TranscriptSegment] { [] }
+    func unload() async {}
 }
 
 private actor LifecycleMockEngine: TranscriptionEngine {

@@ -99,6 +99,7 @@ public enum SpeechPipelineError:
     Sendable
 {
     case invalidChunkDuration(TimeInterval)
+    case invalidChunkOverlap(TimeInterval)
     case invalidTrackStartTime(TimeInterval)
     case unsupportedAudioFormat(
         url: URL,
@@ -129,6 +130,8 @@ public enum SpeechPipelineError:
         switch self {
         case let .invalidChunkDuration(duration):
             "Audio chunk duration must be finite and positive; received \(duration)."
+        case let .invalidChunkOverlap(overlap):
+            "Audio chunk overlap must be finite, nonnegative, and shorter than the chunk; received \(overlap)."
         case let .invalidTrackStartTime(startTime):
             "Audio track start time must be finite and nonnegative; received \(startTime)."
         case let .unsupportedAudioFormat(
