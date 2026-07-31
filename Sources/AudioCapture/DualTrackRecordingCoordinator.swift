@@ -27,16 +27,25 @@ public struct DualTrackCaptureResult: Equatable, Sendable {
     public let paths: DualTrackRecordingPaths
     public let microphone: AudioTrackCaptureResult
     public let system: AudioTrackCaptureResult
+    public let stopReason: DualTrackRecordingStopReason
 
     public init(
         paths: DualTrackRecordingPaths,
         microphone: AudioTrackCaptureResult,
-        system: AudioTrackCaptureResult
+        system: AudioTrackCaptureResult,
+        stopReason: DualTrackRecordingStopReason = .requested
     ) {
         self.paths = paths
         self.microphone = microphone
         self.system = system
+        self.stopReason = stopReason
     }
+}
+
+public enum DualTrackRecordingStopReason: Equatable, Sendable {
+    case requested
+    case lowDiskSpace(availableBytes: Int64, reserveBytes: Int64)
+    case diskSpaceMonitoringFailed(message: String)
 }
 
 public enum DualTrackRecordingState: Equatable, Sendable {
@@ -62,16 +71,24 @@ public actor DualTrackRecordingCoordinator {
 
     private let microphoneCapture: any AudioTrackCapturing
     private let systemCapture: any AudioTrackCapturing
+    private let freeSpaceProvider: any RecordingFreeSpaceProviding
+    private let diskSpaceConfiguration: RecordingDiskSpaceConfiguration
     private var activePaths: DualTrackRecordingPaths?
+    private var diskMonitorTask: Task<Void, Never>?
 
     public init(
         microphoneCapture: any AudioTrackCapturing =
             MicrophoneCaptureService(),
         systemCapture: any AudioTrackCapturing =
-            SystemAudioCaptureService()
+            SystemAudioCaptureService(),
+        freeSpaceProvider: any RecordingFreeSpaceProviding =
+            VolumeRecordingFreeSpaceProvider(),
+        diskSpaceConfiguration: RecordingDiskSpaceConfiguration = .init()
     ) {
         self.microphoneCapture = microphoneCapture
         self.systemCapture = systemCapture
+        self.freeSpaceProvider = freeSpaceProvider
+        self.diskSpaceConfiguration = diskSpaceConfiguration
     }
 
     @discardableResult
@@ -87,6 +104,35 @@ public actor DualTrackRecordingCoordinator {
         let paths = DualTrackRecordingPaths(
             sessionDirectory: sessionDirectory
         )
+        let availableCapacity: Int64
+        do {
+            availableCapacity = try await freeSpaceProvider
+                .availableCapacity(at: sessionDirectory)
+        } catch {
+            let wrappedError = (error as? AudioCaptureError)
+                ?? AudioCaptureError.recordingDiskSpaceCheckFailed(
+                    error.localizedDescription
+                )
+            state = .failed(
+                message: wrappedError.localizedDescription,
+                paths: paths
+            )
+            throw wrappedError
+        }
+        let requiredCapacity = diskSpaceConfiguration
+            .requiredFreeSpaceBeforeRecordingBytes
+        guard availableCapacity >= requiredCapacity else {
+            let error = AudioCaptureError.insufficientRecordingDiskSpace(
+                requiredBytes: requiredCapacity,
+                availableBytes: availableCapacity
+            )
+            state = .failed(
+                message: error.localizedDescription,
+                paths: paths
+            )
+            throw error
+        }
+
         activePaths = paths
         state = .starting(paths: paths)
         let clock = ContinuousClock()
@@ -149,16 +195,58 @@ public actor DualTrackRecordingCoordinator {
         }
 
         state = .recording(paths: paths)
+        startDiskMonitoring()
         return paths
     }
 
     public func stopRecording() async throws -> DualTrackCaptureResult {
+        try await stopRecording(reason: .requested)
+    }
+
+    /// Performs one injected/provider-backed monitoring pass immediately.
+    /// Tests use this entry point without waiting for wall-clock polling.
+    @discardableResult
+    public func checkAvailableDiskSpace()
+        async throws -> DualTrackCaptureResult?
+    {
+        guard case .recording = state, let paths = activePaths else {
+            return nil
+        }
+
+        let availableCapacity: Int64
+        do {
+            availableCapacity = try await freeSpaceProvider
+                .availableCapacity(at: paths.sessionDirectory)
+        } catch {
+            return try await stopRecording(
+                reason: .diskSpaceMonitoringFailed(
+                    message: error.localizedDescription
+                )
+            )
+        }
+        let reserve = diskSpaceConfiguration.minimumFreeSpaceReserveBytes
+        guard availableCapacity <= reserve else {
+            return nil
+        }
+        return try await stopRecording(
+            reason: .lowDiskSpace(
+                availableBytes: availableCapacity,
+                reserveBytes: reserve
+            )
+        )
+    }
+
+    private func stopRecording(
+        reason: DualTrackRecordingStopReason
+    ) async throws -> DualTrackCaptureResult {
         guard state.isActive, let paths = activePaths else {
             throw AudioCaptureError.dualTrackStopFailed(
                 "There is no active two-track recording."
             )
         }
 
+        diskMonitorTask?.cancel()
+        diskMonitorTask = nil
         state = .stopping(paths: paths)
         var failures: [String] = []
         var systemResult: AudioTrackCaptureResult?
@@ -191,10 +279,32 @@ public actor DualTrackRecordingCoordinator {
         let result = DualTrackCaptureResult(
             paths: paths,
             microphone: microphoneResult,
-            system: systemResult
+            system: systemResult,
+            stopReason: reason
         )
         state = .stopped(result: result)
         return result
+    }
+
+    private func startDiskMonitoring() {
+        diskMonitorTask?.cancel()
+        let interval = diskSpaceConfiguration.monitoringInterval
+        diskMonitorTask = Task { [weak self] in
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: interval)
+                    guard let self else {
+                        return
+                    }
+                    _ = try await self.checkAvailableDiskSpace()
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // stopRecording records any finalization failure in state.
+                return
+            }
+        }
     }
 
     private static func timeInterval(_ duration: Duration) -> TimeInterval {

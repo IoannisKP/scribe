@@ -71,6 +71,11 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
     )
     case systemGraphTeardownFailed(String)
     case systemRecoveryFailed(String)
+    case recordingDiskSpaceCheckFailed(String)
+    case insufficientRecordingDiskSpace(
+        requiredBytes: Int64,
+        availableBytes: Int64
+    )
     case dualTrackStartFailed(String)
     case dualTrackStopFailed(String)
 
@@ -146,10 +151,24 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
             "Core Audio capture stopped, but one or more temporary audio objects could not be removed: \(message)"
         case let .systemRecoveryFailed(message):
             "System-audio recording could not recover after an output-device interruption: \(message)"
+        case let .recordingDiskSpaceCheckFailed(message):
+            "Scribe could not check free recording space: \(message)"
+        case let .insufficientRecordingDiskSpace(
+            requiredBytes,
+            availableBytes
+        ):
+            "Recording was not started because Scribe needs \(Self.formattedByteCount(requiredBytes)) free for the expected session and safety reserve; \(Self.formattedByteCount(availableBytes)) is available."
         case let .dualTrackStartFailed(message):
             "The two-track recording could not start: \(message)"
         case let .dualTrackStopFailed(message):
             "The two-track recording stopped with an error: \(message)"
         }
+    }
+
+    private static func formattedByteCount(_ byteCount: Int64) -> String {
+        ByteCountFormatter.string(
+            fromByteCount: byteCount,
+            countStyle: .file
+        )
     }
 }

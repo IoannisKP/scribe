@@ -558,3 +558,22 @@ convert old sessions in place; introduce a compressed-audio dependency.
 input or realtime behavior. Quantizing on the existing non-realtime consumer
 preserves callback safety. Read-time compatibility keeps existing recordings
 usable and avoids modifying user session data.
+
+## 2026-08-01 — Reserve disk capacity before and during recording
+
+**Decision:** Before either audio service starts, require enough free capacity
+for a configurable expected duration plus a configurable reserve. Estimate the
+two Int16 WAVs and worst-case simultaneous Float32 live-transport and speech
+window spools. Recheck periodically during recording and, at or below the
+reserve—or if capacity can no longer be queried—stop through the ordinary
+two-track finalization path.
+
+**Alternatives:** Check only when a file write fails; budget only durable WAVs;
+monitor in the UI; delete prior sessions automatically; continue recording when
+the capacity provider fails.
+
+**Reasoning:** Write failure is too late to guarantee valid headers, while the
+temporary bounded-memory queues can dominate disk use under sustained backlog.
+Keeping policy and monitoring in the capture coordinator guarantees preflight
+before capture, applies equally outside the UI, and is deterministic under an
+injected provider. Automatic deletion would violate local-data ownership.
