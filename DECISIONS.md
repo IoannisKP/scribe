@@ -412,3 +412,22 @@ data.
 poll concurrently with writers. Avoiding empty reads prevents a reader from
 remaining at a stale end-of-file position, while the actor-owned count provides
 a deterministic availability check without extra filesystem work.
+
+## 2026-08-01 — Evaluate EOU as an optional live capability, not a replacement
+
+**Decision:** Keep FluidAudio pinned to `0.15.5` and retain the existing
+Silero/window/TDT path. Treat Parakeet Realtime EOU as a possible future
+English-only low-latency live-preview capability behind a refined streaming
+engine protocol.
+
+**Alternatives:** Upgrade FluidAudio before evaluation; replace Milestone 3B
+globally; force the cache-aware streaming model through the existing bounded
+request/response method; reject streaming entirely.
+
+**Reasoning:** The pinned release already contains the EOU streaming API, so an
+upgrade adds no capability today. EOU can reduce partial latency and eliminate
+Silero/window segmentation for its own path, but it supports only English and
+does not emit punctuation or capitalization. TDT v3 remains necessary for the
+required multilingual coverage and higher-quality durable transcript text.
+Whisper and other window-based engines also continue to need a segmentation and
+backpressure path.
