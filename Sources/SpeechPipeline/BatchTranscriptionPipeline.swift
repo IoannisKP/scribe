@@ -90,7 +90,8 @@ public actor BatchTranscriptionPipeline {
             let finalSegments = try await engine.finish()
             try Self.validate(finalSegments, expectedSource: nil)
             segments.append(contentsOf: finalSegments)
-            let merged = TranscriptTimeline.merge(segments)
+            let stitched = TranscriptOverlapDeduplicator.stitch(segments)
+            let merged = TranscriptTimeline.merge(stitched)
             await engine.unload()
             state = .finished(segmentCount: merged.count)
             return merged
@@ -126,7 +127,8 @@ public actor BatchTranscriptionPipeline {
             ),
             source: .microphone,
             trackStartTime: microphoneTrack.startTime,
-            chunkDuration: chunkDuration
+            chunkDuration: chunkDuration,
+            overlapDuration: engine.preferredOverlap
         )
         let systemReader = try CanonicalWAVChunkReader(
             url: sessionDirectory.appendingPathComponent(
@@ -135,7 +137,8 @@ public actor BatchTranscriptionPipeline {
             ),
             source: .system,
             trackStartTime: systemTrack.startTime,
-            chunkDuration: chunkDuration
+            chunkDuration: chunkDuration,
+            overlapDuration: engine.preferredOverlap
         )
         return (microphoneReader, systemReader)
     }

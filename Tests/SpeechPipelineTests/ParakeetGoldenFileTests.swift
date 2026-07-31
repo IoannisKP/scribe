@@ -66,6 +66,105 @@ final class ParakeetGoldenFileTests: XCTestCase {
         )
     }
 
+    func testGoldenFixtureKeepsSpeechAcrossMidWordBatchSeam()
+        async throws
+    {
+        let environment = ProcessInfo.processInfo.environment
+        let model = Self.configuredModel(environment: environment)
+        let store = try ParakeetModelStore()
+        guard await store.availability(of: model) == .available else {
+            let modelDirectory = await store.directory(for: model)
+            throw XCTSkip(
+                "Mid-word seam regression requires \(model.displayName), which is missing from \(modelDirectory.path)."
+            )
+        }
+        let wavURL = try Self.fixtureURL(
+            resource: "parakeet-golden",
+            extension: "wav"
+        )
+        let referenceURL = try Self.fixtureURL(
+            resource: "parakeet-golden-reference",
+            extension: "txt"
+        )
+        let expectedText = try String(
+            contentsOf: referenceURL,
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelDirectory = await store.directory(for: model)
+        let baselineEngine = ParakeetTranscriptionEngine(
+            model: model,
+            modelDirectory: modelDirectory
+        )
+        let baselineReader = try CanonicalWAVChunkReader(
+            url: wavURL,
+            source: .microphone,
+            trackStartTime: 0,
+            chunkDuration: 30
+        )
+        try await baselineEngine.prepare()
+        var baselineSegments: [TranscriptSegment] = []
+        while let chunk = try await baselineReader.nextChunk() {
+            baselineSegments.append(
+                contentsOf: try await baselineEngine.transcribe(chunk)
+            )
+        }
+        await baselineEngine.unload()
+        let baselineWords = baselineSegments.flatMap { $0.words ?? [] }
+        let middleWord = try XCTUnwrap(
+            baselineWords.min {
+                abs(($0.startTime + $0.endTime) / 2 - 9.5)
+                    < abs(($1.startTime + $1.endTime) / 2 - 9.5)
+            }
+        )
+        let boundary = (middleWord.startTime + middleWord.endTime) / 2
+        XCTAssertGreaterThan(boundary, middleWord.startTime)
+        XCTAssertLessThan(boundary, middleWord.endTime)
+
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.copyItem(
+            at: wavURL,
+            to: directory.appendingPathComponent("microphone.wav")
+        )
+        try await writeCanonicalWAV(
+            samples: [0],
+            to: directory.appendingPathComponent("system.wav")
+        )
+        try CaptureSessionManifest.dualTrack(
+            microphoneStartTime: 0,
+            systemStartTime: 0
+        ).write(to: directory)
+        let seamEngine = WindowGeometryOverrideEngine(
+            wrapped: ParakeetTranscriptionEngine(
+                model: model,
+                modelDirectory: modelDirectory
+            ),
+            preferredWindowDuration: boundary,
+            preferredOverlap: 1.5
+        )
+        let pipeline = try BatchTranscriptionPipeline(engine: seamEngine)
+        let segments = try await pipeline.transcribeSession(at: directory)
+        let actualText = segments.map(\.text).joined(separator: " ")
+        let baselineText = baselineSegments.map(\.text).joined(separator: " ")
+        let measuredWER = Self.wordErrorRate(
+            expected: expectedText,
+            actual: actualText
+        )
+        print(
+            "Parakeet golden mid-word seam [\(middleWord.text), "
+                + String(format: "%.3f", boundary)
+                + "s]: WER " + String(format: "%.4f", measuredWER)
+        )
+        XCTAssertLessThanOrEqual(measuredWER, 0.20)
+        XCTAssertGreaterThanOrEqual(
+            Self.normalizedWords(actualText).count,
+            Self.normalizedWords(baselineText).count,
+            "The overlapped batch path lost words relative to one-window inference."
+        )
+    }
+
     private func assertGoldenFixture(
         wavURL: URL,
         expectedText: String,
@@ -196,5 +295,47 @@ final class ParakeetGoldenFileTests: XCTestCase {
         text.lowercased()
             .split { !$0.isLetter && !$0.isNumber }
             .map(String.init)
+    }
+}
+
+private actor WindowGeometryOverrideEngine: TranscriptionEngine {
+    nonisolated let identifier: String
+    nonisolated let supportsStreaming: Bool
+    nonisolated let requiresNetwork: Bool
+    nonisolated let supportedLanguages: [String]
+    nonisolated let preferredWindowDuration: TimeInterval
+    nonisolated let preferredOverlap: TimeInterval
+    private let wrapped: any TranscriptionEngine
+
+    init(
+        wrapped: any TranscriptionEngine,
+        preferredWindowDuration: TimeInterval,
+        preferredOverlap: TimeInterval
+    ) {
+        self.wrapped = wrapped
+        self.identifier = wrapped.identifier + ".geometry-override"
+        self.supportsStreaming = wrapped.supportsStreaming
+        self.requiresNetwork = wrapped.requiresNetwork
+        self.supportedLanguages = wrapped.supportedLanguages
+        self.preferredWindowDuration = preferredWindowDuration
+        self.preferredOverlap = preferredOverlap
+    }
+
+    func prepare() async throws {
+        try await wrapped.prepare()
+    }
+
+    func transcribe(_ chunk: AudioChunk) async throws
+        -> [TranscriptSegment]
+    {
+        try await wrapped.transcribe(chunk)
+    }
+
+    func finish() async throws -> [TranscriptSegment] {
+        try await wrapped.finish()
+    }
+
+    func unload() async {
+        await wrapped.unload()
     }
 }

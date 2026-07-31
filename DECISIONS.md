@@ -463,3 +463,18 @@ the UI select geometry; infer the engine type with runtime casts.
 engine prevents batch and live behavior from drifting and allows a later
 Whisper engine to request its required 30-second window without model-specific
 conditionals in either pipeline.
+
+## 2026-08-01 — Overlap and stitch batch transcription windows
+
+**Decision:** Advance canonical batch reads by engine window duration minus
+engine overlap, then run produced segments through the existing source-aware
+overlap deduplicator before the final timeline merge.
+
+**Alternatives:** Keep nonoverlapping batch chunks; concatenate overlapping
+results verbatim; add a second batch-only text merger; load the complete track
+into memory.
+
+**Reasoning:** Context on both sides of a model boundary protects words split
+by a batch seam. Reusing the timing-aware live deduplicator keeps each word once
+without mixing microphone and system speech, while bounded reads preserve the
+long-recording memory guarantee.

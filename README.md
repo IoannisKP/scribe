@@ -40,6 +40,8 @@ transcription:
   monotonic session timeline;
 - bounded canonical-WAV reads sized by the selected engine instead of loading
   an entire long meeting into memory;
+- overlapping batch reads advance by window minus overlap and pass each
+  source through seam de-duplication before the shared timeline is merged;
 - chronological dispatch and deterministic merging across microphone and
   system tracks;
 - strict validation of engine timing and source attribution;
@@ -383,6 +385,11 @@ This check requires the one-time VAD download and real input sources:
    `TranscriptOverlapDeduplicatorTests` suites verify the exact 30-second
    ceiling, 14-second windows, 1.5-second overlaps, source offsets, transient
    spool round trips, seam removal, and bounded one-hour silence processing.
+
+The ordinary suite also runs a committed Parakeet batch-seam regression when
+the selected model is installed. It places a window boundary inside a word
+identified by one-window inference and requires the overlapped result to retain
+the baseline word count while remaining within the golden WER threshold.
 
 ## Milestone 3C acceptance check
 
