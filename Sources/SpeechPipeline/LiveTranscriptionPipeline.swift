@@ -22,7 +22,7 @@ public struct LiveTranscriptRow: Equatable, Identifiable, Sendable {
 
 public enum LiveTranscriptionPipelineState: Equatable, Sendable {
     case idle
-    case modelUnavailable
+    case modelUnavailable(reason: LiveTranscriptionUnavailableReason)
     case preparing
     case running(pendingWindowCount: UInt64)
     case bufferingToDisk(pendingWindowCount: UInt64)
@@ -30,6 +30,18 @@ public enum LiveTranscriptionPipelineState: Equatable, Sendable {
     case finishing(pendingWindowCount: UInt64)
     case completed(finalRowCount: Int)
     case failed(message: String)
+
+    public var isModelUnavailable: Bool {
+        if case .modelUnavailable = self {
+            return true
+        }
+        return false
+    }
+}
+
+public enum LiveTranscriptionUnavailableReason: Equatable, Sendable {
+    case voiceActivityModel
+    case transcriptionModel
 }
 
 public struct LiveTranscriptionPipelineMetrics: Equatable, Sendable {

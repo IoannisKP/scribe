@@ -525,3 +525,21 @@ utterance first.
 its measured positive offset. At a genuinely equal absolute start, source order
 is the stable tie-breaker; utterance length must not reverse the speaker order.
 Comparing full-precision times avoids manufacturing ties from UI rounding.
+
+## 2026-08-01 — Carry the observed unavailable component into status text
+
+**Decision:** Give live-transcription's unavailable state an explicit reason:
+missing Silero voice-activity model or missing Parakeet transcription model.
+Centralize live transport, speech, and transcription wording in a tested
+formatter.
+
+**Alternatives:** Infer the reason from whichever model is usually missing;
+keep one generic unavailable message; let each view independently reconstruct
+pipeline state.
+
+**Reasoning:** The previous shared state blamed Parakeet even when the branch
+had directly observed missing Silero. The audit found one related issue: raw
+live-audio transport buffering was labelled an ASR backlog even though it can
+occur before ASR. It also found idle batch status claiming readiness without a
+recording or selected model. Explicit inputs ensure messages report observed
+state rather than a plausible cause and keep degradation understandable.

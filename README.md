@@ -102,6 +102,8 @@ preparation:
 - source- and timeline-aware overlap de-duplication prefers word timings and
   falls back to normalized text tokens;
 - the recording UI shows model acquisition and live speech-pipeline state;
+- unavailable and backlog statuses name the observed component: Silero for
+  speech detection, Parakeet for ASR, and live audio for transport buffering;
 - deterministic tests cover source isolation, segmentation, window overlap,
   spool round trips, de-duplication, and a virtual one-hour bounded-buffer
   soak.

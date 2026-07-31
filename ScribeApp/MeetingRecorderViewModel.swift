@@ -157,18 +157,12 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     var transcriptionStatusText: String {
-        switch transcriptionState {
-        case .idle:
-            "Ready to transcribe the latest recording"
-        case .preparing:
-            "Loading the local model"
-        case let .transcribing(processedChunkCount):
-            "Transcribing locally · \(processedChunkCount) chunks processed"
-        case let .finished(segmentCount):
-            "Finished · \(segmentCount) transcript segments"
-        case let .failed(message):
-            "Failed · \(message)"
-        }
+        LivePipelineStatusText.batchTranscription(
+            transcriptionState,
+            hasRecording: hasRecording,
+            isRecording: isRecording,
+            modelAvailable: modelAvailability == .available
+        )
     }
 
     var modelStatusText: String {
@@ -194,24 +188,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     var liveTransportStatusText: String {
-        switch liveTransportState {
-        case .idle:
-            "Live feed idle"
-        case .ready:
-            "Live feed ready"
-        case let .keepingUp(pendingSampleCount):
-            "Live feed keeping up · \(pendingDuration(pendingSampleCount)) queued"
-        case let .bufferingToDisk(pendingSampleCount):
-            "ASR backlog buffered safely to disk · \(pendingDuration(pendingSampleCount)) queued"
-        case let .catchingUp(pendingSampleCount):
-            "Live feed catching up · \(pendingDuration(pendingSampleCount)) queued"
-        case let .recordingComplete(pendingSampleCount):
-            "Recording complete · \(pendingDuration(pendingSampleCount)) buffered"
-        case .drained:
-            "Live feed stopped cleanly"
-        case let .failed(message):
-            "Live feed failed · \(message)"
-        }
+        LivePipelineStatusText.transport(liveTransportState)
     }
 
     var sileroVADStatusText: String {
@@ -237,45 +214,13 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     var liveSpeechPipelineStatusText: String {
-        switch liveSpeechPipelineState {
-        case .idle:
-            "Speech detection idle"
-        case .modelUnavailable:
-            "Recording only · download Live VAD to detect speech"
-        case .preparing:
-            "Loading local Silero VAD"
-        case let .running(pendingWindowCount):
-            "Speech detection running · \(pendingWindowCount) windows buffered"
-        case let .finishing(pendingWindowCount):
-            "Finishing speech detection · \(pendingWindowCount) windows buffered"
-        case let .completed(pendingWindowCount):
-            "Speech detection complete · \(pendingWindowCount) windows buffered"
-        case let .failed(message):
-            "Speech detection failed · \(message)"
-        }
+        LivePipelineStatusText.speech(liveSpeechPipelineState)
     }
 
     var liveTranscriptionStatusText: String {
-        switch liveTranscriptionPipelineState {
-        case .idle:
-            "Live transcription idle"
-        case .modelUnavailable:
-            "Recording and VAD only · download the selected Parakeet model for live text"
-        case .preparing:
-            "Loading local Parakeet for live transcription"
-        case let .running(pendingWindowCount):
-            "Live transcription keeping up · \(pendingWindowCount) windows queued"
-        case let .bufferingToDisk(pendingWindowCount):
-            "ASR behind real time · \(pendingWindowCount) windows buffered safely to disk"
-        case let .catchingUp(pendingWindowCount):
-            "Live transcription catching up · \(pendingWindowCount) windows queued"
-        case let .finishing(pendingWindowCount):
-            "Finalizing live transcript · \(pendingWindowCount) windows queued"
-        case let .completed(finalRowCount):
-            "Live transcript complete · \(finalRowCount) final rows"
-        case let .failed(message):
-            "Live transcription failed · \(message)"
-        }
+        LivePipelineStatusText.transcription(
+            liveTranscriptionPipelineState
+        )
     }
 
     var statusText: String {
@@ -817,7 +762,9 @@ final class MeetingRecorderViewModel: ObservableObject {
             liveSpeechPipeline = nil
             liveSpeechPipelineState = .modelUnavailable
             liveTranscriptionPipeline = nil
-            liveTranscriptionPipelineState = .modelUnavailable
+            liveTranscriptionPipelineState = .modelUnavailable(
+                reason: .voiceActivityModel
+            )
             return
         }
 
@@ -850,7 +797,9 @@ final class MeetingRecorderViewModel: ObservableObject {
                 modelStore != nil
             else {
                 liveTranscriptionPipeline = nil
-                liveTranscriptionPipelineState = .modelUnavailable
+                liveTranscriptionPipelineState = .modelUnavailable(
+                    reason: .transcriptionModel
+                )
                 return
             }
 
@@ -934,7 +883,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                     await liveTranscriptionPipeline.state
                 self.liveTranscriptionPipeline = nil
             } else if
-                liveTranscriptionPipelineState != .modelUnavailable
+                !liveTranscriptionPipelineState.isModelUnavailable
             {
                 liveTranscriptionPipelineState = .idle
             }
@@ -1016,12 +965,4 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
-    private func pendingDuration(_ sampleCount: UInt64) -> String {
-        let seconds =
-            Double(sampleCount) / CanonicalAudioFormat.sampleRate
-        if seconds < 10 {
-            return String(format: "%.1f s", seconds)
-        }
-        return String(format: "%.0f s", seconds)
-    }
 }
