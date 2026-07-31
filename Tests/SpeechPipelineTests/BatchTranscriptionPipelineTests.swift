@@ -108,7 +108,7 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
             TranscriptSegment(
                 text: "system",
                 startTime: 2,
-                endTime: 3,
+                endTime: 2.25,
                 source: .system
             ),
             TranscriptSegment(
@@ -128,6 +128,38 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
         XCTAssertEqual(
             TranscriptTimeline.merge(segments).map(\.text),
             ["first", "microphone", "system"]
+        )
+    }
+
+    func testPositiveSystemOffsetOrdersSameRelativeChunkLater()
+        async throws
+    {
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let offset = 2.0 / CanonicalAudioFormat.sampleRate
+        try await writeDualTrackSession(
+            directory: directory,
+            microphoneSamples: Array(repeating: 0.25, count: 4),
+            systemSamples: Array(repeating: -0.25, count: 4),
+            systemStartTime: offset
+        )
+        let engine = LifecycleMockEngine(
+            preferredWindowDuration:
+                4.0 / CanonicalAudioFormat.sampleRate,
+            preferredOverlap: 0
+        )
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
+
+        let segments = try await pipeline.transcribeSession(at: directory)
+
+        XCTAssertEqual(segments.map(\.source), [.microphone, .system])
+        XCTAssertEqual(segments[0].startTime, 0, accuracy: 0.000_001)
+        XCTAssertEqual(
+            segments[1].startTime,
+            offset,
+            accuracy: 0.000_001
         )
     }
 

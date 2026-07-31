@@ -84,6 +84,44 @@ final class LiveTranscriptionPipelineTests: XCTestCase {
         )
     }
 
+    func testEqualLiveStartsOrderMicrophoneBeforeShorterSystemRow()
+        async throws
+    {
+        let provider = ControlledWindowProvider()
+        let pipeline = try LiveTranscriptionPipeline(
+            windowProvider: provider,
+            engine: TieOrderingTranscriptionEngine()
+        )
+        await provider.append(
+            window(
+                source: .system,
+                segmentIndex: 0,
+                firstSampleIndex: 0,
+                isFinal: true
+            )
+        )
+        await provider.append(
+            window(
+                source: .microphone,
+                segmentIndex: 0,
+                firstSampleIndex: 0,
+                isFinal: true
+            )
+        )
+        await provider.finish()
+
+        try await pipeline.beginSession()
+        try await pipeline.waitUntilFinished()
+
+        let rows = await pipeline.rows
+        XCTAssertEqual(rows.map(\.segment.source), [.microphone, .system])
+        XCTAssertEqual(rows.map(\.segment.startTime), [0, 0])
+        XCTAssertGreaterThan(
+            rows[0].segment.endTime,
+            rows[1].segment.endTime
+        )
+    }
+
     func testVirtualOneHourTwoSourceSoakKeepsInFlightAudioBounded()
         async throws
     {
@@ -339,6 +377,32 @@ private actor VirtualHourWindowProvider:
             pendingWindowCount: total - deliveredCount
         )
     }
+}
+
+private actor TieOrderingTranscriptionEngine: TranscriptionEngine {
+    nonisolated let identifier = "test.tie-ordering"
+    nonisolated let supportsStreaming = false
+    nonisolated let requiresNetwork = false
+    nonisolated let supportedLanguages = ["en"]
+
+    func prepare() async throws {}
+
+    func transcribe(_ chunk: AudioChunk) async throws
+        -> [TranscriptSegment]
+    {
+        [
+            TranscriptSegment(
+                text: chunk.source.rawValue,
+                startTime: chunk.startTime,
+                endTime: chunk.startTime
+                    + (chunk.source == .microphone ? 1 : 0.25),
+                source: chunk.source
+            )
+        ]
+    }
+
+    func finish() async throws -> [TranscriptSegment] { [] }
+    func unload() async {}
 }
 
 private actor SeamTranscriptionEngine: TranscriptionEngine {

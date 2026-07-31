@@ -509,3 +509,19 @@ old mixer discarded. Materializing it before WAV/live fan-out preserves one
 linear sample-index mapping for persistence, VAD, and transcription without a
 second timing model. A timer would race the device clock, while manifest gap
 records would leave the durable audio itself temporally compressed.
+
+## 2026-08-01 — Order equal transcript starts by capture source
+
+**Decision:** Sort transcript segments first by absolute start, then microphone
+before system, then by end and text. Reuse the same comparator for live rows and
+batch timeline merges; continue applying each track's manifest start offset
+before sorting.
+
+**Alternatives:** Compare end time before source; rely on insertion or dictionary
+order; sort by the displayed whole-second timestamp; always put the shortest
+utterance first.
+
+**Reasoning:** The microphone capture starts first and the system track carries
+its measured positive offset. At a genuinely equal absolute start, source order
+is the stable tie-breaker; utterance length must not reverse the speaker order.
+Comparing full-precision times avoids manufacturing ties from UI rounding.
