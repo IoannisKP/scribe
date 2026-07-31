@@ -41,6 +41,7 @@
 		100000000000000000000020 /* TranscriptOverlapDeduplicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000021 /* TranscriptOverlapDeduplicator.swift */; };
 		100000000000000000000021 /* LiveTranscriptionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000022 /* LiveTranscriptionPipeline.swift */; };
 		100000000000000000000022 /* LivePipelineStatusText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000023 /* LivePipelineStatusText.swift */; };
+		100000000000000000000023 /* Int16WAVWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000024 /* Int16WAVWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -118,6 +119,7 @@
 		110000000000000000000021 /* TranscriptOverlapDeduplicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptOverlapDeduplicator.swift; sourceTree = "<group>"; };
 		110000000000000000000022 /* LiveTranscriptionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptionPipeline.swift; sourceTree = "<group>"; };
 		110000000000000000000023 /* LivePipelineStatusText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePipelineStatusText.swift; sourceTree = "<group>"; };
+		110000000000000000000024 /* Int16WAVWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Int16WAVWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -189,6 +191,7 @@
 				110000000000000000000004 /* FloatRingBuffer.swift */,
 				110000000000000000000005 /* AudioResampler.swift */,
 				110000000000000000000006 /* Float32WAVWriter.swift */,
+				110000000000000000000024 /* Int16WAVWriter.swift */,
 				110000000000000000000011 /* CanonicalAudioFileConsumer.swift */,
 				110000000000000000000012 /* CoreAudioSupport.swift */,
 				110000000000000000000013 /* CoreAudioSystemTapGraph.swift */,
@@ -358,6 +361,7 @@
 				100000000000000000000004 /* FloatRingBuffer.swift in Sources */,
 				100000000000000000000005 /* AudioResampler.swift in Sources */,
 				100000000000000000000006 /* Float32WAVWriter.swift in Sources */,
+				100000000000000000000023 /* Int16WAVWriter.swift in Sources */,
 				10000000000000000000000D /* CanonicalAudioFileConsumer.swift in Sources */,
 				10000000000000000000000E /* CoreAudioSupport.swift in Sources */,
 				10000000000000000000000F /* CoreAudioSystemTapGraph.swift in Sources */,

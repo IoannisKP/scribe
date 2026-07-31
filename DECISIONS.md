@@ -543,3 +543,18 @@ live-audio transport buffering was labelled an ASR backlog even though it can
 occur before ASR. It also found idle batch status claiming readiness without a
 recording or selected model. Explicit inputs ensure messages report observed
 state rather than a plausible cause and keep degradation understandable.
+
+## 2026-08-01 — Quantize only durable session audio to Int16 PCM
+
+**Decision:** Keep capture, live fan-out, VAD, and transcription in Float32,
+but stream each durable 16 kHz mono session track as signed 16-bit PCM. Continue
+accepting both Int16 PCM and the legacy Float32 format in the transcription
+reader.
+
+**Alternatives:** Retain Float32 WAV storage; quantize inside realtime capture;
+convert old sessions in place; introduce a compressed-audio dependency.
+
+**Reasoning:** Int16 halves the durable sample payload without changing model
+input or realtime behavior. Quantizing on the existing non-realtime consumer
+preserves callback safety. Read-time compatibility keeps existing recordings
+usable and avoids modifying user session data.

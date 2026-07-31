@@ -45,3 +45,12 @@ func writeCanonicalWAV(
     try await writer.append(samples)
     try await writer.finish()
 }
+
+func writeDurableSessionWAV(
+    samples: [Float],
+    to url: URL
+) async throws {
+    let writer = try Int16WAVWriter(url: url)
+    try await writer.append(samples)
+    try await writer.finish()
+}

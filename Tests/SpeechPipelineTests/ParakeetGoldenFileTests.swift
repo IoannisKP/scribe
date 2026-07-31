@@ -34,6 +34,49 @@ final class ParakeetGoldenFileTests: XCTestCase {
         )
     }
 
+    func testDurableInt16CopyWithinWordErrorRateTolerance() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let sourceURL = try Self.fixtureURL(
+            resource: "parakeet-golden",
+            extension: "wav"
+        )
+        let referenceURL = try Self.fixtureURL(
+            resource: "parakeet-golden-reference",
+            extension: "txt"
+        )
+        let expectedText = try String(
+            contentsOf: referenceURL,
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let reader = try CanonicalWAVChunkReader(
+            url: sourceURL,
+            source: .microphone,
+            trackStartTime: 0,
+            chunkDuration: 30
+        )
+        var samples: [Float] = []
+        while let chunk = try await reader.nextChunk() {
+            samples.append(contentsOf: chunk.samples)
+        }
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let durableURL = directory.appendingPathComponent("durable-int16.wav")
+        try await writeDurableSessionWAV(samples: samples, to: durableURL)
+
+        try await assertGoldenFixture(
+            wavURL: durableURL,
+            expectedText: expectedText,
+            model: Self.configuredModel(environment: environment),
+            tolerance: Self.tolerance(
+                environment: environment,
+                defaultValue: 0.20
+            ),
+            label: "durable Int16 copy"
+        )
+    }
+
     func testOptionalRecordedFixtureWithinWordErrorRateTolerance()
         async throws
     {
@@ -128,7 +171,7 @@ final class ParakeetGoldenFileTests: XCTestCase {
             at: wavURL,
             to: directory.appendingPathComponent("microphone.wav")
         )
-        try await writeCanonicalWAV(
+        try await writeDurableSessionWAV(
             samples: [0],
             to: directory.appendingPathComponent("system.wav")
         )

@@ -105,7 +105,7 @@ public enum SpeechPipelineError:
         url: URL,
         sampleRate: Double,
         channelCount: UInt32,
-        isFloat: Bool
+        formatDescription: String
     )
     case audioBufferAllocationFailed(URL)
     case audioFileProducedNoSamples(URL)
@@ -138,9 +138,9 @@ public enum SpeechPipelineError:
             url,
             sampleRate,
             channelCount,
-            isFloat
+            formatDescription
         ):
-            "The audio file at \(url.path) is not canonical 16 kHz mono Float32 audio (rate: \(sampleRate), channels: \(channelCount), Float32: \(isFloat))."
+            "The audio file at \(url.path) is not supported canonical audio. Expected 16 kHz mono Int16 PCM or legacy Float32; received rate \(sampleRate), channels \(channelCount), format \(formatDescription)."
         case let .audioBufferAllocationFailed(url):
             "Unable to allocate a bounded read buffer for \(url.path)."
         case let .audioFileProducedNoSamples(url):

@@ -4,7 +4,7 @@ import SpeechPipeline
 import XCTest
 
 final class CanonicalWAVChunkReaderTests: XCTestCase {
-    func testReadsFixtureBackedWAVInBoundedChunksWithTimelineOffset()
+    func testReadsLegacyFloat32WAVInBoundedChunksWithTimelineOffset()
         async throws
     {
         let fixture = try CanonicalWAVFixture.load()
@@ -49,6 +49,31 @@ final class CanonicalWAVChunkReaderTests: XCTestCase {
         XCTAssertNil(end)
         let remaining = await reader.remainingSampleCount
         XCTAssertEqual(remaining, 0)
+    }
+
+    func testReadsDurableInt16WAVAsFloatInferenceSamples() async throws {
+        let fixture = try CanonicalWAVFixture.load()
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let url = directory.appendingPathComponent("durable-int16.wav")
+        try await writeDurableSessionWAV(samples: fixture.samples, to: url)
+        let reader = try CanonicalWAVChunkReader(
+            url: url,
+            source: .microphone,
+            trackStartTime: 2,
+            chunkDuration: 1
+        )
+
+        let value = try await reader.nextChunk()
+        let chunk = try XCTUnwrap(value)
+
+        XCTAssertEqual(chunk.samples.count, fixture.samples.count)
+        XCTAssertEqual(chunk.startTime, 2)
+        for (actual, expected) in zip(chunk.samples, fixture.samples) {
+            XCTAssertEqual(actual, expected, accuracy: 1 / 32_768)
+        }
     }
 
     func testRejectsNoncanonicalWAV() async throws {

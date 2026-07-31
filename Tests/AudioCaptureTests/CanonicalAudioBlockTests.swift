@@ -65,11 +65,11 @@ final class CanonicalAudioBlockTests: XCTestCase {
         let wavData = try Data(contentsOf: outputURL)
         XCTAssertEqual(
             wavData.uint32LE(at: 40),
-            UInt32(committedSampleCount * MemoryLayout<Float>.size)
+            UInt32(committedSampleCount * MemoryLayout<Int16>.size)
         )
         XCTAssertEqual(
             wavData.count,
-            44 + committedSampleCount * MemoryLayout<Float>.size
+            44 + committedSampleCount * MemoryLayout<Int16>.size
         )
     }
 
