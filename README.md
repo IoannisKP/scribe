@@ -327,8 +327,16 @@ This check downloads a model once and then runs locally:
    phrase occurred, including the small startup offset between tracks.
 6. Repeat with Parakeet v2 for an English recording if that model is installed.
 
-An opt-in command-line golden test is available for a canonical 16 kHz mono
-Float32 WAV and known reference text:
+The ordinary suite includes a committed 19.6-second canonical Float32 WAV made
+with macOS `say` and its known reference text. When the selected Parakeet model
+is installed, the suite transcribes that fixture and enforces a word-error-rate
+ceiling. When it is missing, the test skips with the exact model name and local
+directory required. The synthetic voice is clean and contains no disfluency,
+room noise, cross-talk, or accent variation; this is a deterministic regression
+guard, not evidence of real-world accuracy.
+
+An optional second golden run remains available for caller-supplied recorded
+audio and reference text:
 
 ```sh
 SCRIBE_RUN_PARAKEET_GOLDEN=1 \
@@ -339,8 +347,10 @@ SCRIBE_GOLDEN_MAX_WER=0.25 \
 swift test --filter ParakeetGoldenFileTests
 ```
 
-Ordinary test runs skip this test, never download a model, and never access the
-network.
+Ordinary test runs never download a model or access the network. They run the
+committed fixture only when the local model is already complete. The opt-in
+variables affect only the additional real-recording fixture; `SCRIBE_GOLDEN_MODEL`
+and `SCRIBE_GOLDEN_MAX_WER` can also select v2 or override the ceiling.
 
 ## Milestone 3A acceptance check
 
