@@ -51,6 +51,8 @@
 		10000000000000000000002A /* ModelStoragePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000029 /* ModelStoragePaths.swift */; };
 		10000000000000000000002B /* ModelIntegrity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002A /* ModelIntegrity.swift */; };
 		10000000000000000000002C /* ModelDownloadController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002B /* ModelDownloadController.swift */; };
+		10000000000000000000002D /* ModelDiskAccounting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002C /* ModelDiskAccounting.swift */; };
+		10000000000000000000002E /* ModelResourceSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002D /* ModelResourceSafety.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -151,6 +153,8 @@
 		110000000000000000000029 /* ModelStoragePaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStoragePaths.swift; sourceTree = "<group>"; };
 		11000000000000000000002A /* ModelIntegrity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelIntegrity.swift; sourceTree = "<group>"; };
 		11000000000000000000002B /* ModelDownloadController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadController.swift; sourceTree = "<group>"; };
+		11000000000000000000002C /* ModelDiskAccounting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDiskAccounting.swift; sourceTree = "<group>"; };
+		11000000000000000000002D /* ModelResourceSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelResourceSafety.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,6 +276,8 @@
 				110000000000000000000029 /* ModelStoragePaths.swift */,
 				11000000000000000000002A /* ModelIntegrity.swift */,
 				11000000000000000000002B /* ModelDownloadController.swift */,
+				11000000000000000000002C /* ModelDiskAccounting.swift */,
+				11000000000000000000002D /* ModelResourceSafety.swift */,
 			);
 			path = ModelManager;
 			sourceTree = "<group>";
@@ -488,6 +494,8 @@
 				10000000000000000000002A /* ModelStoragePaths.swift in Sources */,
 				10000000000000000000002B /* ModelIntegrity.swift in Sources */,
 				10000000000000000000002C /* ModelDownloadController.swift in Sources */,
+				10000000000000000000002D /* ModelDiskAccounting.swift in Sources */,
+				10000000000000000000002E /* ModelResourceSafety.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

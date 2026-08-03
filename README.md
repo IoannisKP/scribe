@@ -148,6 +148,11 @@ downloading, pausing, paused, verifying, installed, cancelled, and failed states
 Downloads remain in a staging folder until a bounded-memory SHA-256/size pass
 succeeds; pause tokens are handed to the provider transport, cancellation removes
 partial staging, and invalid artifacts are never promoted as installed models.
+Model storage accounting uses the files actually present on disk, including
+allocated size, without following symbolic links. Download and load safety use
+evidence-backed artifact and peak-memory profiles plus configurable disk and RAM
+reserves. If a requirement or capacity reading is unknown, the operation is
+blocked with a specific reason instead of guessing from parameter counts.
 
 ## Requirements
 

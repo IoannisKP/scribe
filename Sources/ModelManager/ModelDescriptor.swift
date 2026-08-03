@@ -43,6 +43,7 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
     public let supportedLanguages: [String]
     public let supportsLiveProcessing: Bool
     public let windowGeometry: ModelWindowGeometry?
+    public let resourceProfile: ModelResourceProfile?
 
     public init(
         id: ModelIdentifier,
@@ -53,7 +54,8 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         installationDirectoryName: String,
         supportedLanguages: [String],
         supportsLiveProcessing: Bool,
-        windowGeometry: ModelWindowGeometry?
+        windowGeometry: ModelWindowGeometry?,
+        resourceProfile: ModelResourceProfile? = nil
     ) throws {
         guard !id.rawValue.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -110,6 +112,7 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         self.supportedLanguages = Array(Set(supportedLanguages)).sorted()
         self.supportsLiveProcessing = supportsLiveProcessing
         self.windowGeometry = windowGeometry
+        self.resourceProfile = resourceProfile
     }
 
     private static func isSafePathComponent(_ component: String) -> Bool {

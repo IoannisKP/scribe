@@ -50,6 +50,14 @@ future WhisperKit network APIs outside the manager's policy layer.
 counts and SHA-256 digests, and rejects missing files, traversal, duplicate
 manifest entries, and symlinks resolving outside the staged installation.
 
+`ModelDiskAccounting` recursively measures actual installed logical and
+allocated bytes while refusing to follow symbolic links. Before an acquisition
+or model load, `ModelResourceSafetyEvaluator` compares evidence-backed download,
+installed, and peak-memory requirements with current disk capacity and physical
+memory. Unknown requirements and unavailable capacity fail closed. Resource
+profiles must cite either a local measurement or a primary upstream source;
+parameter-count estimates are not accepted as operational safety data.
+
 ## Audio path
 
 The planned two-source path keeps microphone and system audio isolated:
