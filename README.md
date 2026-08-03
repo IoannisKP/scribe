@@ -140,8 +140,9 @@ Milestone 4 has begun with a standalone, dependency-free `ModelManager`
 framework. Its validated built-in catalogue gives Parakeet v3, Parakeet v2,
 and Silero stable identifiers plus shared provider, task, language, installation
 folder, live-processing, and window-geometry metadata. Acquisition and inference
-still use their existing stores until the following manager checkpoints migrate
-them without changing offline behavior.
+still use their existing stores, but both stores now resolve the same canonical
+`Application Support/Scribe/Models` tree through `ModelStoragePaths`. Explicit
+test roots remain supported and existing model folder names are unchanged.
 
 ## Requirements
 

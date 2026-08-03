@@ -32,10 +32,12 @@ engine lifecycle, timestamp mapping, result validation, and merged timeline
 ordering.
 
 `ModelManager` is dependency-free and owns validated, engine-neutral model
-identity and catalogue metadata. Its initial built-in catalogue describes the
-existing Parakeet v3, Parakeet v2, and Silero installations, including provider,
-task, language coverage, live-processing capability, safe installation folder,
-and transcription window geometry. Download and inference adapters remain in
+identity, catalogue metadata, and the canonical Application Support model
+layout. Its initial built-in catalogue describes the existing Parakeet v3,
+Parakeet v2, and Silero installations, including provider, task, language
+coverage, live-processing capability, safe installation folder, and
+transcription window geometry. Parakeet and Silero now resolve their unchanged
+locations through `ModelStoragePaths`; download and inference adapters remain in
 `SpeechPipeline` until their lifecycle is migrated behind this boundary.
 
 ## Audio path

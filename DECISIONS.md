@@ -596,3 +596,20 @@ identifiers, paths, and geometry at construction catches unsafe or contradictory
 metadata before it reaches storage or inference. Starting with models Scribe
 already supports keeps the first checkpoint factual; Whisper entries wait for
 measured source metadata and the exact dependency pin.
+
+## 2026-08-03 — Centralize model paths without relocating caches
+
+**Decision:** Make `ModelStoragePaths` the single owner of Scribe's
+`Application Support/Scribe/Models` layout and per-descriptor installation and
+staging directories. Route the existing Parakeet and Silero stores through it
+while preserving their public injected-root initializers and exact folder names.
+
+**Alternatives:** Move existing caches into a new Milestone 4 hierarchy; let
+each adapter append `Scribe/Models` independently; centralize paths only after
+the download manager exists; scan multiple legacy locations at runtime.
+
+**Reasoning:** The current cache locations already contain large, valid models.
+A path abstraction should eliminate duplication without creating a migration
+or risking offline availability. Descriptor-validated single-component folder
+names keep installations beneath the models root, and injected roots retain
+deterministic tests without reading or writing the user's model cache.
