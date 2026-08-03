@@ -56,6 +56,8 @@
 		10000000000000000000002F /* ManagedModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002E /* ManagedModelRegistry.swift */; };
 		100000000000000000000030 /* HuggingFaceIntegrityManifestResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */; };
 		100000000000000000000031 /* FluidAudioModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000030 /* FluidAudioModelManager.swift */; };
+		100000000000000000000032 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 510000000000000000000002 /* WhisperKit */; };
+		100000000000000000000033 /* WhisperKitDependencyContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000031 /* WhisperKitDependencyContract.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -161,6 +163,7 @@
 		11000000000000000000002E /* ManagedModelRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedModelRegistry.swift; sourceTree = "<group>"; };
 		11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceIntegrityManifestResolver.swift; sourceTree = "<group>"; };
 		110000000000000000000030 /* FluidAudioModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluidAudioModelManager.swift; sourceTree = "<group>"; };
+		110000000000000000000031 /* WhisperKitDependencyContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitDependencyContract.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +191,7 @@
 				100000000000000000000017 /* AudioCapture.framework in Frameworks */,
 				100000000000000000000027 /* ModelManager.framework in Frameworks */,
 				10000000000000000000001B /* FluidAudio in Frameworks */,
+				100000000000000000000032 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -265,6 +269,7 @@
 				11000000000000000000001A /* BatchTranscriptionPipeline.swift */,
 				110000000000000000000030 /* FluidAudioModelManager.swift */,
 				11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */,
+				110000000000000000000031 /* WhisperKitDependencyContract.swift */,
 				11000000000000000000001C /* ParakeetTranscriptionEngine.swift */,
 				11000000000000000000001E /* LiveAudioTransport.swift */,
 				11000000000000000000001F /* SileroVoiceActivityDetector.swift */,
@@ -374,6 +379,7 @@
 			name = SpeechPipeline;
 			packageProductDependencies = (
 				510000000000000000000001 /* FluidAudio */,
+				510000000000000000000002 /* WhisperKit */,
 			);
 			productName = SpeechPipeline;
 			productReference = 11000000000000000000001B /* SpeechPipeline.framework */;
@@ -430,6 +436,7 @@
 			productRefGroup = 150000000000000000000007 /* Products */;
 			packageReferences = (
 				500000000000000000000001 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				500000000000000000000002 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -486,6 +493,7 @@
 				100000000000000000000016 /* BatchTranscriptionPipeline.swift in Sources */,
 				100000000000000000000031 /* FluidAudioModelManager.swift in Sources */,
 				100000000000000000000030 /* HuggingFaceIntegrityManifestResolver.swift in Sources */,
+				100000000000000000000033 /* WhisperKitDependencyContract.swift in Sources */,
 				10000000000000000000001A /* ParakeetTranscriptionEngine.swift in Sources */,
 				10000000000000000000001D /* LiveAudioTransport.swift in Sources */,
 				10000000000000000000001E /* SileroVoiceActivityDetector.swift in Sources */,
@@ -882,6 +890,14 @@
 				version = 0.15.5;
 			};
 		};
+		500000000000000000000002 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -889,6 +905,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 500000000000000000000001 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		510000000000000000000002 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 500000000000000000000002 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
