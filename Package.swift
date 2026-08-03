@@ -16,6 +16,10 @@ let package = Package(
         .package(
             url: "https://github.com/FluidInference/FluidAudio.git",
             exact: "0.15.5"
+        ),
+        .package(
+            url: "https://github.com/argmaxinc/argmax-oss-swift.git",
+            exact: "1.0.0"
         )
     ],
     targets: [
@@ -45,7 +49,8 @@ let package = Package(
             dependencies: [
                 "AudioCapture",
                 "ModelManager",
-                .product(name: "FluidAudio", package: "FluidAudio")
+                .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "WhisperKit", package: "argmax-oss-swift")
             ],
             path: "Sources/SpeechPipeline",
             swiftSettings: [

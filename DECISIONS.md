@@ -683,3 +683,21 @@ primary repository metadata avoids invented sizes and lets an upstream change
 fail safely if it races a transfer. Correcting the catalogue to the folder
 FluidAudio actually reads makes disk accounting truthful and was verified by
 the committed offline Parakeet golden test against the already-installed model.
+
+## 2026-08-03 — Pin the renamed Argmax SDK at WhisperKit 1.0.0
+
+**Decision:** Add `argmaxinc/argmax-oss-swift` at the exact stable version
+`1.0.0` and link only its `WhisperKit` product to SpeechPipeline. Keep
+FluidAudio independently pinned at exactly `0.15.5`. Resolve and commit the
+package lockfile, including WhisperKit's `swift-argument-parser` transitive pin,
+without initializing WhisperKit or downloading model weights.
+
+**Alternatives:** Continue from the pre-rename `WhisperKit` repository and a
+`0.x` tag; use a version range; link the `ArgmaxOSS` umbrella product; track a
+branch or revision; let the first inference path add the package implicitly.
+
+**Reasoning:** Argmax identifies 1.0.0 as the stable rename release and exposes
+WhisperKit as an individual library product with Swift 6 support. An exact pin
+makes builds reproducible and keeps unused SpeakerKit and TTSKit APIs out of
+Scribe's dependency boundary. Package resolution acquires source only; the
+model manager remains the sole authority for explicit model downloads.

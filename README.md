@@ -157,6 +157,10 @@ allocated size, without following symbolic links. Download and load safety use
 evidence-backed artifact and peak-memory profiles plus configurable disk and RAM
 reserves. If a requirement or capacity reading is unknown, the evaluator returns
 a denied result with a specific reason instead of guessing from parameter counts.
+SpeechPipeline now also links the individual WhisperKit product from the renamed
+Argmax open-source SDK at exact version 1.0.0. This dependency checkpoint does
+not initialize WhisperKit or download any model weights; catalogue entries and
+the manager-owned provider adapter are added in the following checkpoints.
 
 ## Requirements
 
@@ -268,10 +272,12 @@ storage paths, and App Store signing profile would then need to be enabled.
 
 - [FluidAudio](https://github.com/FluidInference/FluidAudio) `0.15.5`, exact
   revision `19600a485baa4998812e4654b70d2bab8f2c9949`.
+- [Argmax OSS / WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)
+  `1.0.0`, exact revision `25c62997041c134b03ca82731ce2f6fd2cae1eb9`.
 
-Both Swift Package Manager entry points are locked: the root
-`Package.resolved` supports command-line tests and the Xcode project's
-`Package.resolved` supports app builds.
+Both Swift Package Manager entry points use exact requirements. The committed
+root `Package.resolved` locks command-line builds, while the Xcode project stores
+the same exact requirements and resolves its workspace lockfile locally.
 
 ## Data locations
 
@@ -334,11 +340,12 @@ Those records contain only VAD-selected canonical samples and window metadata.
 They bound memory until live ASR is attached in Milestone 3C and are removed
 when the session stops. They do not replace the WAV files.
 
-The source checkout can itself occupy several gigabytes because SwiftPM keeps a
-FluidAudio checkout and compiled dependencies under `.build`; Xcode keeps a
-separate DerivedData cache outside the checkout. Those caches can grow after
-new configurations or toolchain versions are built. Model downloads and meeting
-sessions live under Application Support, not inside the source checkout.
+The source checkout can itself occupy several gigabytes because SwiftPM keeps
+FluidAudio, Argmax OSS, and compiled dependencies under `.build`; Xcode keeps a
+separate DerivedData cache outside the checkout. The Argmax OSS source checkout
+is small compared with compiled artifacts, but caches can grow after new
+configurations or toolchain versions are built. Whisper model downloads and
+meeting sessions live under Application Support, not inside the source checkout.
 
 WAV tests write only to a unique temporary directory and remove it after each
 test.

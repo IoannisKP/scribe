@@ -397,6 +397,15 @@ golden fixture runs automatically when its model is already installed and skips
 with the missing model's name otherwise; the suite never acquires a model or
 touches the network.
 
+## WhisperKit dependency boundary
+
+SpeechPipeline links the individual `WhisperKit` library product from the
+exactly pinned `argmax-oss-swift` 1.0.0 package. It does not link the Argmax OSS
+umbrella product, initialize an engine, select a model, or permit an implicit
+model download at this boundary. The provider adapter added later in Milestone
+4 must supply a manager-owned local model directory and keep acquisition under
+the same explicit-download lifecycle used by FluidAudio.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.
