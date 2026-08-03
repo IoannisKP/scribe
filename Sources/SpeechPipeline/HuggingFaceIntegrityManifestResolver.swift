@@ -6,22 +6,41 @@ struct HuggingFaceModelSource: Equatable, Sendable {
     let repository: String
     let revision: String
     let requiredRoots: [String]
+    let strippingRemotePrefix: String?
 
     init(
         repository: String,
         revision: String = "main",
-        requiredRoots: [String]
+        requiredRoots: [String],
+        strippingRemotePrefix: String? = nil
     ) throws {
         guard Self.isRepository(repository),
             Self.isSafePathComponent(revision),
             !requiredRoots.isEmpty,
-            requiredRoots.allSatisfy(Self.isSafeRelativePath)
+            requiredRoots.allSatisfy(Self.isSafeRelativePath),
+            strippingRemotePrefix.map(Self.isSafeRelativePath) ?? true
         else {
             throw HuggingFaceManifestError.invalidSource(repository)
         }
         self.repository = repository
         self.revision = revision
         self.requiredRoots = Array(Set(requiredRoots)).sorted()
+        self.strippingRemotePrefix = strippingRemotePrefix
+    }
+
+    func localPath(for remotePath: String) throws -> String {
+        guard let strippingRemotePrefix else {
+            return remotePath
+        }
+        let prefix = strippingRemotePrefix + "/"
+        guard remotePath.hasPrefix(prefix) else {
+            throw HuggingFaceManifestError.invalidArtifact(remotePath)
+        }
+        let localPath = String(remotePath.dropFirst(prefix.count))
+        guard Self.isSafeRelativePath(localPath) else {
+            throw HuggingFaceManifestError.invalidArtifact(remotePath)
+        }
+        return localPath
     }
 
     private static func isSafeRelativePath(_ path: String) -> Bool {
@@ -47,6 +66,11 @@ struct HuggingFaceModelSource: Equatable, Sendable {
         !component.isEmpty && component != "." && component != ".."
             && !component.contains("/") && !component.contains("\\")
     }
+}
+
+struct HuggingFaceResolvedArtifact: Equatable, Sendable {
+    let integrity: ModelArtifactIntegrity
+    let downloadURL: URL
 }
 
 enum HuggingFaceManifestError:
@@ -83,7 +107,10 @@ enum HuggingFaceManifestError:
 struct HuggingFaceIntegrityManifestResolver: Sendable {
     typealias Fetch = @Sendable (URL) async throws -> Data
 
-    private static let maximumNonLFSHashBytes: Int64 = 4 * 1_024 * 1_024
+    // Hugging Face's upload tooling automatically routes files over 10 MB to
+    // large-file storage. Regular Git artifacts below that boundary are still
+    // downloaded and SHA-256 hashed here before entering the managed plan.
+    private static let maximumNonLFSHashBytes: Int64 = 10 * 1_024 * 1_024
     private let fetch: Fetch
 
     init(fetch: @escaping Fetch = Self.fetchFromNetwork) {
@@ -93,12 +120,20 @@ struct HuggingFaceIntegrityManifestResolver: Sendable {
     func resolve(
         _ source: HuggingFaceModelSource
     ) async throws -> ModelIntegrityManifest {
+        try ModelIntegrityManifest(
+            artifacts: await resolveArtifacts(source).map(\.integrity)
+        )
+    }
+
+    func resolveArtifacts(
+        _ source: HuggingFaceModelSource
+    ) async throws -> [HuggingFaceResolvedArtifact] {
         let rootURL = try treeURL(for: source, path: nil)
         let rootItems = try decodeItems(
             try await fetch(rootURL),
             from: rootURL
         )
-        var artifacts: [ModelArtifactIntegrity] = []
+        var artifacts: [HuggingFaceResolvedArtifact] = []
 
         for root in source.requiredRoots {
             guard let item = rootItems.first(where: { $0.path == root }) else {
@@ -127,13 +162,13 @@ struct HuggingFaceIntegrityManifestResolver: Sendable {
                 throw HuggingFaceManifestError.invalidArtifact(root)
             }
         }
-        return try ModelIntegrityManifest(artifacts: artifacts)
+        return artifacts
     }
 
     private func artifact(
         for item: TreeItem,
         source: HuggingFaceModelSource
-    ) async throws -> ModelArtifactIntegrity {
+    ) async throws -> HuggingFaceResolvedArtifact {
         guard item.size >= 0 else {
             throw HuggingFaceManifestError.invalidArtifact(item.path)
         }
@@ -159,10 +194,13 @@ struct HuggingFaceIntegrityManifestResolver: Sendable {
                 String(format: "%02x", $0)
             }.joined()
         }
-        return try ModelArtifactIntegrity(
-            relativePath: item.path,
-            expectedByteCount: item.size,
-            sha256: digest
+        return try HuggingFaceResolvedArtifact(
+            integrity: ModelArtifactIntegrity(
+                relativePath: source.localPath(for: item.path),
+                expectedByteCount: item.size,
+                sha256: digest
+            ),
+            downloadURL: rawURL(for: source, path: item.path)
         )
     }
 
@@ -199,8 +237,12 @@ struct HuggingFaceIntegrityManifestResolver: Sendable {
             throw HuggingFaceManifestError.invalidSource(source.repository)
         }
         components.queryItems = [
-            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(
+                name: "recursive",
+                value: path == nil ? "false" : "true"
+            ),
             URLQueryItem(name: "expand", value: "true"),
+            URLQueryItem(name: "limit", value: "100"),
         ]
         guard let result = components.url else {
             throw HuggingFaceManifestError.invalidSource(source.repository)

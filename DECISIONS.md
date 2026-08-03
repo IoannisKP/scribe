@@ -701,3 +701,44 @@ WhisperKit as an individual library product with Swift 6 support. An exact pin
 makes builds reproducible and keeps unused SpeakerKit and TTSKit APIs out of
 Scribe's dependency boundary. Package resolution acquires source only; the
 model manager remains the sole authority for explicit model downloads.
+
+## 2026-08-03 — Support only Whisper variants with direct fixture evidence
+
+**Decision:** Add twelve explicit Whisper entries backed by Argmax's official
+[`whisperkit-coreml`](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main)
+artifact folders: standard Tiny, Tiny English, Base, Small, Medium, Large v3,
+OpenAI's 2024 Large v3 Turbo architecture, Distil Large v3, and four named
+compressed/Argmax-optimized Large or Distil variants. Give every entry exact
+30-second/1.5-second geometry, its own committed WER ceiling, verified installed
+bytes, and a measured conservative first-load process peak RSS. Use parameter
+counts only as descriptive UI metadata, sourced from the official
+[OpenAI Whisper](https://huggingface.co/openai/whisper-large-v3) and
+[Distil-Whisper](https://huggingface.co/distil-whisper/distil-large-v3)
+model cards, never for storage or RAM safety.
+
+Require `WhisperKitModelManager` to resolve and stage exact files, add the
+matching OpenAI tokenizer locally, verify sizes and SHA-256 values, and promote
+only complete installations. Regular Git files up to the Hub tooling's 10 MiB
+large-file boundary are hashed directly; larger weights require upstream LFS
+SHA-256 metadata. Construct WhisperKit with download disabled. Validate the
+local tokenizer before loading, but let `loadModels()` assign it so WhisperKit
+first detects vocabulary/encoder shape and multilingual state. A missing or
+failed selection names that exact model and never falls back to another.
+
+**Alternatives:** Expose the entire upstream folder list without testing; call
+WhisperKit's automatic download/model recommendation path; substitute a smaller
+model after load failure; estimate resources from parameter count; treat
+`_turbo` as synonymous with OpenAI's Turbo architecture; preassign a tokenizer
+before model loading; keep the compressed 216 MB Small diagnostic as the
+standard Small entry.
+
+**Reasoning:** The milestone contract says an entry without a WER is not
+supported. Direct measurements make every current entry auditable and allow the
+resource evaluator to fail closed. Argmax folder suffixes describe distinct
+properties: `_*MB` denotes compressed weights, while `_turbo` can denote an
+Argmax streaming optimization rather than OpenAI's Turbo architecture. The
+load-order rule was established by a real defect: preassigning the tokenizer
+skipped WhisperKit's model-shape detection and returned empty Small transcripts;
+letting the pinned SDK complete its detection produced WER 0.0000 with word
+timestamps. Synthetic clean speech remains a regression guard, not a claim of
+real-meeting accuracy.

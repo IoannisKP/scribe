@@ -136,31 +136,35 @@ streaming. Consequently, short phrases finalize after their speech boundary,
 while continuous speech first produces a partial after a full 14-second window
 plus overlap is available. No network is used.
 
-Milestone 4 has begun with a standalone, dependency-free `ModelManager`
-framework. Its validated built-in catalogue gives Parakeet v3, Parakeet v2,
-and Silero stable identifiers plus shared provider, task, language, installation
-folder, live-processing, and window-geometry metadata. Parakeet and Silero now
-share one managed registry and one FluidAudio provider adapter; the previous
-milestone-specific stores have been removed. Explicit test roots remain
-supported, and the existing FluidAudio cache is used in place without copying
-or redownloading it.
+Milestone 4 now has a standalone, dependency-free `ModelManager` framework. Its
+validated built-in catalogue gives Parakeet v3/v2, Silero, and twelve verified
+Whisper variants stable identities plus language, installation, geometry,
+quantization, speed, and measured resource metadata. Parakeet and Silero share
+one managed registry and FluidAudio adapter; Whisper uses a separate adapter
+behind the same manager policy. Existing caches are used in place without
+copying or redownloading them.
 The manager also defines a provider-neutral acquisition controller with explicit
 downloading, pausing, paused, verifying, installed, cancelled, and failed states.
 Downloads remain in a staging folder until a bounded-memory SHA-256/size pass
 succeeds; pause tokens are handed to the provider transport, cancellation removes
 partial staging, and invalid artifacts are never promoted as installed models.
-The FluidAudio adapter obtains exact sizes and LFS SHA-256 values from the
-official Hugging Face tree; small Git metadata is hashed directly. Provider
-cache-shape validation also runs while files are still staged.
+The provider adapters obtain exact sizes and LFS SHA-256 values from official
+Hugging Face trees; regular Git artifacts below the Hub's 10 MiB large-file
+boundary are downloaded and SHA-256 hashed directly. Provider cache-shape
+validation also runs while files are still staged.
 Model storage accounting uses the files actually present on disk, including
 allocated size, without following symbolic links. Download and load safety use
 evidence-backed artifact and peak-memory profiles plus configurable disk and RAM
 reserves. If a requirement or capacity reading is unknown, the evaluator returns
 a denied result with a specific reason instead of guessing from parameter counts.
-SpeechPipeline now also links the individual WhisperKit product from the renamed
-Argmax open-source SDK at exact version 1.0.0. This dependency checkpoint does
-not initialize WhisperKit or download any model weights; catalogue entries and
-the manager-owned provider adapter are added in the following checkpoints.
+SpeechPipeline links only the individual WhisperKit product from the renamed
+Argmax open-source SDK at exact version 1.0.0. Tiny, Tiny English, Base, Small,
+Medium, Large v3, Large v3 Turbo, Distil Large v3, and four compressed/optimized
+variants have each produced a committed golden WER measurement. The adapter
+requires the exact selected local folder, disables implicit downloading, uses
+30-second windows with 1.5-second overlap, and preserves word timestamps. These
+models are backend-supported but are not exposed in the app UI until the
+single-resident coordinator and model-management screens are complete.
 
 ## Requirements
 
@@ -346,6 +350,11 @@ separate DerivedData cache outside the checkout. The Argmax OSS source checkout
 is small compared with compiled artifacts, but caches can grow after new
 configurations or toolchain versions are built. Whisper model downloads and
 meeting sessions live under Application Support, not inside the source checkout.
+During the Milestone 4 all-model verification, the checkout remained about
+3.1 GB while the model library reached roughly 11–12 GB. The twelve supported Whisper
+installations alone total 11,582,028,876 logical bytes. Normal users do not need
+every model installed; model storage is separate so a future manager action can
+remove one exact installation without touching source, other models, or sessions.
 
 WAV tests write only to a unique temporary directory and remove it after each
 test.
