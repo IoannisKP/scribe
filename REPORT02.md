@@ -1,8 +1,8 @@
 # Post-acceptance report 02
 
-**Scope:** Work items 1–10, completed in order on 1 August 2026  
+**Scope:** Work items 1–10 plus Milestone 4 checkpoints 1–7
 **Baseline:** Milestones 1–3 accepted; commit `e645a24`  
-**Result:** Items 1–10 are committed green. Item 11 has not started.  
+**Result:** Items 1–10 are committed green; Item 11 is green through checkpoint 7.
 **Dependency invariant:** FluidAudio remains pinned exactly to `0.15.5`.
 
 ## Item 1 — FluidAudio streaming evaluation
@@ -146,8 +146,34 @@ skip, 0 failures**. Final quiet arm64 Debug and Release builds passed.
 external disk pressure, actual five-second polling, user notification, and WAV
 playability after a real low-space stop need target-hardware acceptance.
 
-## Requires human acceptance on target hardware
+## Item 11 — Milestone 4, checkpoints 1–7
+**Changed:** Added the general catalogue, canonical model paths, managed staged
+downloads with pause/resume/cancel and SHA-256 verification, measured disk/RAM
+safety, shared FluidAudio registry, exact WhisperKit 1.0.0 pin, and an explicit
+offline Whisper provider/adapter. Twelve catalogue variants declare 30-second
+windows with 1.5-second overlap; none permits implicit download or substitution.
+**Tested:** Full suite: **119 tests, 1 intentional skip, 0 failures**; quiet
+arm64 Debug/Release builds passed. The M4 Pro fixture measurements use logical
+installed bytes and conservative first-load process peak RSS:
+| Catalogue model | WER | Disk bytes | Peak RSS bytes |
+|---|---:|---:|---:|
+| Tiny | 0.0588 | 79,398,546 | 229,294,080 |
+| Tiny English | 0.0000 | 155,399,288 | 302,841,856 |
+| Base | 0.0392 | 149,482,602 | 344,489,984 |
+| Small | 0.0000 | 489,250,614 | 895,385,600 |
+| Medium | 0.0000 | 1,532,417,382 | 2,553,430,016 |
+| Large v3 | 0.0000 | 3,093,083,359 | 4,440,883,200 |
+| Large v3 Turbo | 0.0000 | 1,622,294,723 | 3,020,783,616 |
+| Distil Large v3 | 0.0392 | 1,517,298,160 | 2,907,111,424 |
+| Turbo 4-bit | 0.0000 | 629,481,698 | 1,173,094,400 |
+| Turbo optimized 4-bit | 0.0000 | 648,432,373 | 1,477,410,816 |
+| Large v3 optimized compressed | 0.0000 | 1,055,612,340 | 1,828,929,536 |
+| Distil optimized compressed | 0.0392 | 609,877,791 | 1,376,993,280 |
+**Unverified/remaining:** This fixture is still synthetic. Checkpoints 8–10
+(single-resident coordinator, model-management UI, and switching verification)
+remain; no Whisper option is exposed in the UI yet.
 
+## Requires human acceptance on target hardware
 - Prototype EOU separately before claiming subsecond latency, acceptable EOU,
   punctuation quality, two-source isolation, or meeting-room WER.
 - Run the optional real-audio golden fixture across accents, noise, overlap,
@@ -169,3 +195,5 @@ playability after a real low-space stop need target-hardware acceptance.
   finalized WAVs, and confirm live-spool cleanup and understandable UI status.
 - Confirm source checkout, DerivedData, models, transient spools, and retained
   sessions grow as documented during repeated real builds and meetings.
+- Compare all supported Whisper variants on noisy, accented, overlapping real
+  meetings and judge word timing, quality, latency, thermals, and memory pressure.

@@ -33,14 +33,15 @@ ordering.
 
 `ModelManager` is dependency-free and owns validated, engine-neutral model
 identity, catalogue metadata, and the canonical Application Support model
-layout. Its initial built-in catalogue describes the existing Parakeet v3,
-Parakeet v2, and Silero installations, including provider, task, language
-coverage, live-processing capability, safe installation folder, and
-transcription window geometry. Parakeet and Silero now resolve their provider
-cache locations through `ModelStoragePaths`. `ManagedModelRegistry` owns their
-provider-neutral availability, disk accounting, resource evaluation, and
-acquisition state. The single `FluidAudioModelManager` adapter in
-`SpeechPipeline` supplies FluidAudio-specific validation and transport behavior.
+layout. The built-in catalogue describes Parakeet v3/v2, Silero, and twelve
+verified Whisper variants, including provider, task, language coverage,
+live-processing capability, safe installation folder, transcription geometry,
+parameter/quantization/speed labels, and evidence-backed disk/RAM requirements.
+Whisper declares exact 30-second windows with 1.5-second overlap; Parakeet keeps
+its 14-second geometry. `ManagedModelRegistry` owns provider-neutral
+availability, disk accounting, resource evaluation, and acquisition state.
+Provider adapters in `SpeechPipeline` supply SDK-specific validation and
+transport behavior without moving those policies into the SDKs.
 
 Model acquisition is split into policy and provider transport.
 `ModelDownloadController` owns per-model state, staging below `.Downloads`,
@@ -51,11 +52,11 @@ future WhisperKit network APIs outside the manager's policy layer.
 `ModelIntegrityVerifier` reads artifacts in bounded chunks, validates exact byte
 counts and SHA-256 digests, and rejects missing files, traversal, duplicate
 manifest entries, and symlinks resolving outside the staged installation.
-For FluidAudio, `HuggingFaceIntegrityManifestResolver` reads the provider's
-official tree metadata before transfer. It uses LFS SHA-256 values directly and
-downloads only small non-LFS metadata files to calculate their SHA-256. A source
-change between manifest resolution and transfer fails verification rather than
-promoting mismatched files.
+`HuggingFaceIntegrityManifestResolver` reads official tree metadata before
+transfer. It uses LFS SHA-256 values directly and downloads regular Git files
+below Hugging Face's 10 MiB large-file boundary to calculate their SHA-256. A
+source change between manifest resolution and transfer fails verification
+rather than promoting mismatched files.
 
 `ModelDiskAccounting` recursively measures actual installed logical and
 allocated bytes while refusing to follow symbolic links.
@@ -335,11 +336,12 @@ capture-session.json
                                          deterministic timeline merge
 ```
 
-`CanonicalWAVChunkReader` is an actor owning one `AVAudioFile`. It accepts only
-16 kHz mono Float32 files and copies at most one configured chunk into memory.
-The default is 14 seconds, below Parakeet's approximately 15-second batch
-window. Fixed chunks deliberately have no overlap in Milestone 2A; VAD,
-overlap, and seam de-duplication belong to Milestone 3.
+`CanonicalWAVChunkReader` is an actor owning one `AVAudioFile`. It accepts
+Scribe's 16 kHz mono Int16 durable files and legacy Float32 sessions, converting
+to canonical Float32 samples on bounded reads. Chunk duration and overlap come
+from the selected engine: Parakeet requests 14/1.5 seconds and Whisper requests
+30/1.5 seconds. Batch and live paths reuse the same source-aware overlap
+de-duplicator so engine changes cannot silently reintroduce seam word loss.
 
 `BatchTranscriptionPipeline` prepares one injected engine, requests chunks in
 shared-session order, validates every returned segment, appends `finish()`
@@ -397,14 +399,33 @@ golden fixture runs automatically when its model is already installed and skips
 with the missing model's name otherwise; the suite never acquires a model or
 touches the network.
 
-## WhisperKit dependency boundary
+## Whisper catalogue and inference boundary
 
-SpeechPipeline links the individual `WhisperKit` library product from the
-exactly pinned `argmax-oss-swift` 1.0.0 package. It does not link the Argmax OSS
-umbrella product, initialize an engine, select a model, or permit an implicit
-model download at this boundary. The provider adapter added later in Milestone
-4 must supply a manager-owned local model directory and keep acquisition under
-the same explicit-download lifecycle used by FluidAudio.
+SpeechPipeline links only the individual `WhisperKit` library product from the
+exactly pinned `argmax-oss-swift` 1.0.0 package. `WhisperKitModelManager`
+projects exact artifact trees from Argmax's official `whisperkit-coreml`
+repository into one manager-owned installation folder and adds the corresponding
+OpenAI tokenizer files. Downloads are explicit, staged, file-resumable, and
+SHA-256/size verified before promotion. Ordinary tests and inference never
+download.
+
+`WhisperKitTranscriptionEngine` accepts one exact `WhisperModel`; a missing or
+failed model is named and never replaced. Preparation validates and parses the
+local tokenizer first, constructs WhisperKit with download disabled, then lets
+`loadModels()` detect vocabulary/encoder shape and multilingual state before it
+loads that same local tokenizer. This order is required: preassigning a tokenizer
+causes WhisperKit to skip model-shape detection. Multilingual models use local
+language detection; English-only Tiny and Distil variants use English prefill.
+All variants request word timestamps and map returned words/segments into the
+engine-neutral transcript contract.
+
+The catalogue exposes standard Tiny, Tiny English, Base, Small, Medium, Large
+v3, the 2024 Large v3 Turbo architecture, Distil Large v3, and four explicit
+compressed/Argmax-optimized variants. `_turbo` in Argmax folder names means a
+streaming optimization, while `_*MB` names compressed weights; neither label is
+silently inferred. Every exposed entry has a committed WER limit and measured
+installed-byte/first-load peak-RSS profile. The committed clean synthetic fixture
+is a regression guard, not evidence of noisy-meeting accuracy.
 
 ## Concurrency
 

@@ -1,4 +1,5 @@
 @testable import SpeechPipeline
+import CryptoKit
 import Foundation
 import ModelManager
 import XCTest
@@ -61,6 +62,77 @@ final class HuggingFaceIntegrityManifestResolverTests: XCTestCase {
         } catch let error as HuggingFaceManifestError {
             XCTAssertEqual(error, .missingRoot("missing.bin"))
         }
+    }
+
+    func testProjectsSharedRepositoryFolderIntoInstallationRoot()
+        async throws
+    {
+        let fixture = ManifestFetchFixture()
+        let resolver = HuggingFaceIntegrityManifestResolver { url in
+            try await fixture.data(for: url)
+        }
+        let source = try HuggingFaceModelSource(
+            repository: "Provider/model",
+            requiredRoots: ["Bundle.mlmodelc"],
+            strippingRemotePrefix: "Bundle.mlmodelc"
+        )
+
+        let artifacts = try await resolver.resolveArtifacts(source)
+
+        XCTAssertEqual(
+            artifacts.map(\.integrity.relativePath),
+            ["weights.bin"]
+        )
+        XCTAssertEqual(
+            artifacts.map(\.downloadURL.path),
+            ["/Provider/model/resolve/main/Bundle.mlmodelc/weights.bin"]
+        )
+    }
+
+    func testHashesRegularGitArtifactBelowHubLargeFileBoundary()
+        async throws
+    {
+        let byteCount = 7_589_739
+        let content = Data(repeating: 0x61, count: byteCount)
+        let resolver = HuggingFaceIntegrityManifestResolver { url in
+            switch url.path {
+            case "/api/models/Provider/model/tree/main":
+                return Data(
+                    """
+                    [
+                      {
+                        "type":"file",
+                        "path":"model.mil",
+                        "size":\(byteCount),
+                        "lfs":null
+                      }
+                    ]
+                    """.utf8
+                )
+            case "/Provider/model/resolve/main/model.mil":
+                return content
+            default:
+                throw FixtureError.unexpectedURL(url)
+            }
+        }
+        let source = try HuggingFaceModelSource(
+            repository: "Provider/model",
+            requiredRoots: ["model.mil"]
+        )
+
+        let manifest = try await resolver.resolve(source)
+
+        XCTAssertEqual(manifest.artifacts.count, 1)
+        XCTAssertEqual(
+            manifest.artifacts[0].expectedByteCount,
+            Int64(byteCount)
+        )
+        XCTAssertEqual(
+            manifest.artifacts[0].sha256,
+            SHA256.hash(data: content).map {
+                String(format: "%02x", $0)
+            }.joined()
+        )
     }
 }
 

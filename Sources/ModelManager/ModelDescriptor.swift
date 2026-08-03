@@ -23,6 +23,20 @@ public enum ModelTask: String, Codable, Sendable {
     case voiceActivityDetection
 }
 
+public enum ModelQuantization: String, Codable, Sendable {
+    case uncompressedCoreML
+    case int8
+    case fourBitCompressed
+    case qloraCompressed
+}
+
+public enum ModelSpeedRating: String, Codable, Sendable {
+    case fastest
+    case fast
+    case balanced
+    case quality
+}
+
 public struct ModelWindowGeometry: Equatable, Codable, Sendable {
     public let duration: TimeInterval
     public let overlap: TimeInterval
@@ -43,6 +57,9 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
     public let supportedLanguages: [String]
     public let supportsLiveProcessing: Bool
     public let windowGeometry: ModelWindowGeometry?
+    public let parameterCountMillions: Int?
+    public let quantization: ModelQuantization?
+    public let speedRating: ModelSpeedRating?
     public let resourceProfile: ModelResourceProfile?
 
     public init(
@@ -55,6 +72,9 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         supportedLanguages: [String],
         supportsLiveProcessing: Bool,
         windowGeometry: ModelWindowGeometry?,
+        parameterCountMillions: Int? = nil,
+        quantization: ModelQuantization? = nil,
+        speedRating: ModelSpeedRating? = nil,
         resourceProfile: ModelResourceProfile? = nil
     ) throws {
         guard !id.rawValue.trimmingCharacters(
@@ -102,6 +122,12 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
                 throw ModelCatalogueError.unexpectedWindowGeometry(id)
             }
         }
+        if let parameterCountMillions, parameterCountMillions <= 0 {
+            throw ModelCatalogueError.invalidParameterCount(
+                id,
+                parameterCountMillions
+            )
+        }
 
         self.id = id
         self.displayName = displayName
@@ -112,6 +138,9 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         self.supportedLanguages = Array(Set(supportedLanguages)).sorted()
         self.supportsLiveProcessing = supportsLiveProcessing
         self.windowGeometry = windowGeometry
+        self.parameterCountMillions = parameterCountMillions
+        self.quantization = quantization
+        self.speedRating = speedRating
         self.resourceProfile = resourceProfile
     }
 
@@ -139,6 +168,7 @@ public enum ModelCatalogueError:
     case unexpectedWindowGeometry(ModelIdentifier)
     case invalidWindowDuration(ModelIdentifier, TimeInterval)
     case invalidWindowOverlap(ModelIdentifier, TimeInterval)
+    case invalidParameterCount(ModelIdentifier, Int)
     case duplicateIdentifier(ModelIdentifier)
     case duplicateInstallationDirectory(String)
 
@@ -160,6 +190,8 @@ public enum ModelCatalogueError:
             "Model \(identifier.rawValue) has invalid window duration \(duration)."
         case let .invalidWindowOverlap(identifier, overlap):
             "Model \(identifier.rawValue) has invalid window overlap \(overlap)."
+        case let .invalidParameterCount(identifier, count):
+            "Model \(identifier.rawValue) has invalid parameter count \(count) million."
         case let .duplicateIdentifier(identifier):
             "Model identifier \(identifier.rawValue) appears more than once."
         case let .duplicateInstallationDirectory(directory):
