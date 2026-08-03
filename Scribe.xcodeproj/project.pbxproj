@@ -61,6 +61,7 @@
 		100000000000000000000034 /* WhisperModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000032 /* WhisperModel.swift */; };
 		100000000000000000000035 /* WhisperKitModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000033 /* WhisperKitModelManager.swift */; };
 		100000000000000000000036 /* WhisperKitTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000034 /* WhisperKitTranscriptionEngine.swift */; };
+		100000000000000000000037 /* ResidentTranscriptionEngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000035 /* ResidentTranscriptionEngineCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -170,6 +171,7 @@
 		110000000000000000000032 /* WhisperModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModel.swift; sourceTree = "<group>"; };
 		110000000000000000000033 /* WhisperKitModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelManager.swift; sourceTree = "<group>"; };
 		110000000000000000000034 /* WhisperKitTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitTranscriptionEngine.swift; sourceTree = "<group>"; };
+		110000000000000000000035 /* ResidentTranscriptionEngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResidentTranscriptionEngineCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -279,6 +281,7 @@
 				110000000000000000000032 /* WhisperModel.swift */,
 				110000000000000000000033 /* WhisperKitModelManager.swift */,
 				110000000000000000000034 /* WhisperKitTranscriptionEngine.swift */,
+				110000000000000000000035 /* ResidentTranscriptionEngineCoordinator.swift */,
 				11000000000000000000001C /* ParakeetTranscriptionEngine.swift */,
 				11000000000000000000001E /* LiveAudioTransport.swift */,
 				11000000000000000000001F /* SileroVoiceActivityDetector.swift */,
@@ -506,6 +509,7 @@
 				100000000000000000000034 /* WhisperModel.swift in Sources */,
 				100000000000000000000035 /* WhisperKitModelManager.swift in Sources */,
 				100000000000000000000036 /* WhisperKitTranscriptionEngine.swift in Sources */,
+				100000000000000000000037 /* ResidentTranscriptionEngineCoordinator.swift in Sources */,
 				10000000000000000000001A /* ParakeetTranscriptionEngine.swift in Sources */,
 				10000000000000000000001D /* LiveAudioTransport.swift in Sources */,
 				10000000000000000000001E /* SileroVoiceActivityDetector.swift in Sources */,
