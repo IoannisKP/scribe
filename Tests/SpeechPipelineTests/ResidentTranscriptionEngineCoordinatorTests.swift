@@ -3,6 +3,48 @@ import AudioCapture
 import XCTest
 
 final class ResidentTranscriptionEngineCoordinatorTests: XCTestCase {
+    func testSequentialMockComparisonUsesEveryExactEngineInOrder()
+        async throws
+    {
+        let events = EngineEventRecorder()
+        let coordinator = ResidentTranscriptionEngineCoordinator()
+        let identifiers = ["parakeet", "whisper-tiny", "whisper-medium"]
+        var outputs: [String] = []
+        var lastEngine: CoordinatedTranscriptionEngine?
+
+        for identifier in identifiers {
+            let engine = CoordinatedTranscriptionEngine(
+                engine: CoordinatorMockEngine(
+                    identifier: identifier,
+                    events: events
+                ),
+                coordinator: coordinator
+            )
+            try await engine.prepare()
+            outputs.append(
+                contentsOf: try await engine.transcribe(Self.chunk)
+                    .map(\.text)
+            )
+            lastEngine = engine
+        }
+        await lastEngine?.unload()
+        let recordedEvents = await events.values
+        let finalState = await coordinator.state
+
+        XCTAssertEqual(outputs, identifiers)
+        XCTAssertEqual(
+            recordedEvents,
+            [
+                "parakeet.prepare", "parakeet.transcribe",
+                "parakeet.unload", "whisper-tiny.prepare",
+                "whisper-tiny.transcribe", "whisper-tiny.unload",
+                "whisper-medium.prepare", "whisper-medium.transcribe",
+                "whisper-medium.unload",
+            ]
+        )
+        XCTAssertEqual(finalState, .idle)
+    }
+
     func testSwitchUnloadsPreviousEngineBeforePreparingNext() async throws {
         let events = EngineEventRecorder()
         let coordinator = ResidentTranscriptionEngineCoordinator()

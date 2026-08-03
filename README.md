@@ -172,6 +172,11 @@ unloads the prior exact engine before preparing another, rejects switching
 during inference, and prevents stale wrappers from unloading or transcribing
 through the newly selected model.
 
+The committed switching comparison loads Parakeet v3, then Whisper Tiny, Small,
+and Medium through one resident coordinator and transcribes the same fixture
+with each. Measured WERs are 0.0000, 0.0588, 0.0000, and 0.0000 respectively.
+Missing local models are named and skipped; tests never download implicitly.
+
 ## Requirements
 
 - Apple Silicon Mac
