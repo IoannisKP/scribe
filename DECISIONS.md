@@ -577,3 +577,22 @@ temporary bounded-memory queues can dominate disk use under sustained backlog.
 Keeping policy and monitoring in the capture coordinator guarantees preflight
 before capture, applies equally outside the UI, and is deterministic under an
 injected provider. Automatic deletion would violate local-data ownership.
+
+## 2026-08-03 — Establish a dependency-free model catalogue boundary
+
+**Decision:** Add a `ModelManager` framework that owns validated model
+identifiers, provider/task metadata, language coverage, safe installation folder
+names, live-processing capability, and transcription window geometry. Seed it
+with the two current Parakeet variants and Silero before migrating storage or
+download behavior.
+
+**Alternatives:** Keep extending milestone-specific stores in `SpeechPipeline`;
+introduce the framework only when WhisperKit is added; make catalogue entries
+unvalidated dictionaries; add speculative Whisper entries immediately.
+
+**Reasoning:** A dependency-free catalogue prevents the future Whisper package
+from becoming the owner of application-wide identity and policy. Validating
+identifiers, paths, and geometry at construction catches unsafe or contradictory
+metadata before it reaches storage or inference. Starting with models Scribe
+already supports keeps the first checkpoint factual; Whisper entries wait for
+measured source metadata and the exact dependency pin.
