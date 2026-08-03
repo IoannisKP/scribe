@@ -177,6 +177,16 @@ public actor ModelDownloadController {
         try? removeIfPresent(paths.stagingDirectory(for: descriptor))
     }
 
+    public func resetState(_ identifier: ModelIdentifier) throws {
+        switch state(for: identifier) {
+        case .downloading, .pausing, .verifying:
+            throw ModelDownloadControllerError.operationInProgress(identifier)
+        case .idle, .paused, .installed, .cancelled, .failed:
+            states[identifier] = .idle
+            resumeData.removeValue(forKey: identifier)
+        }
+    }
+
     private func perform(
         _ plan: ModelDownloadPlan,
         using transport: any ModelDownloadTransport,

@@ -444,6 +444,22 @@ changes. If replacement preparation fails, the failing engine is unloaded, no
 engine remains resident, and the coordinator records its identifier and original
 error text; it never restores or substitutes the previous model silently.
 
+## Catalogue-driven model UI
+
+`TranscriptionModelSelection` is the exact UI-to-provider mapping for the two
+Parakeet and twelve verified Whisper entries. The same selection creates batch
+and live engines, so SwiftUI cannot select one model while a pipeline prepares
+another. The saved default is captured when recording starts.
+
+`MeetingRecorderViewModel` projects both provider managers into one availability,
+download-progress, pause/resume/cancel, disk-accounting, and resource-safety
+surface. It evaluates disk before a measured model install and the safe physical-
+RAM budget before load. Installed and invalid exact folders can be removed only
+while recording and inference are idle. Total usage is summed from files actually
+on disk, including Silero. A missing or failed selection can expose the closest
+smaller installed measured model, but selection changes only after an explicit
+user action; no fallback is automatic.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.

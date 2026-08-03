@@ -163,11 +163,14 @@ Medium, Large v3, Large v3 Turbo, Distil Large v3, and four compressed/optimized
 variants have each produced a committed golden WER measurement. The adapter
 requires the exact selected local folder, disables implicit downloading, uses
 30-second windows with 1.5-second overlap, and preserves word timestamps. These
-models are backend-supported but are not exposed in the app UI until the
-model-management screens are complete. A shared resident-engine coordinator is
-already in place: it unloads the prior exact engine before preparing another,
-rejects switching during inference, and prevents stale wrappers from unloading
-or transcribing through the newly selected model.
+models are exposed alongside both Parakeet choices in the catalogue-driven app
+menu. The model card shows provider, languages, compression, speed, measured
+installed size and peak memory, current safety status, and total library usage.
+Installs can be paused, resumed, or cancelled; installed or invalid entries can
+be deleted without touching recordings. A shared resident-engine coordinator
+unloads the prior exact engine before preparing another, rejects switching
+during inference, and prevents stale wrappers from unloading or transcribing
+through the newly selected model.
 
 ## Requirements
 
@@ -199,12 +202,20 @@ durable files are quantized to Int16, halving their audio payload. Existing
 
 To transcribe:
 
-1. Choose **Parakeet v3 · Multilingual** or **Parakeet v2 · English**.
-2. Click **Download Model**. This explicit action is the only model-network
-   path.
-3. After the model is available, click **Transcribe Recording**.
+1. Choose an exact Parakeet or verified Whisper entry under **Models and local
+   transcription**. The choice is saved as the default and fixed when a live
+   recording starts.
+2. Review its language, disk, peak-memory, and safety information, then click
+   **Install**. This explicit action is the only model-network path. Large
+   transfers expose **Pause**, **Resume**, and **Cancel**.
+3. After the model is installed, click **Transcribe Recording**.
 4. Read the merged rows labelled **You** and **Others**. Their timestamps use
    the shared monotonic capture timeline.
+
+If the exact selection is missing or fails, Scribe names it and may offer the
+closest smaller model already installed. It changes models only when that offer
+is clicked. **Delete…** removes only the selected model after confirmation;
+Silero VAD has the same explicit install/delete treatment.
 
 Downloaded model artifacts are large. The app shows real download and Core ML
 compilation progress. New downloads stay under the manager's hidden staging
@@ -213,18 +224,18 @@ pause keeps completed staged files so a later resume can skip them.
 
 To prepare live speech detection:
 
-1. Click **Download Live VAD** before recording. This is an explicit,
+1. Click **Install Silero VAD** before recording. This is an explicit,
    user-initiated network operation.
-2. Start recording after the model reports downloaded.
+2. Start recording after the model reports installed.
 3. Confirm **Speech detection running** appears under the live-feed state.
 4. Stop recording normally so the source spools are fully drained and removed.
 
 If the VAD model is missing or fails to load, Scribe continues saving both WAV
 tracks and explains that the session is recording-only.
 
-For live transcription, both **Live VAD** and the selected **Parakeet** model
-must report downloaded before recording starts. Model selection is locked for
-the active session. Missing ASR never prevents recording.
+For live transcription, both **Silero VAD** and the exact selected transcription
+model must report installed before recording starts. Model selection is locked
+for the active session. Missing ASR never prevents recording.
 
 From Terminal:
 
@@ -356,8 +367,8 @@ meeting sessions live under Application Support, not inside the source checkout.
 During the Milestone 4 all-model verification, the checkout remained about
 3.1 GB while the model library reached roughly 11–12 GB. The twelve supported Whisper
 installations alone total 11,582,028,876 logical bytes. Normal users do not need
-every model installed; model storage is separate so a future manager action can
-remove one exact installation without touching source, other models, or sessions.
+every model installed; the model card reports actual total usage and can remove
+one exact installation without touching source, other models, or sessions.
 
 WAV tests write only to a unique temporary directory and remove it after each
 test.

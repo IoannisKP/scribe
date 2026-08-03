@@ -42,11 +42,14 @@ public enum ManagedModelRegistryError:
     Sendable
 {
     case unknownModel(ModelIdentifier)
+    case downloadInProgress(ModelIdentifier)
 
     public var errorDescription: String? {
         switch self {
         case let .unknownModel(identifier):
             "The model catalogue does not contain \(identifier.rawValue)."
+        case let .downloadInProgress(identifier):
+            "Cancel or finish the download for \(identifier.rawValue) before deleting it."
         }
     }
 }
@@ -172,5 +175,31 @@ public actor ManagedModelRegistry {
         of identifier: ModelIdentifier
     ) async throws {
         await downloads.cancel(try descriptor(for: identifier))
+    }
+
+    public func removeInstallation(
+        of identifier: ModelIdentifier
+    ) async throws {
+        switch await downloads.state(for: identifier) {
+        case .downloading, .pausing, .paused, .verifying:
+            throw ManagedModelRegistryError.downloadInProgress(identifier)
+        case .idle, .installed, .cancelled, .failed:
+            break
+        }
+        let descriptor = try descriptor(for: identifier)
+        let directory = paths.installationDirectory(for: descriptor)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: directory.path,
+            isDirectory: &isDirectory
+        ) else {
+            try await downloads.resetState(identifier)
+            return
+        }
+        guard isDirectory.boolValue else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try FileManager.default.removeItem(at: directory)
+        try await downloads.resetState(identifier)
     }
 }

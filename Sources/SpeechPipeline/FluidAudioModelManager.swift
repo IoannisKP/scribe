@@ -206,6 +206,12 @@ public actor FluidAudioModelManager {
         }
     }
 
+    public func removeModel(
+        identifiedBy identifier: ModelIdentifier
+    ) async throws {
+        try await registry.removeInstallation(of: identifier)
+    }
+
     private func install(
         _ target: FluidAudioManagedTarget,
         detailedProgress: DetailedProgress?

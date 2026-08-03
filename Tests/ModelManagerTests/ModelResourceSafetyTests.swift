@@ -70,6 +70,8 @@ final class ModelResourceSafetyTests: XCTestCase {
             )
         )
         XCTAssertTrue(evaluation.allowsInstallationAndLoading)
+        XCTAssertNil(evaluation.installationBlocker)
+        XCTAssertNil(evaluation.loadingBlocker)
     }
 
     func testUnsafeAndUnknownProfilesFailClosed() async throws {
@@ -107,6 +109,18 @@ final class ModelResourceSafetyTests: XCTestCase {
             )
         )
         XCTAssertFalse(unsafe.allowsInstallationAndLoading)
+        XCTAssertEqual(
+            unsafe.installationBlocker,
+            .insufficientDisk(requiredBytes: 7_000, availableBytes: 6_500)
+        )
+        XCTAssertEqual(
+            unsafe.loadingBlocker,
+            .insufficientMemory(
+                requiredBytes: 8_000,
+                budgetBytes: 7_000,
+                physicalBytes: 10_000
+            )
+        )
 
         let unknown = try makeDescriptor(profile: nil)
         let unknownEvaluation = await evaluator.evaluate(
@@ -116,6 +130,14 @@ final class ModelResourceSafetyTests: XCTestCase {
         XCTAssertEqual(unknownEvaluation.disk, .unknownRequirements)
         XCTAssertEqual(unknownEvaluation.memory, .unknownRequirements)
         XCTAssertFalse(unknownEvaluation.allowsInstallationAndLoading)
+        XCTAssertEqual(
+            unknownEvaluation.installationBlocker,
+            .diskRequirementsUnknown
+        )
+        XCTAssertEqual(
+            unknownEvaluation.loadingBlocker,
+            .memoryRequirementsUnknown
+        )
     }
 
     func testResourceProfileRequiresMeasurementsAndEvidence() {

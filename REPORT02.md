@@ -1,8 +1,8 @@
 # Post-acceptance report 02
 
-**Scope:** Work items 1–10 plus Milestone 4 checkpoints 1–8
+**Scope:** Work items 1–10 plus Milestone 4 checkpoints 1–9
 **Baseline:** Milestones 1–3 accepted; commit `e645a24`  
-**Result:** Items 1–10 are committed green; Item 11 is green through checkpoint 8.
+**Result:** Items 1–10 are committed green; Item 11 is green through checkpoint 9.
 **Dependency invariant:** FluidAudio remains pinned exactly to `0.15.5`.
 
 ## Item 1 — FluidAudio streaming evaluation
@@ -146,13 +146,13 @@ skip, 0 failures**. Final quiet arm64 Debug and Release builds passed.
 external disk pressure, actual five-second polling, user notification, and WAV
 playability after a real low-space stop need target-hardware acceptance.
 
-## Item 11 — Milestone 4, checkpoints 1–8
+## Item 11 — Milestone 4, checkpoints 1–9
 **Changed:** Added the general catalogue, canonical model paths, managed staged
 downloads with pause/resume/cancel and SHA-256 verification, measured disk/RAM
 safety, shared FluidAudio registry, exact WhisperKit 1.0.0 pin, an explicit
-offline Whisper adapter, and a single-resident engine coordinator. Twelve
-variants declare 30/1.5-second geometry; none downloads or substitutes implicitly.
-**Tested:** Full suite: **124 tests, 1 intentional skip, 0 failures**; quiet
+offline Whisper adapter, a single-resident coordinator, and unified model UI
+with safety/storage facts, lifecycle controls, deletion, and explicit fallback.
+**Tested:** Full suite: **131 tests, 1 intentional skip, 0 failures**; quiet
 arm64 Debug/Release builds passed. The M4 Pro fixture measurements use logical
 installed bytes and conservative first-load process peak RSS:
 | Catalogue model | WER | Disk bytes | Peak RSS bytes |
@@ -169,9 +169,8 @@ installed bytes and conservative first-load process peak RSS:
 | Turbo optimized 4-bit | 0.0000 | 648,432,373 | 1,477,410,816 |
 | Large v3 optimized compressed | 0.0000 | 1,055,612,340 | 1,828,929,536 |
 | Distil optimized compressed | 0.0392 | 609,877,791 | 1,376,993,280 |
-**Unverified/remaining:** This fixture is still synthetic. Checkpoints 9–10
-(model-management UI and end-to-end switching verification) remain; no Whisper
-option is exposed in the UI yet.
+**Unverified/remaining:** This fixture is synthetic. Checkpoint 10 remains: mock
+and real end-to-end switching/comparison verification, including UI acceptance.
 
 ## Requires human acceptance on target hardware
 - Prototype EOU separately before claiming subsecond latency, acceptable EOU,

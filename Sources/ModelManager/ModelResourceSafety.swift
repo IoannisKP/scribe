@@ -175,6 +175,49 @@ public struct ModelResourceSafetyEvaluation: Equatable, Sendable {
     public var allowsInstallationAndLoading: Bool {
         disk.allowsInstallation && memory.allowsLoading
     }
+
+    public var installationBlocker: ModelResourceSafetyBlocker? {
+        switch disk {
+        case .sufficient:
+            nil
+        case .unknownRequirements:
+            .diskRequirementsUnknown
+        case let .capacityUnavailable(message):
+            .diskCapacityUnavailable(message: message)
+        case let .insufficient(requiredBytes, availableBytes):
+            .insufficientDisk(
+                requiredBytes: requiredBytes,
+                availableBytes: availableBytes
+            )
+        }
+    }
+
+    public var loadingBlocker: ModelResourceSafetyBlocker? {
+        switch memory {
+        case .sufficient:
+            nil
+        case .unknownRequirements:
+            .memoryRequirementsUnknown
+        case let .insufficient(requiredBytes, budgetBytes, physicalBytes):
+            .insufficientMemory(
+                requiredBytes: requiredBytes,
+                budgetBytes: budgetBytes,
+                physicalBytes: physicalBytes
+            )
+        }
+    }
+}
+
+public enum ModelResourceSafetyBlocker: Equatable, Sendable {
+    case diskRequirementsUnknown
+    case diskCapacityUnavailable(message: String)
+    case insufficientDisk(requiredBytes: Int64, availableBytes: Int64)
+    case memoryRequirementsUnknown
+    case insufficientMemory(
+        requiredBytes: Int64,
+        budgetBytes: Int64,
+        physicalBytes: Int64
+    )
 }
 
 public enum ModelResourceSafetyError:

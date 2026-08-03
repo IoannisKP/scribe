@@ -761,7 +761,29 @@ replacement fails; cache several prepared engines based on guessed RAM cost.
 
 **Reasoning:** A 24 GB Mac can run the measured variants individually, but
 simultaneous Core ML residency makes peak memory and lifecycle behavior opaque.
-The coordinator enforces the invariant below the future UI and remains testable
+The coordinator enforces the invariant below the model UI and remains testable
 with engine mocks. Explicit rejection during an active call prevents use-after-
 unload races, while invalid leases ensure delayed pipeline cleanup can never
 unload a newer selection.
+
+## 2026-08-03 — Drive model controls from exact catalogue selections
+
+**Decision:** Replace the Parakeet-only picker and separate VAD download control
+with one catalogue-driven model card. Persist one exact transcription selection
+as the default, capture it for live or batch work, and route both providers
+through the resident coordinator. Show provider, language, quantization, speed,
+measured disk/RAM, live safety evaluation, per-model status, and actual total
+library usage. Expose install, pause, resume, cancel, and confirmed deletion.
+Offer the closest smaller installed measured model after an unavailable or
+failed exact selection, but require the user to click the offer.
+
+**Alternatives:** Keep separate provider screens; list only three representative
+Whisper sizes; silently choose a smaller model; infer UI metadata outside the
+catalogue; hide staged-download controls; delete a whole provider cache; retain
+the milestone-specific Silero action in the capture card.
+
+**Reasoning:** One exact selection prevents UI/provider drift and preserves the
+no-substitution contract already enforced by adapters. Explicit fallback keeps
+recording recoverable without misrepresenting which model produced text. Shared
+manager state makes storage and safety figures auditable, while scoped confirmed
+deletion cannot affect another model or any session recording.

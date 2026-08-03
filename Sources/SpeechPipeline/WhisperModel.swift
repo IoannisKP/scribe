@@ -1,7 +1,7 @@
 import Foundation
 import ModelManager
 
-public enum WhisperModel: String, CaseIterable, Sendable {
+public enum WhisperModel: String, CaseIterable, Hashable, Sendable {
     case tiny
     case tinyEnglish
     case base
@@ -85,4 +85,81 @@ public enum WhisperModel: String, CaseIterable, Sendable {
             false
         }
     }
+}
+
+/// The catalogue-backed transcription choice shared by batch, live, and UI
+/// paths. Every case maps to one exact provider model; no case represents an
+/// automatic or silent fallback.
+public enum TranscriptionModelSelection: Hashable, Identifiable, Sendable {
+    case parakeet(ParakeetModel)
+    case whisper(WhisperModel)
+
+    public static let allCases: [TranscriptionModelSelection] =
+        ParakeetModel.allCases.map(Self.parakeet)
+        + WhisperModel.allCases.map(Self.whisper)
+
+    public var id: ModelIdentifier {
+        switch self {
+        case let .parakeet(model):
+            model.modelIdentifier
+        case let .whisper(model):
+            model.modelIdentifier
+        }
+    }
+
+    public var descriptor: ModelDescriptor {
+        guard let descriptor = Self.catalogue[id] else {
+            preconditionFailure(
+                "The built-in catalogue is missing \(id.rawValue)."
+            )
+        }
+        return descriptor
+    }
+
+    public init?(identifier: ModelIdentifier) {
+        if let model = ParakeetModel.allCases.first(
+            where: { $0.modelIdentifier == identifier }
+        ) {
+            self = .parakeet(model)
+            return
+        }
+        if let model = WhisperModel.allCases.first(
+            where: { $0.modelIdentifier == identifier }
+        ) {
+            self = .whisper(model)
+            return
+        }
+        return nil
+    }
+
+    public var smallerFallbackCandidates: [TranscriptionModelSelection] {
+        let known = Self.allCases.filter { candidate in
+            candidate != self
+                && candidate.descriptor.resourceProfile != nil
+        }
+        guard let selectedBytes = descriptor.resourceProfile?.installedBytes
+        else {
+            return known.sorted {
+                ($0.descriptor.resourceProfile?.installedBytes ?? .max)
+                    < ($1.descriptor.resourceProfile?.installedBytes ?? .max)
+            }
+        }
+        return known.filter {
+            ($0.descriptor.resourceProfile?.installedBytes ?? .max)
+                < selectedBytes
+        }.sorted {
+            ($0.descriptor.resourceProfile?.installedBytes ?? 0)
+                > ($1.descriptor.resourceProfile?.installedBytes ?? 0)
+        }
+    }
+
+    private static let catalogue: ModelCatalogue = {
+        do {
+            return try ScribeModelCatalogue.builtIn()
+        } catch {
+            preconditionFailure(
+                "Scribe's built-in model catalogue is invalid: \(error)"
+            )
+        }
+    }()
 }
