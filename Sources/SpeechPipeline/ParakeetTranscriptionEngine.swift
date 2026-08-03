@@ -4,7 +4,14 @@ import FluidAudio
 import Foundation
 import ModelManager
 
-public enum ParakeetModel: String, CaseIterable, Codable, Identifiable, Sendable {
+public enum ParakeetModel:
+    String,
+    CaseIterable,
+    Codable,
+    Hashable,
+    Identifiable,
+    Sendable
+{
     case v3Multilingual
     case v2English
 

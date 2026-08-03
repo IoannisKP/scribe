@@ -228,6 +228,8 @@ private struct PermissionStatusHeader: View {
 
 private struct RecordingView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
+    @State private var showsDeleteModelConfirmation = false
+    @State private var showsDeleteVADConfirmation = false
 
     var body: some View {
         ScrollView {
@@ -324,70 +326,20 @@ private struct RecordingView: View {
 
                         Divider()
 
-                        HStack {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label(
-                                    recorder.sileroVADStatusText,
-                                    systemImage:
-                                        recorder.sileroVADAvailability
-                                            == .available
-                                        ? "checkmark.circle.fill"
-                                        : "arrow.down.circle"
-                                )
-                                .foregroundStyle(
-                                    recorder.sileroVADAvailability
-                                        == .available
-                                        ? .green : .secondary
-                                )
-
-                                Label(
-                                    recorder.liveSpeechPipelineStatusText,
-                                    systemImage: liveSpeechSystemImage
-                                )
-                                .foregroundStyle(liveSpeechColor)
-
-                                Label(
-                                    recorder.liveTranscriptionStatusText,
-                                    systemImage:
-                                        liveTranscriptionSystemImage
-                                )
-                                .foregroundStyle(
-                                    liveTranscriptionColor
-                                )
-                            }
-                            .font(.callout)
-
-                            Spacer()
-
-                            if recorder.sileroVADAvailability
-                                == .notDownloaded
-                            {
-                                Button("Download Live VAD") {
-                                    recorder.downloadSileroVAD()
-                                }
-                                .disabled(
-                                    recorder.isDownloadingSileroVAD
-                                        || recorder.isDownloadingModel
-                                        || recorder.isRecording
-                                        || recorder.isTranscribing
-                                )
-                            }
-                        }
-
-                        if recorder.isDownloadingSileroVAD,
-                            let progress =
-                                recorder.sileroVADDownloadProgress
-                        {
-                            ProgressView(
-                                value: progress.fractionCompleted
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label(
+                                recorder.liveSpeechPipelineStatusText,
+                                systemImage: liveSpeechSystemImage
                             )
-                        }
+                            .foregroundStyle(liveSpeechColor)
 
-                        Text(
-                            "Live VAD download requires the network once. Recording and Silero inference remain local and work offline afterward."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                            Label(
+                                recorder.liveTranscriptionStatusText,
+                                systemImage: liveTranscriptionSystemImage
+                            )
+                            .foregroundStyle(liveTranscriptionColor)
+                        }
+                        .font(.callout)
 
                         if recorder.microphoneURL != nil,
                             !recorder.isRecording
@@ -507,19 +459,16 @@ private struct RecordingView: View {
     }
 
     private var transcriptionBox: some View {
-        GroupBox("Local transcription") {
+        GroupBox("Models and local transcription") {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 16) {
                     Picker(
-                        "Engine",
-                        selection: $recorder.selectedParakeetModel
+                        "Transcription model",
+                        selection: $recorder.selectedTranscriptionModel
                     ) {
-                        ForEach(ParakeetModel.allCases) { model in
-                            VStack(alignment: .leading) {
-                                Text(model.displayName)
-                                Text(model.detail)
-                            }
-                            .tag(model)
+                        ForEach(recorder.modelOptions) { selection in
+                            Text(selection.descriptor.displayName)
+                                .tag(selection)
                         }
                     }
                     .pickerStyle(.menu)
@@ -532,19 +481,34 @@ private struct RecordingView: View {
 
                     Spacer()
 
-                    modelAction
+                    modelLifecycleActions
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(recorder.selectedModelDescriptor.displayName)
+                        .font(.headline)
+                    Text(recorder.selectedModelDescriptor.detail)
+                        .foregroundStyle(.secondary)
+                    Text(
+                        "\(recorder.modelProviderText) · \(recorder.modelLanguagesText)"
+                    )
+                    .font(.caption)
+                    Text(recorder.modelPerformanceText)
+                        .font(.caption)
+                    Text(recorder.modelResourceText)
+                        .font(.caption.monospacedDigit())
                 }
 
                 HStack {
                     Label(
                         recorder.modelStatusText,
                         systemImage:
-                            recorder.modelAvailability == .available
+                            recorder.isSelectedModelAvailable
                             ? "checkmark.circle.fill"
                             : "arrow.down.circle"
                     )
                     .foregroundStyle(
-                        recorder.modelAvailability == .available
+                        recorder.isSelectedModelAvailable
                             ? .green : .secondary
                     )
 
@@ -557,13 +521,106 @@ private struct RecordingView: View {
                 }
                 .font(.callout)
 
+                if let suggestedModelText = recorder.suggestedModelText {
+                    Button(suggestedModelText) {
+                        recorder.selectSuggestedModel()
+                    }
+                    .font(.callout)
+                    .disabled(
+                        recorder.isDownloadingModel
+                            || recorder.isDownloadingSileroVAD
+                            || recorder.isRecording
+                            || recorder.isTranscribing
+                    )
+                }
+
+                Label(
+                    recorder.modelSafetyText,
+                    systemImage: recorder.modelSafetyAllowsUse
+                        ? "checkmark.shield.fill"
+                        : "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(
+                    recorder.modelSafetyAllowsUse ? .green : .orange
+                )
+
+                Text(recorder.totalModelDiskText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Live speech detection")
+                            .font(.headline)
+                        Text(recorder.sileroVADStatusText)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if recorder.sileroVADAvailability == .notDownloaded {
+                        Button("Install Silero VAD") {
+                            recorder.downloadSileroVAD()
+                        }
+                        .disabled(
+                            recorder.isDownloadingSileroVAD
+                                || recorder.isDownloadingModel
+                                || recorder.isRecording
+                                || recorder.isTranscribing
+                        )
+                    } else {
+                        Button("Delete…", role: .destructive) {
+                            showsDeleteVADConfirmation = true
+                        }
+                        .disabled(
+                            recorder.isDownloadingSileroVAD
+                                || recorder.isDownloadingModel
+                                || recorder.isRecording
+                                || recorder.isTranscribing
+                        )
+                    }
+                }
+
+                if recorder.isDownloadingSileroVAD,
+                    let progress = recorder.sileroVADDownloadProgress
+                {
+                    ProgressView(value: progress.fractionCompleted)
+                }
+
                 Text(
-                    "Model downloads are the only network steps. Recordings and transcripts are never uploaded; after download, inference runs entirely on this Mac."
+                    "Installs are the only network steps. Recordings and transcripts are never uploaded; model verification and inference run on this Mac. Your transcription choice is saved as the default and is fixed for each recording once it starts."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
                 Divider()
+
+                HStack {
+                    Label(
+                        recorder.transcriptionStatusText,
+                        systemImage: recorder.isTranscribing
+                            ? "waveform.badge.magnifyingglass"
+                            : "text.alignleft"
+                    )
+                    .font(.callout)
+
+                    Spacer()
+
+                    Button("Transcribe Recording") {
+                        recorder.transcribeLatestRecording()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        !recorder.hasRecording
+                            || !recorder.isSelectedModelAvailable
+                            || recorder.isDownloadingModel
+                            || recorder.isDownloadingSileroVAD
+                            || recorder.isRecording
+                            || recorder.isTranscribing
+                    )
+                }
 
                 Label(
                     recorder.liveTranscriptionStatusText,
@@ -573,14 +630,6 @@ private struct RecordingView: View {
                         }
                         ? "text.bubble.fill"
                         : "text.bubble"
-                )
-                .font(.callout)
-
-                Label(
-                    recorder.transcriptionStatusText,
-                    systemImage: recorder.isTranscribing
-                        ? "waveform.badge.magnifyingglass"
-                        : "text.alignleft"
                 )
                 .font(.callout)
 
@@ -625,34 +674,74 @@ private struct RecordingView: View {
             }
             .padding(8)
         }
+        .confirmationDialog(
+            "Delete \(recorder.selectedModelDescriptor.displayName)?",
+            isPresented: $showsDeleteModelConfirmation
+        ) {
+            Button("Delete Model", role: .destructive) {
+                recorder.deleteSelectedModel()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "The model can be installed again later. Recordings and transcripts are not affected."
+            )
+        }
+        .confirmationDialog(
+            "Delete Silero VAD?",
+            isPresented: $showsDeleteVADConfirmation
+        ) {
+            Button("Delete Model", role: .destructive) {
+                recorder.deleteSileroVAD()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Live speech detection will be unavailable until the model is installed again."
+            )
+        }
     }
 
     @ViewBuilder
-    private var modelAction: some View {
-        switch recorder.modelAvailability {
-        case .notDownloaded:
-            Button("Download Model") {
-                recorder.downloadSelectedModel()
+    private var modelLifecycleActions: some View {
+        HStack(spacing: 8) {
+            if recorder.modelDownloadCanPause {
+                Button("Pause") {
+                    recorder.pauseSelectedModelDownload()
+                }
+            } else if recorder.modelDownloadCanResume {
+                Button("Resume") {
+                    recorder.resumeSelectedModelDownload()
+                }
+                .buttonStyle(.borderedProminent)
+            } else if recorder.selectedModelCanDelete {
+                Button("Delete…", role: .destructive) {
+                    showsDeleteModelConfirmation = true
+                }
+                .disabled(
+                    recorder.isDownloadingModel
+                        || recorder.isDownloadingSileroVAD
+                        || recorder.isRecording
+                        || recorder.isTranscribing
+                )
+            } else {
+                Button("Install") {
+                    recorder.downloadSelectedModel()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    recorder.isDownloadingModel
+                        || recorder.isDownloadingSileroVAD
+                        || recorder.isRecording
+                        || recorder.isTranscribing
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(
-                recorder.isDownloadingModel
-                    || recorder.isDownloadingSileroVAD
-                    || recorder.isRecording
-                    || recorder.isTranscribing
-            )
-        case .available:
-            Button("Transcribe Recording") {
-                recorder.transcribeLatestRecording()
+
+            if recorder.modelDownloadCanCancel {
+                Button("Cancel", role: .destructive) {
+                    recorder.cancelSelectedModelDownload()
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(
-                !recorder.hasRecording
-                    || recorder.isDownloadingModel
-                    || recorder.isDownloadingSileroVAD
-                    || recorder.isRecording
-                    || recorder.isTranscribing
-            )
         }
     }
 }

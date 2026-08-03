@@ -166,6 +166,10 @@ public actor WhisperKitModelManager {
         }
     }
 
+    public func removeModel(_ model: WhisperModel) async throws {
+        try await registry.removeInstallation(of: model.modelIdentifier)
+    }
+
     private func resolvedArtifacts(
         for model: WhisperModel
     ) async throws -> [HuggingFaceResolvedArtifact] {

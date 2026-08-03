@@ -78,6 +78,48 @@ final class ManagedModelRegistryTests: XCTestCase {
         }
     }
 
+    func testRemoveInstallationDeletesOnlyTheSelectedModelDirectory()
+        async throws
+    {
+        let fixture = try makeFixture()
+        let installation = fixture.paths.installationDirectory(
+            for: fixture.descriptor
+        )
+        try FileManager.default.createDirectory(
+            at: installation,
+            withIntermediateDirectories: true
+        )
+        try Data("weights".utf8).write(
+            to: installation.appendingPathComponent("model.bin")
+        )
+        let unrelated = fixture.paths.modelsDirectory
+            .appendingPathComponent("unrelated", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: unrelated,
+            withIntermediateDirectories: true
+        )
+
+        try await fixture.registry.removeInstallation(
+            of: fixture.descriptor.id
+        )
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: installation.path)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
+    }
+
+    func testRemovingAMissingInstallationIsIdempotent() async throws {
+        let fixture = try makeFixture()
+
+        try await fixture.registry.removeInstallation(
+            of: fixture.descriptor.id
+        )
+        try await fixture.registry.removeInstallation(
+            of: fixture.descriptor.id
+        )
+    }
+
     private func makeFixture() throws -> RegistryFixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

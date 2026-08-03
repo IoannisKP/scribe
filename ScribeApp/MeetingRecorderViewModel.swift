@@ -1,8 +1,48 @@
 @preconcurrency import AppKit
 import AudioCapture
 import Foundation
+import ModelManager
 import SpeechPipeline
 import SwiftUI
+
+enum SelectedModelAvailability: Equatable {
+    case checking
+    case notDownloaded
+    case available
+    case invalid(message: String)
+}
+
+private enum ModelManagementUIError: Error, LocalizedError {
+    case resourceSafety(ModelResourceSafetyBlocker)
+
+    var errorDescription: String? {
+        switch self {
+        case let .resourceSafety(blocker):
+            Self.description(for: blocker)
+        }
+    }
+
+    private static func description(
+        for blocker: ModelResourceSafetyBlocker
+    ) -> String {
+        switch blocker {
+        case .diskRequirementsUnknown:
+            "Scribe has no verified disk measurement for this model. Choose a model with measured requirements."
+        case let .diskCapacityUnavailable(message):
+            "Scribe could not confirm enough model storage: \(message)"
+        case let .insufficientDisk(requiredBytes, availableBytes):
+            "This model needs \(bytes(requiredBytes)) of free space including Scribe's safety reserve, but only \(bytes(availableBytes)) is available."
+        case .memoryRequirementsUnknown:
+            "Scribe has no verified peak-memory measurement for this model. Choose a model with measured requirements."
+        case let .insufficientMemory(requiredBytes, budgetBytes, _):
+            "This model needs up to \(bytes(requiredBytes)) of memory, above this Mac's safe \(bytes(budgetBytes)) model budget. Choose a smaller model."
+        }
+    }
+
+    private static func bytes(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    }
+}
 
 @MainActor
 final class MeetingRecorderViewModel: ObservableObject {
@@ -20,10 +60,18 @@ final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var isCheckingPermissions = false
     @Published private(set) var modelAvailability:
-        ParakeetModelAvailability = .notDownloaded
+        SelectedModelAvailability = .checking
     @Published private(set) var isDownloadingModel = false
     @Published private(set) var downloadProgress:
-        ParakeetDownloadProgress?
+        ModelDownloadProgress?
+    @Published private(set) var modelDownloadState:
+        ManagedModelDownloadState = .idle
+    @Published private(set) var modelResourceSafety:
+        ModelResourceSafetyEvaluation?
+    @Published private(set) var modelDiskUsage: ModelDiskUsage?
+    @Published private(set) var totalModelDiskUsageBytes: Int64 = 0
+    @Published private(set) var suggestedAvailableModel:
+        TranscriptionModelSelection?
     @Published private(set) var transcriptionState:
         BatchTranscriptionState = .idle
     @Published private(set) var transcriptSegments: [TranscriptSegment] = []
@@ -40,11 +88,21 @@ final class MeetingRecorderViewModel: ObservableObject {
         LiveTranscriptionPipelineState = .idle
     @Published private(set) var liveTranscriptRows:
         [LiveTranscriptRow] = []
-    @Published var selectedParakeetModel: ParakeetModel = .v3Multilingual {
+    @Published var selectedTranscriptionModel:
+        TranscriptionModelSelection = MeetingRecorderViewModel
+            .savedModelSelection()
+    {
         didSet {
+            UserDefaults.standard.set(
+                selectedTranscriptionModel.id.rawValue,
+                forKey: Self.defaultModelKey
+            )
             transcriptSegments = []
             transcriptionState = .idle
             downloadProgress = nil
+            modelDownloadState = .idle
+            modelAvailability = .checking
+            suggestedAvailableModel = nil
             Task {
                 await refreshModelAvailability()
             }
@@ -55,6 +113,8 @@ final class MeetingRecorderViewModel: ObservableObject {
 
     private static let permissionSetupKey =
         "MeetingRecorderViewModel.permissionSetupCompleted"
+    private static let defaultModelKey =
+        "MeetingRecorderViewModel.defaultTranscriptionModel"
 
     private let coordinator: DualTrackRecordingCoordinator
     private let microphoneCapture: MicrophoneCaptureService
@@ -63,12 +123,16 @@ final class MeetingRecorderViewModel: ObservableObject {
         any MicrophonePermissionAuthorizing
     private let systemAudioPermissionAuthorizer:
         any SystemAudioPermissionAuthorizing
-    private let modelManager: FluidAudioModelManager?
+    private let fluidAudioModelManager: FluidAudioModelManager?
+    private let whisperKitModelManager: WhisperKitModelManager?
+    private let residentEngineCoordinator =
+        ResidentTranscriptionEngineCoordinator()
     private let liveTransport: LiveAudioTransport?
     private var liveSpeechPipeline: LiveSpeechPipeline?
     private var liveTranscriptionPipeline:
         LiveTranscriptionPipeline?
     private var stateMonitorTask: Task<Void, Never>?
+    private var modelDownloadStateMonitorTask: Task<Void, Never>?
     private var handledAutomaticStopSessionDirectory: URL?
 
     init() {
@@ -105,9 +169,15 @@ final class MeetingRecorderViewModel: ObservableObject {
             systemCapture: systemAudioCapture
         )
         do {
-            self.modelManager = try FluidAudioModelManager()
+            self.fluidAudioModelManager = try FluidAudioModelManager()
         } catch {
-            self.modelManager = nil
+            self.fluidAudioModelManager = nil
+            initializationErrors.append(error.localizedDescription)
+        }
+        do {
+            self.whisperKitModelManager = try WhisperKitModelManager()
+        } catch {
+            self.whisperKitModelManager = nil
             initializationErrors.append(error.localizedDescription)
         }
         self.showsPermissionSetup = !UserDefaults.standard.bool(
@@ -122,12 +192,14 @@ final class MeetingRecorderViewModel: ObservableObject {
         Task {
             await refreshPermissionStatus()
             await refreshModelAvailability()
+            await refreshTotalModelDiskUsage()
             await refreshSileroVADAvailability()
         }
     }
 
     deinit {
         stateMonitorTask?.cancel()
+        modelDownloadStateMonitorTask?.cancel()
     }
 
     var isRecording: Bool {
@@ -155,30 +227,174 @@ final class MeetingRecorderViewModel: ObservableObject {
             transcriptionState,
             hasRecording: hasRecording,
             isRecording: isRecording,
-            modelAvailable: modelAvailability == .available
+            modelAvailable: isSelectedModelAvailable
         )
     }
 
+    var modelOptions: [TranscriptionModelSelection] {
+        TranscriptionModelSelection.allCases
+    }
+
+    var selectedModelDescriptor: ModelDescriptor {
+        selectedTranscriptionModel.descriptor
+    }
+
+    var isSelectedModelAvailable: Bool {
+        if case .available = modelAvailability {
+            return true
+        }
+        return false
+    }
+
+    var selectedModelCanDelete: Bool {
+        switch modelAvailability {
+        case .available, .invalid:
+            true
+        case .checking, .notDownloaded:
+            false
+        }
+    }
+
     var modelStatusText: String {
-        if isDownloadingModel {
-            guard let downloadProgress else {
-                return "Starting download"
-            }
-            switch downloadProgress.phase {
-            case .listing:
-                return "Finding model files"
-            case let .downloading(completedFiles, totalFiles):
-                return "Downloading \(completedFiles) of \(totalFiles) files"
-            case let .compiling(modelName):
-                return "Compiling \(modelName)"
-            }
+        switch modelDownloadState {
+        case .idle:
+            break
+        case let .downloading(progress):
+            return "Downloading · \(Self.percent(progress.fractionCompleted))"
+        case .pausing:
+            return "Pausing download"
+        case let .paused(progress):
+            return "Download paused · \(Self.percent(progress.fractionCompleted))"
+        case .verifying:
+            return "Verifying checksums"
+        case .installed:
+            return "Installed · inference stays offline"
+        case .cancelled:
+            return "Download cancelled"
+        case let .failed(message):
+            return "Download failed · \(message)"
         }
         switch modelAvailability {
         case .available:
-            return "Downloaded · inference stays offline"
+            return "Installed · inference stays offline"
+        case .checking:
+            return "Checking local model"
         case .notDownloaded:
-            return "Not downloaded"
+            return "Not installed"
+        case let .invalid(message):
+            return "Local model is invalid · \(message)"
         }
+    }
+
+    var modelProviderText: String {
+        switch selectedModelDescriptor.provider {
+        case .fluidAudio: "FluidAudio"
+        case .whisperKit: "WhisperKit"
+        }
+    }
+
+    var modelLanguagesText: String {
+        let languages = selectedModelDescriptor.supportedLanguages
+        if languages == ["en"] {
+            return "English only"
+        }
+        let greek = languages.contains("el") ? " · includes Greek" : ""
+        return "\(languages.count) languages\(greek)"
+    }
+
+    var modelPerformanceText: String {
+        var parts: [String] = []
+        if let quantization = selectedModelDescriptor.quantization {
+            switch quantization {
+            case .uncompressedCoreML:
+                parts.append("Uncompressed Core ML")
+            case .int8:
+                parts.append("8-bit")
+            case .fourBitCompressed:
+                parts.append("4-bit compressed")
+            case .qloraCompressed:
+                parts.append("QLoRA compressed")
+            }
+        }
+        if let speed = selectedModelDescriptor.speedRating {
+            switch speed {
+            case .fastest: parts.append("Fastest")
+            case .fast: parts.append("Fast")
+            case .balanced: parts.append("Balanced")
+            case .quality: parts.append("Quality focused")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var modelResourceText: String {
+        guard let profile = selectedModelDescriptor.resourceProfile else {
+            return "Disk and peak-memory measurements are not available"
+        }
+        let download = Self.bytes(profile.downloadBytes)
+        let installed = Self.bytes(profile.installedBytes)
+        let memory = Self.bytes(profile.peakMemoryBytes)
+        return "\(download) download · \(installed) installed · up to \(memory) memory"
+    }
+
+    var totalModelDiskText: String {
+        "All installed local models use \(Self.bytes(totalModelDiskUsageBytes))"
+    }
+
+    var modelSafetyText: String {
+        guard selectedModelDescriptor.resourceProfile != nil else {
+            return "Verified disk and peak-memory measurements are unavailable for this legacy model"
+        }
+        guard let modelResourceSafety else {
+            return "Checking this Mac's storage and memory"
+        }
+        if !isSelectedModelAvailable,
+            let blocker = modelResourceSafety.installationBlocker
+        {
+            return ModelManagementUIError.resourceSafety(blocker)
+                .localizedDescription
+        }
+        if let blocker = modelResourceSafety.loadingBlocker {
+            return ModelManagementUIError.resourceSafety(blocker)
+                .localizedDescription
+        }
+        return "Fits this Mac's current storage and safe memory budget"
+    }
+
+    var modelSafetyAllowsUse: Bool {
+        guard selectedModelDescriptor.resourceProfile != nil else {
+            return false
+        }
+        guard let modelResourceSafety else { return false }
+        if isSelectedModelAvailable {
+            return modelResourceSafety.loadingBlocker == nil
+        }
+        return modelResourceSafety.installationBlocker == nil
+            && modelResourceSafety.loadingBlocker == nil
+    }
+
+    var modelDownloadCanPause: Bool {
+        if case .downloading = modelDownloadState { return true }
+        return false
+    }
+
+    var modelDownloadCanResume: Bool {
+        if case .paused = modelDownloadState { return true }
+        return false
+    }
+
+    var modelDownloadCanCancel: Bool {
+        switch modelDownloadState {
+        case .downloading, .pausing, .paused, .verifying:
+            true
+        case .idle, .installed, .cancelled, .failed:
+            false
+        }
+    }
+
+    var suggestedModelText: String? {
+        guard let suggestedAvailableModel else { return nil }
+        return "Use installed \(suggestedAvailableModel.descriptor.displayName) instead"
     }
 
     var liveTransportStatusText: String {
@@ -483,39 +699,81 @@ final class MeetingRecorderViewModel: ObservableObject {
         guard
             !isDownloadingModel,
             !isDownloadingSileroVAD,
-            !isTranscribing
+            !isTranscribing,
+            !isRecording
         else {
             return
         }
-        guard let modelManager else {
-            errorMessage =
-                "Scribe could not open its local model directory."
-            return
-        }
+        beginSelectedModelOperation(resuming: false)
+    }
 
-        isDownloadingModel = true
-        downloadProgress = nil
+    func pauseSelectedModelDownload() {
+        guard modelDownloadCanPause else { return }
+        let selection = selectedTranscriptionModel
         errorMessage = nil
-        let model = selectedParakeetModel
         Task {
             do {
-                _ = try await modelManager.download(model) {
-                    [weak self] progress in
-                    Task { @MainActor in
-                        guard self?.selectedParakeetModel == model else {
-                            return
-                        }
-                        self?.downloadProgress = progress
-                    }
-                }
-                await refreshModelAvailability()
-            } catch is CancellationError {
-                errorMessage = "The model download was cancelled."
+                try await pauseDownload(of: selection)
+                await refreshDownloadState(for: selection)
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isDownloadingModel = false
         }
+    }
+
+    func resumeSelectedModelDownload() {
+        guard
+            modelDownloadCanResume,
+            !isDownloadingModel,
+            !isDownloadingSileroVAD,
+            !isTranscribing,
+            !isRecording
+        else {
+            return
+        }
+        beginSelectedModelOperation(resuming: true)
+    }
+
+    func cancelSelectedModelDownload() {
+        guard modelDownloadCanCancel else { return }
+        let selection = selectedTranscriptionModel
+        errorMessage = nil
+        Task {
+            do {
+                try await cancelDownload(of: selection)
+                await refreshDownloadState(for: selection)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func deleteSelectedModel() {
+        guard
+            selectedModelCanDelete,
+            !isDownloadingModel,
+            !isDownloadingSileroVAD,
+            !isTranscribing,
+            !isRecording
+        else {
+            return
+        }
+        let selection = selectedTranscriptionModel
+        errorMessage = nil
+        Task {
+            do {
+                try await removeModel(selection)
+                await refreshModelAvailability()
+                await refreshTotalModelDiskUsage()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func selectSuggestedModel() {
+        guard let suggestedAvailableModel else { return }
+        selectedTranscriptionModel = suggestedAvailableModel
     }
 
     func downloadSileroVAD() {
@@ -527,7 +785,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         else {
             return
         }
-        guard let modelManager else {
+        guard let modelManager = fluidAudioModelManager else {
             errorMessage =
                 "Scribe could not open its local Silero VAD directory."
             return
@@ -554,6 +812,31 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
+    func deleteSileroVAD() {
+        guard
+            sileroVADAvailability == .available,
+            !isDownloadingSileroVAD,
+            !isDownloadingModel,
+            !isTranscribing,
+            !isRecording,
+            let fluidAudioModelManager
+        else {
+            return
+        }
+        errorMessage = nil
+        Task {
+            do {
+                try await fluidAudioModelManager.removeModel(
+                    identifiedBy: ScribeModelIdentifiers.sileroVAD
+                )
+                await refreshSileroVADAvailability()
+                await refreshTotalModelDiskUsage()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     func transcribeLatestRecording() {
         guard
             hasRecording,
@@ -565,11 +848,10 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
         guard modelAvailability == .available else {
             errorMessage =
-                "Download \(selectedParakeetModel.displayName) before transcribing."
+                "Install \(selectedModelDescriptor.displayName) before transcribing."
             return
         }
         guard
-            let modelManager,
             let sessionDirectory = recordingSessionDirectory()
         else {
             errorMessage =
@@ -577,16 +859,14 @@ final class MeetingRecorderViewModel: ObservableObject {
             return
         }
 
-        let model = selectedParakeetModel
+        let selection = selectedTranscriptionModel
         transcriptSegments = []
         transcriptionState = .preparing
         errorMessage = nil
         Task {
             do {
-                let modelDirectory = await modelManager.directory(for: model)
-                let engine = ParakeetTranscriptionEngine(
-                    model: model,
-                    modelDirectory: modelDirectory
+                let engine = try await makeTranscriptionEngine(
+                    for: selection
                 )
                 let pipeline = try BatchTranscriptionPipeline(engine: engine)
                 let monitor = Task { [weak self] in
@@ -624,6 +904,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                 transcriptionState = .failed(
                     message: error.localizedDescription
                 )
+                await refreshSuggestedAvailableModel(for: selection)
                 errorMessage = error.localizedDescription
             }
         }
@@ -662,22 +943,427 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     func refreshModelAvailability() async {
-        guard let modelManager else {
+        let selection = selectedTranscriptionModel
+        do {
+            let availability = try await managedAvailability(of: selection)
+            guard selectedTranscriptionModel == selection else { return }
+            switch availability {
+            case .notInstalled:
+                modelAvailability = .notDownloaded
+                modelDiskUsage = nil
+            case let .installed(_, diskUsage):
+                modelAvailability = .available
+                modelDiskUsage = diskUsage
+            case let .invalid(_, message):
+                modelAvailability = .invalid(message: message)
+                modelDiskUsage = try? await diskUsage(of: selection)
+            }
+            modelResourceSafety = try await resourceSafety(of: selection)
+            await refreshDownloadState(for: selection)
+            if !availability.isInstalled {
+                await refreshSuggestedAvailableModel(for: selection)
+            } else {
+                suggestedAvailableModel = nil
+            }
+        } catch {
+            guard selectedTranscriptionModel == selection else { return }
             modelAvailability = .notDownloaded
-            return
+            modelResourceSafety = nil
+            modelDiskUsage = nil
+            await refreshSuggestedAvailableModel(for: selection)
+            errorMessage = error.localizedDescription
         }
-        modelAvailability = await modelManager.availability(
-            of: selectedParakeetModel
-        )
     }
 
     func refreshSileroVADAvailability() async {
-        guard let modelManager else {
+        guard let modelManager = fluidAudioModelManager else {
             sileroVADAvailability = .notDownloaded
             return
         }
         sileroVADAvailability =
             await modelManager.sileroAvailability()
+    }
+
+    private func beginSelectedModelOperation(resuming: Bool) {
+        let selection = selectedTranscriptionModel
+        isDownloadingModel = true
+        downloadProgress = nil
+        errorMessage = nil
+        startDownloadStateMonitor(for: selection)
+        Task {
+            do {
+                let safety = try await resourceSafety(of: selection)
+                guard selection.descriptor.resourceProfile == nil
+                    || safety.installationBlocker == nil
+                else {
+                    throw ModelManagementUIError.resourceSafety(
+                        safety.installationBlocker ?? .diskRequirementsUnknown
+                    )
+                }
+                if resuming {
+                    _ = try await resumeDownload(of: selection)
+                } else {
+                    _ = try await download(selection)
+                }
+            } catch {
+                let state = await downloadState(of: selection)
+                switch state {
+                case .paused, .cancelled:
+                    break
+                default:
+                    errorMessage = error.localizedDescription
+                }
+            }
+            modelDownloadStateMonitorTask?.cancel()
+            isDownloadingModel = false
+            await refreshModelAvailability()
+            await refreshTotalModelDiskUsage()
+        }
+    }
+
+    private func startDownloadStateMonitor(
+        for selection: TranscriptionModelSelection
+    ) {
+        modelDownloadStateMonitorTask?.cancel()
+        modelDownloadStateMonitorTask = Task { [weak self] in
+            do {
+                while !Task.isCancelled {
+                    guard let self else { return }
+                    await refreshDownloadState(for: selection)
+                    try await Task.sleep(for: .milliseconds(150))
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func refreshDownloadState(
+        for selection: TranscriptionModelSelection
+    ) async {
+        let state = await downloadState(of: selection)
+        guard selectedTranscriptionModel == selection else { return }
+        modelDownloadState = state
+        switch state {
+        case let .downloading(progress), let .paused(progress):
+            downloadProgress = progress
+        case .idle, .pausing, .verifying, .installed, .cancelled,
+            .failed:
+            break
+        }
+    }
+
+    private func managedAvailability(
+        of selection: TranscriptionModelSelection
+    ) async throws -> ManagedModelAvailability {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "Scribe could not open FluidAudio's local model directory."
+                )
+            }
+            return try await fluidAudioModelManager.managedAvailability(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "Scribe could not open WhisperKit's local model directory."
+                )
+            }
+            return try await whisperKitModelManager.availability(of: model)
+        }
+    }
+
+    private func refreshTotalModelDiskUsage() async {
+        var total: Int64 = 0
+        for selection in TranscriptionModelSelection.allCases {
+            guard let usage = try? await diskUsage(of: selection) else {
+                continue
+            }
+            let (sum, overflow) = total.addingReportingOverflow(
+                usage.logicalBytes
+            )
+            total = overflow ? .max : sum
+        }
+        if let fluidAudioModelManager,
+            let usage = try? await fluidAudioModelManager.diskUsage(
+                of: ScribeModelIdentifiers.sileroVAD
+            )
+        {
+            let (sum, overflow) = total.addingReportingOverflow(
+                usage.logicalBytes
+            )
+            total = overflow ? .max : sum
+        }
+        totalModelDiskUsageBytes = total
+    }
+
+    private func refreshSuggestedAvailableModel(
+        for selection: TranscriptionModelSelection
+    ) async {
+        for candidate in selection.smallerFallbackCandidates {
+            guard let availability = try? await managedAvailability(
+                of: candidate
+            ), availability.isInstalled else {
+                continue
+            }
+            guard selectedTranscriptionModel == selection else { return }
+            suggestedAvailableModel = candidate
+            return
+        }
+        guard selectedTranscriptionModel == selection else { return }
+        suggestedAvailableModel = nil
+    }
+
+    private func downloadState(
+        of selection: TranscriptionModelSelection
+    ) async -> ManagedModelDownloadState {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else { return .idle }
+            return await fluidAudioModelManager.downloadState(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else { return .idle }
+            return await whisperKitModelManager.downloadState(of: model)
+        }
+    }
+
+    private func diskUsage(
+        of selection: TranscriptionModelSelection
+    ) async throws -> ModelDiskUsage {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            return try await fluidAudioModelManager.diskUsage(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            return try await whisperKitModelManager.diskUsage(of: model)
+        }
+    }
+
+    private func resourceSafety(
+        of selection: TranscriptionModelSelection
+    ) async throws -> ModelResourceSafetyEvaluation {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            return try await fluidAudioModelManager.resourceSafety(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            return try await whisperKitModelManager.resourceSafety(of: model)
+        }
+    }
+
+    @discardableResult
+    private func download(
+        _ selection: TranscriptionModelSelection
+    ) async throws -> URL {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            return try await fluidAudioModelManager.download(model)
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            return try await whisperKitModelManager.download(model)
+        }
+    }
+
+    private func pauseDownload(
+        of selection: TranscriptionModelSelection
+    ) async throws {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            try await fluidAudioModelManager.pauseDownload(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            try await whisperKitModelManager.pauseDownload(of: model)
+        }
+    }
+
+    @discardableResult
+    private func resumeDownload(
+        of selection: TranscriptionModelSelection
+    ) async throws -> URL {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            return try await fluidAudioModelManager.resumeDownload(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            return try await whisperKitModelManager.resumeDownload(of: model)
+        }
+    }
+
+    private func cancelDownload(
+        of selection: TranscriptionModelSelection
+    ) async throws {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            try await fluidAudioModelManager.cancelDownload(
+                of: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            try await whisperKitModelManager.cancelDownload(of: model)
+        }
+    }
+
+    private func removeModel(
+        _ selection: TranscriptionModelSelection
+    ) async throws {
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            try await fluidAudioModelManager.removeModel(
+                identifiedBy: model.modelIdentifier
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            try await whisperKitModelManager.removeModel(model)
+        }
+    }
+
+    private func makeTranscriptionEngine(
+        for selection: TranscriptionModelSelection,
+        enforcingMemorySafety: Bool = true
+    ) async throws -> any TranscriptionEngine {
+        if enforcingMemorySafety {
+            try await validateLoadingSafety(for: selection)
+        }
+
+        let engine: any TranscriptionEngine
+        switch selection {
+        case let .parakeet(model):
+            guard let fluidAudioModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "FluidAudio model storage is unavailable."
+                )
+            }
+            let directory = await fluidAudioModelManager.directory(for: model)
+            engine = ParakeetTranscriptionEngine(
+                model: model,
+                modelDirectory: directory
+            )
+        case let .whisper(model):
+            guard let whisperKitModelManager else {
+                throw LiveAudioTransportError.operationFailed(
+                    "WhisperKit model storage is unavailable."
+                )
+            }
+            engine = try WhisperKitTranscriptionEngine(
+                model: model,
+                modelManager: whisperKitModelManager
+            )
+        }
+        return CoordinatedTranscriptionEngine(
+            engine: engine,
+            coordinator: residentEngineCoordinator
+        )
+    }
+
+    private func validateLoadingSafety(
+        for selection: TranscriptionModelSelection
+    ) async throws {
+        guard selection.descriptor.resourceProfile != nil else { return }
+        let safety = try await resourceSafety(of: selection)
+        if let blocker = safety.loadingBlocker {
+            throw ModelManagementUIError.resourceSafety(blocker)
+        }
+    }
+
+    private static func savedModelSelection()
+        -> TranscriptionModelSelection
+    {
+        guard
+            let rawValue = UserDefaults.standard.string(
+                forKey: defaultModelKey
+            )
+        else {
+            return .parakeet(.v3Multilingual)
+        }
+        return TranscriptionModelSelection(
+            identifier: ModelIdentifier(rawValue: rawValue)
+        ) ?? .parakeet(.v3Multilingual)
+    }
+
+    private static func bytes(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    }
+
+    private static func percent(_ fraction: Double) -> String {
+        "\(Int((min(max(fraction, 0), 1) * 100).rounded()))%"
     }
 
     private func openSettings(url: URL?, paneName: String) {
@@ -814,7 +1500,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     ) async {
         guard
             sileroVADAvailability == .available,
-            let modelManager
+            let modelManager = fluidAudioModelManager
         else {
             liveSpeechPipeline = nil
             liveSpeechPipelineState = .modelUnavailable
@@ -830,11 +1516,10 @@ final class MeetingRecorderViewModel: ObservableObject {
             let manifest = try CaptureSessionManifest.load(
                 from: sessionDirectory
             )
-            let model = selectedParakeetModel
-            let modelDirectory = await modelManager.directory(for: model)
-            let engine = ParakeetTranscriptionEngine(
-                model: model,
-                modelDirectory: modelDirectory
+            let selection = selectedTranscriptionModel
+            let engine = try await makeTranscriptionEngine(
+                for: selection,
+                enforcingMemorySafety: false
             )
             let pipeline = try LiveSpeechPipeline(
                 audioTransport: transport,
@@ -848,7 +1533,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             liveSpeechPipeline = pipeline
             liveSpeechPipelineState = await pipeline.state
 
-            guard modelAvailability == .available else {
+            guard isSelectedModelAvailable else {
                 liveTranscriptionPipeline = nil
                 liveTranscriptionPipelineState = .modelUnavailable(
                     reason: .transcriptionModel
@@ -857,6 +1542,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             }
 
             do {
+                try await validateLoadingSafety(for: selection)
                 let transcriptionPipeline =
                     try LiveTranscriptionPipeline(
                         speechPipeline: pipeline,
@@ -871,6 +1557,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                 liveTranscriptionPipelineState = .failed(
                     message: error.localizedDescription
                 )
+                await refreshSuggestedAvailableModel(for: selection)
                 errorMessage =
                     "Recording and speech detection continue, but live transcription could not start: \(error.localizedDescription)"
             }

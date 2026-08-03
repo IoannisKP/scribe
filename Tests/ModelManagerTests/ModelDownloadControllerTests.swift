@@ -131,6 +131,30 @@ final class ModelDownloadControllerTests: XCTestCase {
         }
     }
 
+    func testResetStateMakesADeletedInstallationDownloadableAgain()
+        async throws
+    {
+        let fixture = try makeFixture()
+        _ = try await fixture.controller.start(
+            fixture.plan,
+            using: ImmediateTransport(data: Data("hello".utf8))
+        )
+        try FileManager.default.removeItem(
+            at: fixture.paths.installationDirectory(for: fixture.plan.model)
+        )
+
+        try await fixture.controller.resetState(fixture.plan.model.id)
+
+        let resetState = await fixture.controller.state(
+            for: fixture.plan.model.id
+        )
+        XCTAssertEqual(resetState, .idle)
+        _ = try await fixture.controller.start(
+            fixture.plan,
+            using: ImmediateTransport(data: Data("hello".utf8))
+        )
+    }
+
     func testManifestRejectsTraversalAndDuplicateArtifacts() throws {
         XCTAssertThrowsError(
             try ModelArtifactIntegrity(
