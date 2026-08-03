@@ -632,3 +632,24 @@ scales to large weights, while exact sizes and hashes detect truncation and
 corruption. Transport injection makes pause, resume, cancel, and failure paths
 deterministic without network access. Symlink containment ensures a manifest
 cannot redirect verification outside its staged installation.
+
+## 2026-08-03 — Fail closed on unknown model resource requirements
+
+**Decision:** Measure installed logical and allocated bytes from the real model
+tree without following symbolic links. Require every operational resource
+profile to carry positive download, installed, and peak-RAM values backed by a
+local measurement or primary upstream source. Block acquisition or loading when
+requirements or current capacity are unavailable, and retain configurable disk
+and RAM reserves.
+
+**Alternatives:** Estimate storage and memory from parameter count; assume an
+unknown model fits; count only expected manifest artifacts; follow symbolic
+links during recursive accounting; rely on eventual filesystem or allocation
+failure.
+
+**Reasoning:** Quantization, compiled Core ML assets, tokenizer files, framework
+overhead, and provider caching make parameter count an unreliable operational
+measure. Measuring the installation captures real disk use, while cited model
+profiles make preflight decisions auditable. Failing closed prevents a large
+download or model load from exhausting the Mac when the manager cannot prove it
+fits.
