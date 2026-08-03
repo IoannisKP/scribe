@@ -40,6 +40,16 @@ transcription window geometry. Parakeet and Silero now resolve their unchanged
 locations through `ModelStoragePaths`; download and inference adapters remain in
 `SpeechPipeline` until their lifecycle is migrated behind this boundary.
 
+Model acquisition is split into policy and provider transport.
+`ModelDownloadController` owns per-model state, staging below `.Downloads`,
+pause/resume tokens, cancellation cleanup, streamed integrity verification, and
+promotion into the final installation folder only after verification succeeds.
+Provider adapters implement `ModelDownloadTransport`; this keeps FluidAudio and
+future WhisperKit network APIs outside the manager's policy layer.
+`ModelIntegrityVerifier` reads artifacts in bounded chunks, validates exact byte
+counts and SHA-256 digests, and rejects missing files, traversal, duplicate
+manifest entries, and symlinks resolving outside the staged installation.
+
 ## Audio path
 
 The planned two-source path keeps microphone and system audio isolated:

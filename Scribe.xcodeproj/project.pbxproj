@@ -49,6 +49,8 @@
 		100000000000000000000028 /* ModelManager.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 110000000000000000000026 /* ModelManager.framework */; };
 		100000000000000000000029 /* ModelManager.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 110000000000000000000026 /* ModelManager.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		10000000000000000000002A /* ModelStoragePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000029 /* ModelStoragePaths.swift */; };
+		10000000000000000000002B /* ModelIntegrity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002A /* ModelIntegrity.swift */; };
+		10000000000000000000002C /* ModelDownloadController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002B /* ModelDownloadController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -147,6 +149,8 @@
 		110000000000000000000027 /* ModelDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDescriptor.swift; sourceTree = "<group>"; };
 		110000000000000000000028 /* ModelCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogue.swift; sourceTree = "<group>"; };
 		110000000000000000000029 /* ModelStoragePaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStoragePaths.swift; sourceTree = "<group>"; };
+		11000000000000000000002A /* ModelIntegrity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelIntegrity.swift; sourceTree = "<group>"; };
+		11000000000000000000002B /* ModelDownloadController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -266,6 +270,8 @@
 				110000000000000000000027 /* ModelDescriptor.swift */,
 				110000000000000000000028 /* ModelCatalogue.swift */,
 				110000000000000000000029 /* ModelStoragePaths.swift */,
+				11000000000000000000002A /* ModelIntegrity.swift */,
+				11000000000000000000002B /* ModelDownloadController.swift */,
 			);
 			path = ModelManager;
 			sourceTree = "<group>";
@@ -480,6 +486,8 @@
 				100000000000000000000025 /* ModelDescriptor.swift in Sources */,
 				100000000000000000000026 /* ModelCatalogue.swift in Sources */,
 				10000000000000000000002A /* ModelStoragePaths.swift in Sources */,
+				10000000000000000000002B /* ModelIntegrity.swift in Sources */,
+				10000000000000000000002C /* ModelDownloadController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

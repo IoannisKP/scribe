@@ -613,3 +613,22 @@ A path abstraction should eliminate duplication without creating a migration
 or risking offline availability. Descriptor-validated single-component folder
 names keep installations beneath the models root, and injected roots retain
 deterministic tests without reading or writing the user's model cache.
+
+## 2026-08-03 — Separate acquisition policy from provider transport
+
+**Decision:** Put download state, pause/resume tokens, cancellation cleanup,
+staging, streamed SHA-256 and byte-count verification, and final promotion in a
+provider-neutral `ModelDownloadController`. Require provider adapters to conform
+to `ModelDownloadTransport` rather than importing their SDKs into ModelManager.
+
+**Alternatives:** Let FluidAudio and WhisperKit each own UI state and final
+paths; download directly into the installed directory; hash complete artifacts
+in memory; treat HTTPS completion or cache shape as sufficient integrity; keep
+paused tasks alive without explicit resume data.
+
+**Reasoning:** One state machine gives the UI truthful lifecycle semantics and
+prevents partially written models from appearing available. Chunked verification
+scales to large weights, while exact sizes and hashes detect truncation and
+corruption. Transport injection makes pause, resume, cancel, and failure paths
+deterministic without network access. Symlink containment ensures a manifest
+cannot redirect verification outside its staged installation.
