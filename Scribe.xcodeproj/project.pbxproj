@@ -53,6 +53,9 @@
 		10000000000000000000002C /* ModelDownloadController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002B /* ModelDownloadController.swift */; };
 		10000000000000000000002D /* ModelDiskAccounting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002C /* ModelDiskAccounting.swift */; };
 		10000000000000000000002E /* ModelResourceSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002D /* ModelResourceSafety.swift */; };
+		10000000000000000000002F /* ManagedModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002E /* ManagedModelRegistry.swift */; };
+		100000000000000000000030 /* HuggingFaceIntegrityManifestResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */; };
+		100000000000000000000031 /* FluidAudioModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000030 /* FluidAudioModelManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -155,6 +158,9 @@
 		11000000000000000000002B /* ModelDownloadController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadController.swift; sourceTree = "<group>"; };
 		11000000000000000000002C /* ModelDiskAccounting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDiskAccounting.swift; sourceTree = "<group>"; };
 		11000000000000000000002D /* ModelResourceSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelResourceSafety.swift; sourceTree = "<group>"; };
+		11000000000000000000002E /* ManagedModelRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedModelRegistry.swift; sourceTree = "<group>"; };
+		11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceIntegrityManifestResolver.swift; sourceTree = "<group>"; };
+		110000000000000000000030 /* FluidAudioModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluidAudioModelManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -257,6 +263,8 @@
 				110000000000000000000018 /* SpeechTypes.swift */,
 				110000000000000000000019 /* CanonicalWAVChunkReader.swift */,
 				11000000000000000000001A /* BatchTranscriptionPipeline.swift */,
+				110000000000000000000030 /* FluidAudioModelManager.swift */,
+				11000000000000000000002F /* HuggingFaceIntegrityManifestResolver.swift */,
 				11000000000000000000001C /* ParakeetTranscriptionEngine.swift */,
 				11000000000000000000001E /* LiveAudioTransport.swift */,
 				11000000000000000000001F /* SileroVoiceActivityDetector.swift */,
@@ -278,6 +286,7 @@
 				11000000000000000000002B /* ModelDownloadController.swift */,
 				11000000000000000000002C /* ModelDiskAccounting.swift */,
 				11000000000000000000002D /* ModelResourceSafety.swift */,
+				11000000000000000000002E /* ManagedModelRegistry.swift */,
 			);
 			path = ModelManager;
 			sourceTree = "<group>";
@@ -475,6 +484,8 @@
 				100000000000000000000014 /* SpeechTypes.swift in Sources */,
 				100000000000000000000015 /* CanonicalWAVChunkReader.swift in Sources */,
 				100000000000000000000016 /* BatchTranscriptionPipeline.swift in Sources */,
+				100000000000000000000031 /* FluidAudioModelManager.swift in Sources */,
+				100000000000000000000030 /* HuggingFaceIntegrityManifestResolver.swift in Sources */,
 				10000000000000000000001A /* ParakeetTranscriptionEngine.swift in Sources */,
 				10000000000000000000001D /* LiveAudioTransport.swift in Sources */,
 				10000000000000000000001E /* SileroVoiceActivityDetector.swift in Sources */,
@@ -496,6 +507,7 @@
 				10000000000000000000002C /* ModelDownloadController.swift in Sources */,
 				10000000000000000000002D /* ModelDiskAccounting.swift in Sources */,
 				10000000000000000000002E /* ModelResourceSafety.swift in Sources */,
+				10000000000000000000002F /* ManagedModelRegistry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

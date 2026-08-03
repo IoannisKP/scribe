@@ -114,7 +114,7 @@ final class ParakeetGoldenFileTests: XCTestCase {
     {
         let environment = ProcessInfo.processInfo.environment
         let model = Self.configuredModel(environment: environment)
-        let store = try ParakeetModelStore()
+        let store = try FluidAudioModelManager()
         guard await store.availability(of: model) == .available else {
             let modelDirectory = await store.directory(for: model)
             throw XCTSkip(
@@ -215,7 +215,7 @@ final class ParakeetGoldenFileTests: XCTestCase {
         tolerance: Double,
         label: String
     ) async throws {
-        let store = try ParakeetModelStore()
+        let store = try FluidAudioModelManager()
         guard await store.availability(of: model) == .available else {
             let directory = await store.directory(for: model)
             throw XCTSkip(

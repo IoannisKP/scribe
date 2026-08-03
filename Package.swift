@@ -70,7 +70,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SpeechPipelineTests",
-            dependencies: ["SpeechPipeline", "AudioCapture"],
+            dependencies: ["SpeechPipeline", "AudioCapture", "ModelManager"],
             path: "Tests/SpeechPipelineTests",
             resources: [
                 .process("Fixtures")

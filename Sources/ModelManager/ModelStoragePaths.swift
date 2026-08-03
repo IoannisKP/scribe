@@ -19,7 +19,7 @@ public struct ModelStoragePaths: Equatable, Sendable {
         )
     }
 
-    /// Preserves dependency-injected model roots used by existing stores/tests.
+    /// Preserves dependency-injected model roots used by provider adapters/tests.
     public init(modelsDirectory: URL) {
         let modelsDirectory = modelsDirectory.standardizedFileURL
         self.modelsDirectory = modelsDirectory
