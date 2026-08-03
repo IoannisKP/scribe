@@ -460,6 +460,13 @@ on disk, including Silero. A missing or failed selection can expose the closest
 smaller installed measured model, but selection changes only after an explicit
 user action; no fallback is automatic.
 
+Switching verification has two layers. Deterministic mocks assert exact
+prepare/transcribe/unload order across three identities. A real-model regression
+keeps one coordinator alive while replacing Parakeet v3 with Whisper Tiny,
+Small, and Medium and transcribing the same committed audio after every switch.
+The final unload returns the coordinator to idle; missing models cause an
+explicit skip rather than acquisition or substitution.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.
