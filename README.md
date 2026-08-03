@@ -143,6 +143,11 @@ folder, live-processing, and window-geometry metadata. Acquisition and inference
 still use their existing stores, but both stores now resolve the same canonical
 `Application Support/Scribe/Models` tree through `ModelStoragePaths`. Explicit
 test roots remain supported and existing model folder names are unchanged.
+The manager also defines a provider-neutral acquisition controller with explicit
+downloading, pausing, paused, verifying, installed, cancelled, and failed states.
+Downloads remain in a staging folder until a bounded-memory SHA-256/size pass
+succeeds; pause tokens are handed to the provider transport, cancellation removes
+partial staging, and invalid artifacts are never promoted as installed models.
 
 ## Requirements
 
