@@ -139,20 +139,24 @@ plus overlap is available. No network is used.
 Milestone 4 has begun with a standalone, dependency-free `ModelManager`
 framework. Its validated built-in catalogue gives Parakeet v3, Parakeet v2,
 and Silero stable identifiers plus shared provider, task, language, installation
-folder, live-processing, and window-geometry metadata. Acquisition and inference
-still use their existing stores, but both stores now resolve the same canonical
-`Application Support/Scribe/Models` tree through `ModelStoragePaths`. Explicit
-test roots remain supported and existing model folder names are unchanged.
+folder, live-processing, and window-geometry metadata. Parakeet and Silero now
+share one managed registry and one FluidAudio provider adapter; the previous
+milestone-specific stores have been removed. Explicit test roots remain
+supported, and the existing FluidAudio cache is used in place without copying
+or redownloading it.
 The manager also defines a provider-neutral acquisition controller with explicit
 downloading, pausing, paused, verifying, installed, cancelled, and failed states.
 Downloads remain in a staging folder until a bounded-memory SHA-256/size pass
 succeeds; pause tokens are handed to the provider transport, cancellation removes
 partial staging, and invalid artifacts are never promoted as installed models.
+The FluidAudio adapter obtains exact sizes and LFS SHA-256 values from the
+official Hugging Face tree; small Git metadata is hashed directly. Provider
+cache-shape validation also runs while files are still staged.
 Model storage accounting uses the files actually present on disk, including
 allocated size, without following symbolic links. Download and load safety use
 evidence-backed artifact and peak-memory profiles plus configurable disk and RAM
-reserves. If a requirement or capacity reading is unknown, the operation is
-blocked with a specific reason instead of guessing from parameter counts.
+reserves. If a requirement or capacity reading is unknown, the evaluator returns
+a denied result with a specific reason instead of guessing from parameter counts.
 
 ## Requirements
 
@@ -192,8 +196,9 @@ To transcribe:
    the shared monotonic capture timeline.
 
 Downloaded model artifacts are large. The app shows real download and Core ML
-compilation progress; interruption can leave an incomplete cache that remains
-unavailable until Download Model is run again.
+compilation progress. New downloads stay under the manager's hidden staging
+folder until provider validation and checksum verification finish. A managed
+pause keeps completed staged files so a later resume can skip them.
 
 To prepare live speech detection:
 
@@ -279,8 +284,8 @@ The finished app will keep models and application data under:
 Parakeet models are stored under:
 
 ```text
-~/Library/Application Support/Scribe/Models/parakeet-tdt-0.6b-v3-coreml/
-~/Library/Application Support/Scribe/Models/parakeet-tdt-0.6b-v2-coreml/
+~/Library/Application Support/Scribe/Models/parakeet-tdt-0.6b-v3/
+~/Library/Application Support/Scribe/Models/parakeet-tdt-0.6b-v2/
 ```
 
 Silero VAD is stored under:

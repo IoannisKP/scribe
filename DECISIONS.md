@@ -256,9 +256,10 @@ offline contract from an unreviewed package update.
 ## 2026-07-30 — Separate explicit acquisition from offline preparation
 
 **Decision:** Give model download and inference different entry points.
-`ParakeetModelStore.download` is the only operation that permits network
-access. `ParakeetTranscriptionEngine.prepare` requires a complete cache,
-enables FluidAudio offline mode, and only then loads models.
+The explicit install/resume methods on `FluidAudioModelManager` are the only
+operations that permit network access. `ParakeetTranscriptionEngine.prepare`
+requires a complete cache, enables FluidAudio offline mode, and only then loads
+models.
 
 **Alternatives:** Call FluidAudio's combined `downloadAndLoad` from
 `prepare()`; automatically download the selected model on first transcription;
@@ -602,7 +603,7 @@ measured source metadata and the exact dependency pin.
 **Decision:** Make `ModelStoragePaths` the single owner of Scribe's
 `Application Support/Scribe/Models` layout and per-descriptor installation and
 staging directories. Route the existing Parakeet and Silero stores through it
-while preserving their public injected-root initializers and exact folder names.
+while preserving injected test roots and provider cache contents in place.
 
 **Alternatives:** Move existing caches into a new Milestone 4 hierarchy; let
 each adapter append `Scribe/Models` independently; centralize paths only after
@@ -638,9 +639,9 @@ cannot redirect verification outside its staged installation.
 **Decision:** Measure installed logical and allocated bytes from the real model
 tree without following symbolic links. Require every operational resource
 profile to carry positive download, installed, and peak-RAM values backed by a
-local measurement or primary upstream source. Block acquisition or loading when
+local measurement or primary upstream source. Return a denied evaluation when
 requirements or current capacity are unavailable, and retain configurable disk
-and RAM reserves.
+and RAM reserves for callers that preflight acquisition or loading.
 
 **Alternatives:** Estimate storage and memory from parameter count; assume an
 unknown model fits; count only expected manifest artifacts; follow symbolic
@@ -653,3 +654,32 @@ measure. Measuring the installation captures real disk use, while cited model
 profiles make preflight decisions auditable. Failing closed prevents a large
 download or model load from exhausting the Mac when the manager cannot prove it
 fits.
+
+## 2026-08-03 — Put FluidAudio models behind the shared registry
+
+**Decision:** Replace the separate Parakeet and Silero stores with one
+`FluidAudioModelManager` provider adapter backed by `ManagedModelRegistry`.
+Resolve exact artifact sizes and SHA-256 values from the official Hugging Face
+tree before each new transfer, using LFS digests directly and hashing only small
+non-LFS metadata. Download into the manager's staging directory, validate the
+provider cache shape there, run the shared checksum pass, and only then promote
+the directory. Implement FluidAudio pause/resume at file granularity: cancel the
+active request, retain complete staged files, and let resume skip those files.
+
+FluidAudio 0.15.5's Parakeet path argument is nominal: it derives the real cache
+folder from the selected repository and removes the `-coreml` suffix. Make that
+real folder (`parakeet-tdt-0.6b-v3` or `-v2`) canonical in the catalogue. Do not
+move or copy the existing cache.
+
+**Alternatives:** Keep two provider-specific stores; bypass the general
+download controller for FluidAudio; embed a large manifest that becomes stale
+when the upstream repository changes; trust file presence without checksums;
+rename or relocate the existing cache; claim byte-level resume that FluidAudio
+0.15.5 does not expose.
+
+**Reasoning:** A single provider adapter makes the general lifecycle real before
+WhisperKit arrives, while the dependency-free manager remains reusable. Reading
+primary repository metadata avoids invented sizes and lets an upstream change
+fail safely if it races a transfer. Correcting the catalogue to the folder
+FluidAudio actually reads makes disk accounting truthful and was verified by
+the committed offline Parakeet golden test against the already-installed model.

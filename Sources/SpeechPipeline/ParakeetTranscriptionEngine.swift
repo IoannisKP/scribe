@@ -10,6 +10,16 @@ public enum ParakeetModel: String, CaseIterable, Codable, Identifiable, Sendable
 
     public var id: String { rawValue }
 
+    private static let catalogue: ModelCatalogue = {
+        do {
+            return try ScribeModelCatalogue.builtIn()
+        } catch {
+            preconditionFailure(
+                "Scribe's built-in model catalogue is invalid: \(error)"
+            )
+        }
+    }()
+
     public var modelIdentifier: ModelIdentifier {
         switch self {
         case .v3Multilingual:
@@ -19,47 +29,32 @@ public enum ParakeetModel: String, CaseIterable, Codable, Identifiable, Sendable
         }
     }
 
-    public var displayName: String {
-        switch self {
-        case .v3Multilingual:
-            "Parakeet v3 · Multilingual"
-        case .v2English:
-            "Parakeet v2 · English"
+    public var descriptor: ModelDescriptor {
+        guard let descriptor = Self.catalogue[modelIdentifier] else {
+            preconditionFailure(
+                "The built-in catalogue is missing \(modelIdentifier.rawValue)."
+            )
         }
+        return descriptor
+    }
+
+    public var displayName: String {
+        descriptor.displayName
     }
 
     public var detail: String {
-        switch self {
-        case .v3Multilingual:
-            "25 languages, including Greek"
-        case .v2English:
-            "English-only model"
-        }
+        descriptor.detail
     }
 
     public var directoryName: String {
-        switch self {
-        case .v3Multilingual:
-            "parakeet-tdt-0.6b-v3-coreml"
-        case .v2English:
-            "parakeet-tdt-0.6b-v2-coreml"
-        }
+        descriptor.installationDirectoryName
     }
 
     public var supportedLanguages: [String] {
-        switch self {
-        case .v3Multilingual:
-            [
-                "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr",
-                "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt",
-                "ro", "ru", "sk", "sl", "es", "sv", "uk",
-            ]
-        case .v2English:
-            ["en"]
-        }
+        descriptor.supportedLanguages
     }
 
-    fileprivate var fluidVersion: AsrModelVersion {
+    var fluidVersion: AsrModelVersion {
         switch self {
         case .v3Multilingual:
             .v3
@@ -104,94 +99,6 @@ public enum ParakeetEngineError: Error, Equatable, LocalizedError, Sendable {
         case .invalidResultTiming:
             "Parakeet returned timestamps that could not be mapped to the recording timeline."
         }
-    }
-}
-
-public actor ParakeetModelStore {
-    public let rootDirectory: URL
-    private let storagePaths: ModelStoragePaths
-    private let catalogue: ModelCatalogue
-
-    public init(rootDirectory: URL? = nil) throws {
-        let storagePaths = if let rootDirectory {
-            ModelStoragePaths(modelsDirectory: rootDirectory)
-        } else {
-            try ModelStoragePaths.userApplicationSupport()
-        }
-        self.storagePaths = storagePaths
-        self.rootDirectory = storagePaths.modelsDirectory
-        self.catalogue = try ScribeModelCatalogue.builtIn()
-    }
-
-    public func directory(for model: ParakeetModel) -> URL {
-        guard let descriptor = catalogue[model.modelIdentifier] else {
-            preconditionFailure(
-                "The built-in catalogue is missing \(model.modelIdentifier.rawValue)."
-            )
-        }
-        return storagePaths.installationDirectory(
-            for: descriptor
-        )
-    }
-
-    public func availability(
-        of model: ParakeetModel
-    ) -> ParakeetModelAvailability {
-        AsrModels.modelsExist(
-            at: directory(for: model),
-            version: model.fluidVersion,
-            encoderPrecision: .int8
-        )
-            ? .available
-            : .notDownloaded
-    }
-
-    @discardableResult
-    public func download(
-        _ model: ParakeetModel,
-        progress: (@Sendable (ParakeetDownloadProgress) -> Void)? = nil
-    ) async throws -> URL {
-        ModelHub.offlineMode = false
-        defer {
-            ModelHub.offlineMode = true
-        }
-        let targetDirectory = directory(for: model)
-        let downloadedDirectory = try await AsrModels.download(
-            to: targetDirectory,
-            version: model.fluidVersion,
-            encoderPrecision: .int8
-        ) { fluidProgress in
-            progress?(Self.mapProgress(fluidProgress))
-        }
-
-        guard availability(of: model) == .available else {
-            throw ParakeetEngineError.modelNotDownloaded(
-                model: model,
-                directory: downloadedDirectory
-            )
-        }
-        return downloadedDirectory
-    }
-
-    private nonisolated static func mapProgress(
-        _ progress: DownloadProgress
-    ) -> ParakeetDownloadProgress {
-        let phase: ParakeetDownloadProgress.Phase
-        switch progress.phase {
-        case .listing:
-            phase = .listing
-        case let .downloading(completedFiles, totalFiles):
-            phase = .downloading(
-                completedFiles: completedFiles,
-                totalFiles: totalFiles
-            )
-        case let .compiling(modelName):
-            phase = .compiling(modelName: modelName)
-        }
-        return ParakeetDownloadProgress(
-            fractionCompleted: progress.fractionCompleted,
-            phase: phase
-        )
     }
 }
 
@@ -303,8 +210,12 @@ public actor ParakeetTranscriptionEngine: TranscriptionEngine {
 
     public nonisolated let supportsStreaming = false
     public nonisolated let requiresNetwork = false
-    public nonisolated let preferredWindowDuration: TimeInterval = 14
-    public nonisolated let preferredOverlap: TimeInterval = 1.5
+    public nonisolated var preferredWindowDuration: TimeInterval {
+        model.descriptor.windowGeometry?.duration ?? 14
+    }
+    public nonisolated var preferredOverlap: TimeInterval {
+        model.descriptor.windowGeometry?.overlap ?? 1.5
+    }
 
     public nonisolated var supportedLanguages: [String] {
         model.supportedLanguages

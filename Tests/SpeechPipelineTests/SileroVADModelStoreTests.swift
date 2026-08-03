@@ -2,18 +2,18 @@ import Foundation
 @testable import SpeechPipeline
 import XCTest
 
-final class SileroVADModelStoreTests: XCTestCase {
+final class FluidAudioModelManagerSileroTests: XCTestCase {
     func testMissingModelIsReportedWithoutNetworkAccess() async throws {
         let directory = try makeTestDirectory()
         addTeardownBlock {
             try FileManager.default.removeItem(at: directory)
         }
-        let store = try SileroVADModelStore(
+        let store = try FluidAudioModelManager(
             modelsDirectory: directory
         )
 
-        let availability = await store.availability()
-        let modelURL = await store.modelURL
+        let availability = await store.sileroAvailability()
+        let modelURL = await store.sileroModelURL
         XCTAssertEqual(availability, .notDownloaded)
         XCTAssertEqual(
             modelURL.deletingLastPathComponent().lastPathComponent,

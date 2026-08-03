@@ -63,8 +63,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         any MicrophonePermissionAuthorizing
     private let systemAudioPermissionAuthorizer:
         any SystemAudioPermissionAuthorizing
-    private let modelStore: ParakeetModelStore?
-    private let sileroVADModelStore: SileroVADModelStore?
+    private let modelManager: FluidAudioModelManager?
     private let liveTransport: LiveAudioTransport?
     private var liveSpeechPipeline: LiveSpeechPipeline?
     private var liveTranscriptionPipeline:
@@ -106,15 +105,9 @@ final class MeetingRecorderViewModel: ObservableObject {
             systemCapture: systemAudioCapture
         )
         do {
-            self.modelStore = try ParakeetModelStore()
+            self.modelManager = try FluidAudioModelManager()
         } catch {
-            self.modelStore = nil
-            initializationErrors.append(error.localizedDescription)
-        }
-        do {
-            self.sileroVADModelStore = try SileroVADModelStore()
-        } catch {
-            self.sileroVADModelStore = nil
+            self.modelManager = nil
             initializationErrors.append(error.localizedDescription)
         }
         self.showsPermissionSetup = !UserDefaults.standard.bool(
@@ -494,7 +487,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         else {
             return
         }
-        guard let modelStore else {
+        guard let modelManager else {
             errorMessage =
                 "Scribe could not open its local model directory."
             return
@@ -506,7 +499,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         let model = selectedParakeetModel
         Task {
             do {
-                _ = try await modelStore.download(model) {
+                _ = try await modelManager.download(model) {
                     [weak self] progress in
                     Task { @MainActor in
                         guard self?.selectedParakeetModel == model else {
@@ -534,7 +527,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         else {
             return
         }
-        guard let sileroVADModelStore else {
+        guard let modelManager else {
             errorMessage =
                 "Scribe could not open its local Silero VAD directory."
             return
@@ -545,7 +538,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         errorMessage = nil
         Task {
             do {
-                _ = try await sileroVADModelStore.download {
+                _ = try await modelManager.downloadSileroVAD {
                     [weak self] progress in
                     Task { @MainActor in
                         self?.sileroVADDownloadProgress = progress
@@ -576,7 +569,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             return
         }
         guard
-            let modelStore,
+            let modelManager,
             let sessionDirectory = recordingSessionDirectory()
         else {
             errorMessage =
@@ -590,7 +583,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         errorMessage = nil
         Task {
             do {
-                let modelDirectory = await modelStore.directory(for: model)
+                let modelDirectory = await modelManager.directory(for: model)
                 let engine = ParakeetTranscriptionEngine(
                     model: model,
                     modelDirectory: modelDirectory
@@ -669,22 +662,22 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     func refreshModelAvailability() async {
-        guard let modelStore else {
+        guard let modelManager else {
             modelAvailability = .notDownloaded
             return
         }
-        modelAvailability = await modelStore.availability(
+        modelAvailability = await modelManager.availability(
             of: selectedParakeetModel
         )
     }
 
     func refreshSileroVADAvailability() async {
-        guard let sileroVADModelStore else {
+        guard let modelManager else {
             sileroVADAvailability = .notDownloaded
             return
         }
         sileroVADAvailability =
-            await sileroVADModelStore.availability()
+            await modelManager.sileroAvailability()
     }
 
     private func openSettings(url: URL?, paneName: String) {
@@ -821,7 +814,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     ) async {
         guard
             sileroVADAvailability == .available,
-            let sileroVADModelStore
+            let modelManager
         else {
             liveSpeechPipeline = nil
             liveSpeechPipelineState = .modelUnavailable
@@ -833,13 +826,12 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
 
         do {
-            let modelURL = await sileroVADModelStore.modelURL
+            let modelURL = await modelManager.sileroModelURL
             let manifest = try CaptureSessionManifest.load(
                 from: sessionDirectory
             )
             let model = selectedParakeetModel
-            let modelDirectory = await modelStore?.directory(for: model)
-                ?? sessionDirectory
+            let modelDirectory = await modelManager.directory(for: model)
             let engine = ParakeetTranscriptionEngine(
                 model: model,
                 modelDirectory: modelDirectory
@@ -856,10 +848,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             liveSpeechPipeline = pipeline
             liveSpeechPipelineState = await pipeline.state
 
-            guard
-                modelAvailability == .available,
-                modelStore != nil
-            else {
+            guard modelAvailability == .available else {
                 liveTranscriptionPipeline = nil
                 liveTranscriptionPipelineState = .modelUnavailable(
                     reason: .transcriptionModel

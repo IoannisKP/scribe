@@ -188,13 +188,13 @@ final class ParakeetTranscriptionEngineTests: XCTestCase {
         XCTAssertTrue(didUnload)
     }
 
-    func testModelStoreReportsMissingModelWithoutNetwork() async throws {
+    func testModelManagerReportsMissingModelWithoutNetwork() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: root)
         }
-        let store = try ParakeetModelStore(rootDirectory: root)
+        let store = try FluidAudioModelManager(modelsDirectory: root)
 
         let availability = await store.availability(of: .v3Multilingual)
 

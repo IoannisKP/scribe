@@ -54,7 +54,7 @@ public enum ScribeModelCatalogue {
                 provider: .fluidAudio,
                 task: .transcription,
                 installationDirectoryName:
-                    "parakeet-tdt-0.6b-v3-coreml",
+                    "parakeet-tdt-0.6b-v3",
                 supportedLanguages: [
                     "bg", "hr", "cs", "da", "nl", "en", "et", "fi",
                     "fr", "de", "el", "hu", "it", "lv", "lt", "mt",
@@ -74,7 +74,7 @@ public enum ScribeModelCatalogue {
                 provider: .fluidAudio,
                 task: .transcription,
                 installationDirectoryName:
-                    "parakeet-tdt-0.6b-v2-coreml",
+                    "parakeet-tdt-0.6b-v2",
                 supportedLanguages: ["en"],
                 supportsLiveProcessing: true,
                 windowGeometry: ModelWindowGeometry(

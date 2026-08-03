@@ -36,9 +36,11 @@ identity, catalogue metadata, and the canonical Application Support model
 layout. Its initial built-in catalogue describes the existing Parakeet v3,
 Parakeet v2, and Silero installations, including provider, task, language
 coverage, live-processing capability, safe installation folder, and
-transcription window geometry. Parakeet and Silero now resolve their unchanged
-locations through `ModelStoragePaths`; download and inference adapters remain in
-`SpeechPipeline` until their lifecycle is migrated behind this boundary.
+transcription window geometry. Parakeet and Silero now resolve their provider
+cache locations through `ModelStoragePaths`. `ManagedModelRegistry` owns their
+provider-neutral availability, disk accounting, resource evaluation, and
+acquisition state. The single `FluidAudioModelManager` adapter in
+`SpeechPipeline` supplies FluidAudio-specific validation and transport behavior.
 
 Model acquisition is split into policy and provider transport.
 `ModelDownloadController` owns per-model state, staging below `.Downloads`,
@@ -49,14 +51,19 @@ future WhisperKit network APIs outside the manager's policy layer.
 `ModelIntegrityVerifier` reads artifacts in bounded chunks, validates exact byte
 counts and SHA-256 digests, and rejects missing files, traversal, duplicate
 manifest entries, and symlinks resolving outside the staged installation.
+For FluidAudio, `HuggingFaceIntegrityManifestResolver` reads the provider's
+official tree metadata before transfer. It uses LFS SHA-256 values directly and
+downloads only small non-LFS metadata files to calculate their SHA-256. A source
+change between manifest resolution and transfer fails verification rather than
+promoting mismatched files.
 
 `ModelDiskAccounting` recursively measures actual installed logical and
-allocated bytes while refusing to follow symbolic links. Before an acquisition
-or model load, `ModelResourceSafetyEvaluator` compares evidence-backed download,
-installed, and peak-memory requirements with current disk capacity and physical
-memory. Unknown requirements and unavailable capacity fail closed. Resource
-profiles must cite either a local measurement or a primary upstream source;
-parameter-count estimates are not accepted as operational safety data.
+allocated bytes while refusing to follow symbolic links.
+`ModelResourceSafetyEvaluator` can compare evidence-backed download, installed,
+and peak-memory requirements with current disk capacity and physical memory.
+Unknown requirements and unavailable capacity produce a denied evaluation.
+Resource profiles must cite either a local measurement or a primary upstream
+source; parameter-count estimates are not accepted as operational safety data.
 
 ## Audio path
 
@@ -346,7 +353,10 @@ network.
 explicit Download Model click
             │
             ▼
-ParakeetModelStore ── network allowed ── FluidAudio download/compile
+FluidAudioModelManager
+    │
+    ├── official manifest + shared staged lifecycle
+    └── network allowed ── FluidAudio download/compile
             │
             ▼
 ~/Library/Application Support/Scribe/Models/<model repo>/
@@ -362,8 +372,12 @@ ParakeetTranscriptionEngine.prepare()
 AsrModels.load → AsrManager → local Core ML inference
 ```
 
-`ParakeetModelStore` is the only type that disables FluidAudio's offline guard,
-and it does so only inside its explicit `download` operation. Engine
+`FluidAudioModelManager` is the only application type that disables
+FluidAudio's offline guard, and it does so only inside explicit install or
+resume operations. Parakeet and Silero use the same registry, download state,
+staging, pause/cancel cleanup, checksum pass, and atomic promotion. Pausing
+FluidAudio cancels the active file request but retains completed staged files;
+resume asks FluidAudio to skip complete files and continue the remainder. Engine
 preparation first checks that all compiled models and vocabulary files exist.
 An incomplete cache produces an actionable missing-model error before any
 loader is invoked. Preparation then enables FluidAudio offline mode, loads the
@@ -374,13 +388,14 @@ shorter than FluidAudio's 300 ms input minimum is zero-padded for inference,
 while all result timestamps remain clamped to the original unpadded chunk.
 FluidAudio token timings are aggregated into words and shifted by the chunk's
 shared-session start offset. One transcript segment is emitted per nonempty
-batch chunk; Milestone 3 will replace fixed seams with VAD-aware boundaries and
-overlap de-duplication.
+batch chunk; overlapping windows and the shared seam de-duplicator retain
+speech across chunk boundaries.
 
 The production backend is hidden behind a `Sendable` adapter protocol. Unit
-tests verify lifecycle and timestamp mapping without Core ML. The opt-in golden
-test requires an already-installed model and caller-supplied known WAV, so the
-default test suite cannot acquire models or touch the network.
+tests verify lifecycle and timestamp mapping without Core ML. The committed
+golden fixture runs automatically when its model is already installed and skips
+with the missing model's name otherwise; the suite never acquires a model or
+touches the network.
 
 ## Concurrency
 

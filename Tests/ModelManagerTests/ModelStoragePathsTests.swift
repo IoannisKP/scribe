@@ -26,11 +26,11 @@ final class ModelStoragePathsTests: XCTestCase {
         )
         XCTAssertEqual(
             paths.installationDirectory(for: parakeet).path,
-            "/tmp/Application Support/Scribe/Models/parakeet-tdt-0.6b-v3-coreml"
+            "/tmp/Application Support/Scribe/Models/parakeet-tdt-0.6b-v3"
         )
         XCTAssertEqual(
             paths.stagingDirectory(for: parakeet).path,
-            "/tmp/Application Support/Scribe/Models/.Downloads/parakeet-tdt-0.6b-v3-coreml"
+            "/tmp/Application Support/Scribe/Models/.Downloads/parakeet-tdt-0.6b-v3"
         )
     }
 
