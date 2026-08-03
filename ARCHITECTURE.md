@@ -14,7 +14,7 @@ ScribeApp
       └─ Persistence
 ```
 
-`AudioCapture`, `SpeechPipeline`, and the app shell exist through Milestone 3.
+`AudioCapture`, `SpeechPipeline`, `ModelManager`, and the app shell now exist.
 Modules are added when their first complete behavior is implemented rather than
 as empty placeholders.
 
@@ -30,6 +30,13 @@ explicit acquisition, bounded WAV chunk reads, the disk-backed live transport,
 per-source Silero VAD, bounded speech-window spooling, overlap de-duplication,
 engine lifecycle, timestamp mapping, result validation, and merged timeline
 ordering.
+
+`ModelManager` is dependency-free and owns validated, engine-neutral model
+identity and catalogue metadata. Its initial built-in catalogue describes the
+existing Parakeet v3, Parakeet v2, and Silero installations, including provider,
+task, language coverage, live-processing capability, safe installation folder,
+and transcription window geometry. Download and inference adapters remain in
+`SpeechPipeline` until their lifecycle is migrated behind this boundary.
 
 ## Audio path
 

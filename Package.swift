@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .library(name: "AudioCapture", targets: ["AudioCapture"]),
+        .library(name: "ModelManager", targets: ["ModelManager"]),
         .library(name: "SpeechPipeline", targets: ["SpeechPipeline"])
     ],
     dependencies: [
@@ -33,9 +34,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "ModelManager",
+            path: "Sources/ModelManager",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
+        .target(
             name: "SpeechPipeline",
             dependencies: [
                 "AudioCapture",
+                "ModelManager",
                 .product(name: "FluidAudio", package: "FluidAudio")
             ],
             path: "Sources/SpeechPipeline",
@@ -47,6 +56,14 @@ let package = Package(
             name: "AudioCaptureTests",
             dependencies: ["AudioCapture"],
             path: "Tests/AudioCaptureTests",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
+        .testTarget(
+            name: "ModelManagerTests",
+            dependencies: ["ModelManager"],
+            path: "Tests/ModelManagerTests",
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")
             ]

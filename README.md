@@ -136,6 +136,13 @@ streaming. Consequently, short phrases finalize after their speech boundary,
 while continuous speech first produces a partial after a full 14-second window
 plus overlap is available. No network is used.
 
+Milestone 4 has begun with a standalone, dependency-free `ModelManager`
+framework. Its validated built-in catalogue gives Parakeet v3, Parakeet v2,
+and Silero stable identifiers plus shared provider, task, language, installation
+folder, live-processing, and window-geometry metadata. Acquisition and inference
+still use their existing stores until the following manager checkpoints migrate
+them without changing offline behavior.
+
 ## Requirements
 
 - Apple Silicon Mac
