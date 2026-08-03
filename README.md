@@ -164,7 +164,10 @@ variants have each produced a committed golden WER measurement. The adapter
 requires the exact selected local folder, disables implicit downloading, uses
 30-second windows with 1.5-second overlap, and preserves word timestamps. These
 models are backend-supported but are not exposed in the app UI until the
-single-resident coordinator and model-management screens are complete.
+model-management screens are complete. A shared resident-engine coordinator is
+already in place: it unloads the prior exact engine before preparing another,
+rejects switching during inference, and prevents stale wrappers from unloading
+or transcribing through the newly selected model.
 
 ## Requirements
 

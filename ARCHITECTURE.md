@@ -427,6 +427,23 @@ silently inferred. Every exposed entry has a committed WER limit and measured
 installed-byte/first-load peak-RSS profile. The committed clean synthetic fixture
 is a regression guard, not evidence of noisy-meeting accuracy.
 
+## Single-resident transcription engine
+
+`ResidentTranscriptionEngineCoordinator` owns the only prepared ASR engine in
+the process. `CoordinatedTranscriptionEngine` preserves the existing engine
+contract for batch/live pipelines while routing prepare, transcribe, finish, and
+unload through a generation-stamped lease. Preparing a different engine unloads
+the resident engine first. A stale wrapper cannot transcribe through or unload
+the replacement, but it can later prepare again to switch back.
+
+Inference is exclusive. A switch attempted while a transcribe/finish call is in
+flight fails with the exact resident identifier instead of unloading Core ML
+mid-call. An unload requested during inference waits for that call and then
+releases the model. Loading and unloading transitions reject overlapping model
+changes. If replacement preparation fails, the failing engine is unloaded, no
+engine remains resident, and the coordinator records its identifier and original
+error text; it never restores or substitutes the previous model silently.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.

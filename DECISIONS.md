@@ -742,3 +742,26 @@ skipped WhisperKit's model-shape detection and returned empty Small transcripts;
 letting the pinned SDK complete its detection produced WER 0.0000 with word
 timestamps. Synthetic clean speech remains a regression guard, not a claim of
 real-meeting accuracy.
+
+## 2026-08-03 — Serialize all prepared ASR engines behind one resident lease
+
+**Decision:** Add a SpeechPipeline actor that owns at most one prepared
+`TranscriptionEngine`, and a facade that retains the existing engine contract.
+Every activation unloads the previous exact engine before preparing the next.
+Generation-stamped leases invalidate old facades after a switch; stale unloads
+are harmless and stale inference names the requested and resident identifiers.
+Reject a switch while inference is in flight, and let unload wait for the active
+call before releasing Core ML resources. Preserve the selected engine's original
+prepare failure and leave no resident engine after a failed replacement.
+
+**Alternatives:** Let each screen/pipeline own and prepare its engine directly;
+keep Parakeet and Whisper resident together; rely on UI selection locking alone;
+unload an engine concurrently with inference; restore the previous model after a
+replacement fails; cache several prepared engines based on guessed RAM cost.
+
+**Reasoning:** A 24 GB Mac can run the measured variants individually, but
+simultaneous Core ML residency makes peak memory and lifecycle behavior opaque.
+The coordinator enforces the invariant below the future UI and remains testable
+with engine mocks. Explicit rejection during an active call prevents use-after-
+unload races, while invalid leases ensure delayed pipeline cleanup can never
+unload a newer selection.
