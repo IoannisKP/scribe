@@ -2,12 +2,22 @@ import AudioCapture
 @preconcurrency import CoreML
 import FluidAudio
 import Foundation
+import ModelManager
 
 public enum ParakeetModel: String, CaseIterable, Codable, Identifiable, Sendable {
     case v3Multilingual
     case v2English
 
     public var id: String { rawValue }
+
+    public var modelIdentifier: ModelIdentifier {
+        switch self {
+        case .v3Multilingual:
+            ScribeModelIdentifiers.parakeetV3Multilingual
+        case .v2English:
+            ScribeModelIdentifiers.parakeetV2English
+        }
+    }
 
     public var displayName: String {
         switch self {
@@ -99,28 +109,28 @@ public enum ParakeetEngineError: Error, Equatable, LocalizedError, Sendable {
 
 public actor ParakeetModelStore {
     public let rootDirectory: URL
+    private let storagePaths: ModelStoragePaths
+    private let catalogue: ModelCatalogue
 
     public init(rootDirectory: URL? = nil) throws {
-        if let rootDirectory {
-            self.rootDirectory = rootDirectory
-            return
+        let storagePaths = if let rootDirectory {
+            ModelStoragePaths(modelsDirectory: rootDirectory)
+        } else {
+            try ModelStoragePaths.userApplicationSupport()
         }
-
-        let applicationSupport = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        self.rootDirectory = applicationSupport
-            .appendingPathComponent("Scribe", isDirectory: true)
-            .appendingPathComponent("Models", isDirectory: true)
+        self.storagePaths = storagePaths
+        self.rootDirectory = storagePaths.modelsDirectory
+        self.catalogue = try ScribeModelCatalogue.builtIn()
     }
 
     public func directory(for model: ParakeetModel) -> URL {
-        rootDirectory.appendingPathComponent(
-            model.directoryName,
-            isDirectory: true
+        guard let descriptor = catalogue[model.modelIdentifier] else {
+            preconditionFailure(
+                "The built-in catalogue is missing \(model.modelIdentifier.rawValue)."
+            )
+        }
+        return storagePaths.installationDirectory(
+            for: descriptor
         )
     }
 

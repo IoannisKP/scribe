@@ -2,6 +2,7 @@ import AudioCapture
 @preconcurrency import CoreML
 import FluidAudio
 import Foundation
+import ModelManager
 
 public enum SileroVADModelAvailability: Equatable, Sendable {
     case notDownloaded
@@ -54,30 +55,27 @@ public enum SileroVADError:
 
 public actor SileroVADModelStore {
     public let modelsDirectory: URL
+    private let modelInstallationDirectory: URL
 
     public init(modelsDirectory: URL? = nil) throws {
-        if let modelsDirectory {
-            self.modelsDirectory = modelsDirectory
-            return
+        let storagePaths = if let modelsDirectory {
+            ModelStoragePaths(modelsDirectory: modelsDirectory)
+        } else {
+            try ModelStoragePaths.userApplicationSupport()
         }
-
-        let applicationSupport = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        self.modelsDirectory = applicationSupport
-            .appendingPathComponent("Scribe", isDirectory: true)
-            .appendingPathComponent("Models", isDirectory: true)
+        let catalogue = try ScribeModelCatalogue.builtIn()
+        guard let descriptor = catalogue[ScribeModelIdentifiers.sileroVAD] else {
+            preconditionFailure(
+                "The built-in catalogue is missing Silero VAD."
+            )
+        }
+        self.modelsDirectory = storagePaths.modelsDirectory
+        self.modelInstallationDirectory = storagePaths
+            .installationDirectory(for: descriptor)
     }
 
     public var modelURL: URL {
-        modelsDirectory
-            .appendingPathComponent(
-                Repo.vad.folderName,
-                isDirectory: true
-            )
+        modelInstallationDirectory
             .appendingPathComponent(
                 ModelNames.VAD.sileroVadFile,
                 isDirectory: true
