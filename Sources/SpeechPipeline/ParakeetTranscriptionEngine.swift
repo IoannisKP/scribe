@@ -297,7 +297,7 @@ public actor ParakeetTranscriptionEngine: TranscriptionEngine {
                 endTime: end,
                 confidence: result.confidence
             )
-        }
+        }.orderedByAbsoluteTime
 
         let startTime: TimeInterval
         let endTime: TimeInterval

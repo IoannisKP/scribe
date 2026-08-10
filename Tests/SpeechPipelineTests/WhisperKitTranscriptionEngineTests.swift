@@ -93,6 +93,59 @@ final class WhisperKitTranscriptionEngineTests: XCTestCase {
         XCTAssertEqual(unloadCount, 1)
     }
 
+    func testUnorderedBackendWordsAreMappedChronologically()
+        async throws
+    {
+        let root = try makeTestDirectory()
+        addTeardownBlock { try FileManager.default.removeItem(at: root) }
+        let manager = try WhisperKitModelManager(modelsDirectory: root)
+        let modelDirectory = await manager.directory(for: .tiny)
+        try Self.makeValidInstallation(at: modelDirectory)
+        let backend = MockWhisperBackend(
+            segments: [
+                WhisperBackendSegment(
+                    text: "early late",
+                    startTime: 0,
+                    endTime: 6,
+                    confidence: 0.8,
+                    words: [
+                        WhisperBackendWord(
+                            text: "late",
+                            startTime: 5,
+                            endTime: 5.75,
+                            probability: 0.8
+                        ),
+                        WhisperBackendWord(
+                            text: "early",
+                            startTime: 4,
+                            endTime: 4.5,
+                            probability: 0.9
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let engine = try WhisperKitTranscriptionEngine(
+            model: .tiny,
+            modelManager: manager,
+            backend: backend
+        )
+
+        try await engine.prepare()
+        let segments = try await engine.transcribe(
+            AudioChunk(
+                samples: Array(repeating: 0, count: 320_000),
+                startTime: 10,
+                source: .system
+            )
+        )
+        let segment = try XCTUnwrap(segments.first)
+
+        XCTAssertEqual(segment.words?.map(\.text), ["early", "late"])
+        XCTAssertEqual(segment.startTime, 14)
+        XCTAssertEqual(segment.endTime, 15.75)
+    }
+
     func testLoadFailureNamesSelectedModelWithoutSubstitution() async throws {
         let root = try makeTestDirectory()
         addTeardownBlock { try FileManager.default.removeItem(at: root) }

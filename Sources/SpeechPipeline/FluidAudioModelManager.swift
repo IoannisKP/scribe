@@ -143,6 +143,18 @@ public actor FluidAudioModelManager {
         try await registry.resourceSafety(of: identifier)
     }
 
+    public func unrecognizedModelDirectories()
+        async throws -> [UnrecognizedModelDirectory]
+    {
+        try await registry.unrecognizedDirectories()
+    }
+
+    public func removeUnrecognizedModelDirectory(named name: String)
+        async throws
+    {
+        _ = try await registry.removeUnrecognizedDirectory(named: name)
+    }
+
     @discardableResult
     public func download(
         _ model: ParakeetModel,
@@ -209,7 +221,7 @@ public actor FluidAudioModelManager {
     public func removeModel(
         identifiedBy identifier: ModelIdentifier
     ) async throws {
-        try await registry.removeInstallation(of: identifier)
+        _ = try await registry.removeInstallation(of: identifier)
     }
 
     private func install(

@@ -1,5 +1,33 @@
 import Foundation
 
+/// Moves complete model folders to recoverable storage.
+public struct ModelFolderTrash: Sendable {
+    private let moveOperation: @Sendable (URL) throws -> URL
+
+    public init(
+        moveOperation: @escaping @Sendable (URL) throws -> URL
+    ) {
+        self.moveOperation = moveOperation
+    }
+
+    @discardableResult
+    public func move(_ directory: URL) throws -> URL {
+        try moveOperation(directory)
+    }
+
+    public static let system = ModelFolderTrash { directory in
+        var resultingURL: NSURL?
+        try FileManager.default.trashItem(
+            at: directory,
+            resultingItemURL: &resultingURL
+        )
+        guard let resultingURL else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return resultingURL as URL
+    }
+}
+
 public struct ModelInstallationValidator: Sendable {
     private let validation:
         @Sendable (_ descriptor: ModelDescriptor, _ directory: URL) async throws
@@ -43,6 +71,9 @@ public enum ManagedModelRegistryError:
 {
     case unknownModel(ModelIdentifier)
     case downloadInProgress(ModelIdentifier)
+    case invalidUnrecognizedDirectoryName(String)
+    case managedDirectoryCannotBeRemoved(String)
+    case unrecognizedDirectoryNotFound(String)
 
     public var errorDescription: String? {
         switch self {
@@ -50,6 +81,12 @@ public enum ManagedModelRegistryError:
             "The model catalogue does not contain \(identifier.rawValue)."
         case let .downloadInProgress(identifier):
             "Cancel or finish the download for \(identifier.rawValue) before deleting it."
+        case let .invalidUnrecognizedDirectoryName(name):
+            "The unrecognized model folder name is unsafe: \(name)."
+        case let .managedDirectoryCannotBeRemoved(name):
+            "\(name) is managed by Scribe and cannot be removed as unrecognized data."
+        case let .unrecognizedDirectoryNotFound(name):
+            "The unrecognized model folder \(name) is no longer present."
         }
     }
 }
@@ -64,6 +101,7 @@ public actor ManagedModelRegistry {
     private let downloads: ModelDownloadController
     private let diskAccounting: ModelDiskAccounting
     private let safetyEvaluator: ModelResourceSafetyEvaluator
+    private let folderTrash: ModelFolderTrash
 
     public init(
         catalogue: ModelCatalogue,
@@ -71,13 +109,15 @@ public actor ManagedModelRegistry {
         downloads: ModelDownloadController? = nil,
         diskAccounting: ModelDiskAccounting = ModelDiskAccounting(),
         safetyEvaluator: ModelResourceSafetyEvaluator =
-            ModelResourceSafetyEvaluator()
+            ModelResourceSafetyEvaluator(),
+        folderTrash: ModelFolderTrash = .system
     ) {
         self.catalogue = catalogue
         self.paths = paths
         self.downloads = downloads ?? ModelDownloadController(paths: paths)
         self.diskAccounting = diskAccounting
         self.safetyEvaluator = safetyEvaluator
+        self.folderTrash = folderTrash
     }
 
     public func descriptor(
@@ -137,6 +177,108 @@ public actor ManagedModelRegistry {
         )
     }
 
+    public func unrecognizedDirectories()
+        async throws -> [UnrecognizedModelDirectory]
+    {
+        let fileManager = FileManager.default
+        var modelsIsDirectory: ObjCBool = false
+        guard fileManager.fileExists(
+            atPath: paths.modelsDirectory.path,
+            isDirectory: &modelsIsDirectory
+        ) else {
+            return []
+        }
+        guard modelsIsDirectory.boolValue else {
+            throw ModelDiskAccountingError.unableToEnumerate(
+                paths.modelsDirectory
+            )
+        }
+        let managedNames = Set(
+            catalogue.models.map(\.installationDirectoryName)
+        )
+        let internalNames: Set<String> = [".Downloads"]
+        let keys: Set<URLResourceKey> = [
+            .isDirectoryKey,
+            .isSymbolicLinkKey,
+        ]
+        let children = try fileManager.contentsOfDirectory(
+            at: paths.modelsDirectory,
+            includingPropertiesForKeys: Array(keys),
+            options: []
+        )
+        var result: [UnrecognizedModelDirectory] = []
+        for child in children {
+            let name = child.lastPathComponent
+            guard !managedNames.contains(name),
+                !internalNames.contains(name)
+            else {
+                continue
+            }
+            let values = try child.resourceValues(forKeys: keys)
+            guard values.isDirectory == true,
+                values.isSymbolicLink != true
+            else {
+                continue
+            }
+            let usage = try await diskAccounting.usage(
+                ofDirectory: child
+            )
+            result.append(
+                UnrecognizedModelDirectory(
+                    name: name,
+                    url: child.standardizedFileURL,
+                    diskUsage: usage
+                )
+            )
+        }
+        return result.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    @discardableResult
+    public func removeUnrecognizedDirectory(named name: String)
+        async throws -> URL
+    {
+        guard Self.isSafePathComponent(name) else {
+            throw ManagedModelRegistryError
+                .invalidUnrecognizedDirectoryName(name)
+        }
+        let managedNames = Set(
+            catalogue.models.map(\.installationDirectoryName)
+        )
+        guard !managedNames.contains(name), name != ".Downloads" else {
+            throw ManagedModelRegistryError
+                .managedDirectoryCannotBeRemoved(name)
+        }
+        let directory = paths.modelsDirectory
+            .appendingPathComponent(name, isDirectory: true)
+            .standardizedFileURL
+        guard directory.deletingLastPathComponent()
+            == paths.modelsDirectory.standardizedFileURL
+        else {
+            throw ManagedModelRegistryError
+                .invalidUnrecognizedDirectoryName(name)
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: directory.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue
+        else {
+            throw ManagedModelRegistryError
+                .unrecognizedDirectoryNotFound(name)
+        }
+        let values = try directory.resourceValues(
+            forKeys: [.isSymbolicLinkKey]
+        )
+        guard values.isSymbolicLink != true else {
+            throw ManagedModelRegistryError
+                .invalidUnrecognizedDirectoryName(name)
+        }
+        return try folderTrash.move(directory)
+    }
+
     public func downloadState(
         of identifier: ModelIdentifier
     ) async -> ManagedModelDownloadState {
@@ -177,9 +319,10 @@ public actor ManagedModelRegistry {
         await downloads.cancel(try descriptor(for: identifier))
     }
 
+    @discardableResult
     public func removeInstallation(
         of identifier: ModelIdentifier
-    ) async throws {
+    ) async throws -> URL? {
         switch await downloads.state(for: identifier) {
         case .downloading, .pausing, .paused, .verifying:
             throw ManagedModelRegistryError.downloadInProgress(identifier)
@@ -194,12 +337,22 @@ public actor ManagedModelRegistry {
             isDirectory: &isDirectory
         ) else {
             try await downloads.resetState(identifier)
-            return
+            return nil
         }
         guard isDirectory.boolValue else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        try FileManager.default.removeItem(at: directory)
+        let trashedDirectory = try folderTrash.move(directory)
         try await downloads.resetState(identifier)
+        return trashedDirectory
+    }
+
+    private static func isSafePathComponent(_ component: String) -> Bool {
+        !component.isEmpty
+            && component != "."
+            && component != ".."
+            && !component.contains("/")
+            && !component.contains(":")
+            && !component.contains("\\")
     }
 }

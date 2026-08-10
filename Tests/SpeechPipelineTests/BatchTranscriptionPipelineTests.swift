@@ -179,7 +179,7 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
 
         let segments = try await pipeline.transcribeSession(at: directory)
 
-        XCTAssertEqual(segments.map(\.text), ["alpha boundary", "omega"])
+        XCTAssertEqual(segments.map(\.text), ["alpha", "boundary omega"])
         XCTAssertEqual(
             segments.flatMap { $0.words ?? [] }.map(\.text),
             ["alpha", "boundary", "omega"]

@@ -187,12 +187,15 @@ public actor LiveTranscriptionPipeline {
     private let engine: any TranscriptionEngine
     private let backpressureConfiguration:
         LiveTranscriptionBackpressureConfiguration
+    private let overlapTimingTolerance: TimeInterval
 
     private var drainTask: Task<Void, Never>?
     private var failureMessage: String?
     private var rowByKey: [SpeechSegmentKey: LiveTranscriptRow] = [:]
     private var workingByKey:
         [SpeechSegmentKey: WorkingTranscript] = [:]
+    private var finalizedBoundaryBySource:
+        [AudioSource: FinalizedSpeechBoundary] = [:]
     private var backpressureTracker: LiveTranscriptionBackpressureTracker
 
     public init(
@@ -207,6 +210,8 @@ public actor LiveTranscriptionPipeline {
         )
         self.engine = engine
         self.backpressureConfiguration = backpressureConfiguration
+        self.overlapTimingTolerance =
+            TranscriptOverlapDeduplicator.defaultOverlapTimingTolerance
         self.backpressureTracker =
             LiveTranscriptionBackpressureTracker(
                 configuration: backpressureConfiguration
@@ -217,12 +222,15 @@ public actor LiveTranscriptionPipeline {
         windowProvider: any LiveSpeechWindowProviding,
         engine: any TranscriptionEngine,
         backpressureConfiguration:
-            LiveTranscriptionBackpressureConfiguration = .default
+            LiveTranscriptionBackpressureConfiguration = .default,
+        overlapTimingTolerance: TimeInterval =
+            TranscriptOverlapDeduplicator.defaultOverlapTimingTolerance
     ) throws {
         try Self.validate(backpressureConfiguration)
         self.windowProvider = windowProvider
         self.engine = engine
         self.backpressureConfiguration = backpressureConfiguration
+        self.overlapTimingTolerance = overlapTimingTolerance
         self.backpressureTracker =
             LiveTranscriptionBackpressureTracker(
                 configuration: backpressureConfiguration
@@ -249,6 +257,7 @@ public actor LiveTranscriptionPipeline {
         rows = []
         rowByKey = [:]
         workingByKey = [:]
+        finalizedBoundaryBySource = [:]
         failureMessage = nil
         backpressureTracker =
             LiveTranscriptionBackpressureTracker(
@@ -280,6 +289,7 @@ public actor LiveTranscriptionPipeline {
         drainTask = nil
         await engine.unload()
         workingByKey.removeAll(keepingCapacity: false)
+        finalizedBoundaryBySource.removeAll(keepingCapacity: false)
         failureMessage = nil
         state = finalState
     }
@@ -349,12 +359,62 @@ public actor LiveTranscriptionPipeline {
             source: window.source,
             segmentIndex: window.speechSegmentIndex
         )
+        let isFirstWindowForRow =
+            workingByKey[key] == nil && rowByKey[key] == nil
+        let precedingRowKey: SpeechSegmentKey?
+        if
+            let preservedBoundary =
+                finalizedBoundaryBySource[key.source],
+            preservedBoundary.key.segmentIndex < key.segmentIndex,
+            preservedBoundary.seamSegment.source == key.source,
+            rowByKey[preservedBoundary.key] != nil
+        {
+            precedingRowKey = preservedBoundary.key
+        } else {
+            precedingRowKey = rowByKey.keys
+                .filter {
+                    $0.source == key.source
+                        && $0.segmentIndex < key.segmentIndex
+                }
+                .max {
+                    $0.segmentIndex < $1.segmentIndex
+                }
+        }
+        if
+            isFirstWindowForRow,
+            window.overlapSampleCount > 0,
+            let firstCurrent = output.first,
+            let previousKey = precedingRowKey,
+            let previousRow = rowByKey[previousKey],
+            previousRow.isFinal
+        {
+            let reconciled =
+                TranscriptOverlapDeduplicator
+                    .reconcilePreferringCurrent(
+                        previous: previousRow.segment,
+                        current: firstCurrent,
+                        overlapStartTime: window.startTime,
+                        overlapTimingTolerance:
+                            overlapTimingTolerance
+                    )
+            if let revisedPrevious = reconciled.previous {
+                rowByKey[previousKey] = LiveTranscriptRow(
+                    source: previousKey.source,
+                    speechSegmentIndex: previousKey.segmentIndex,
+                    segment: revisedPrevious,
+                    isFinal: true
+                )
+            } else {
+                rowByKey[previousKey] = nil
+            }
+        }
         var working = workingByKey[key] ?? WorkingTranscript()
         for segment in output {
             let deduplicated =
                 TranscriptOverlapDeduplicator.deduplicate(
                     previous: working.seamSegment,
-                    current: segment
+                    current: segment,
+                    overlapTimingTolerance: overlapTimingTolerance
                 )
             working.seamSegment = segment
             if let deduplicated {
@@ -373,6 +433,13 @@ public actor LiveTranscriptionPipeline {
         }
 
         if window.isFinalWindow {
+            if let seamSegment = working.seamSegment {
+                finalizedBoundaryBySource[key.source] =
+                    FinalizedSpeechBoundary(
+                        key: key,
+                        seamSegment: seamSegment
+                    )
+            }
             workingByKey[key] = nil
         } else {
             workingByKey[key] = working
@@ -566,6 +633,11 @@ private struct SpeechSegmentKey: Hashable, Sendable {
     let segmentIndex: UInt64
 }
 
+private struct FinalizedSpeechBoundary: Sendable {
+    let key: SpeechSegmentKey
+    let seamSegment: TranscriptSegment
+}
+
 private struct WorkingTranscript: Sendable {
     var seamSegment: TranscriptSegment?
     private var acceptedSegments: [TranscriptSegment] = []
@@ -591,7 +663,9 @@ private struct WorkingTranscript: Sendable {
         }
         let words: [WordTiming]?
         if allHaveWords {
-            words = acceptedSegments.flatMap { $0.words ?? [] }
+            words = acceptedSegments
+                .flatMap { $0.words ?? [] }
+                .orderedByAbsoluteTime
         } else {
             words = nil
         }
@@ -600,10 +674,12 @@ private struct WorkingTranscript: Sendable {
         )
         return TranscriptSegment(
             text: text,
-            startTime: first.startTime,
-            endTime: acceptedSegments
-                .map(\.endTime)
-                .max() ?? first.endTime,
+            startTime: words?.first?.startTime
+                ?? acceptedSegments.map(\.startTime).min()
+                ?? first.startTime,
+            endTime: words?.last?.endTime
+                ?? acceptedSegments.map(\.endTime).max()
+                ?? first.endTime,
             source: first.source,
             speakerID:
                 speakerIDs.count == 1

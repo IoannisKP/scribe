@@ -96,7 +96,8 @@ preparation:
 - microphone and system audio have independent Silero recurrent states and
   threshold hysteresis;
 - silence-aware segments use 150 ms minimum speech, 750 ms trailing silence,
-  100 ms padding, and an exact 30-second continuous-speech ceiling;
+  100 ms padding, and a 30-second baseline continuous-speech ceiling that grows
+  to fit the selected engine's window plus overlap;
 - speech is emitted with the selected engine's window and overlap geometry
   (14 seconds and 1.5 seconds for Parakeet);
 - windows are written to source-specific transient files, so waiting for the
@@ -116,6 +117,8 @@ Milestone 3C completes local live transcription:
   continues, entirely outside the main actor;
 - long active speech emits partial rows before its boundary; the final
   overlapping tail replaces the same stable row after seam de-duplication;
+- ceiling-forced continuations carry the selected overlap into a new stable row
+  and may correct only the preceding final row's overlap tail in place;
 - short utterances appear as final rows when Silero confirms their trailing
   silence;
 - rows remain chronologically interleaved across **You** and **Others** using
@@ -134,7 +137,8 @@ Milestone 3C completes local live transcription:
 FluidAudio's existing Parakeet adapter is window-based rather than token
 streaming. Consequently, short phrases finalize after their speech boundary,
 while continuous speech first produces a partial after a full 14-second window
-plus overlap is available. No network is used.
+plus overlap is available. Whisper follows the same rule with its 30-second
+window, so its engine-derived ceiling is 31.5 seconds. No network is used.
 
 Milestone 4 now has a standalone, dependency-free `ModelManager` framework. Its
 validated built-in catalogue gives Parakeet v3/v2, Silero, and twelve verified
@@ -167,7 +171,7 @@ models are exposed alongside both Parakeet choices in the catalogue-driven app
 menu. The model card shows provider, languages, compression, speed, measured
 installed size and peak memory, current safety status, and total library usage.
 Installs can be paused, resumed, or cancelled; installed or invalid entries can
-be deleted without touching recordings. A shared resident-engine coordinator
+be moved to Trash without touching recordings. A shared resident-engine coordinator
 unloads the prior exact engine before preparing another, rejects switching
 during inference, and prevents stale wrappers from unloading or transcribing
 through the newly selected model.
@@ -219,8 +223,9 @@ To transcribe:
 
 If the exact selection is missing or fails, Scribe names it and may offer the
 closest smaller model already installed. It changes models only when that offer
-is clicked. **Delete…** removes only the selected model after confirmation;
-Silero VAD has the same explicit install/delete treatment.
+is clicked. **Move to Trash…** moves only the selected model folder to macOS
+Trash after confirmation, so it remains recoverable until Trash is emptied.
+Silero VAD has the same explicit install/recoverable-remove treatment.
 
 Downloaded model artifacts are large. The app shows real download and Core ML
 compilation progress. New downloads stay under the manager's hidden staging
@@ -333,6 +338,10 @@ Microphone recordings are stored under:
 
 The JSON file contains only canonical format metadata, relative audio paths,
 and the two track-start offsets. It contains no transcript or captured audio.
+Transcript word arrays are normalized by absolute timestamp before segment
+bounds, overlap trimming, row ordering, or future seek positions are derived.
+Existing sessions need no migration because transcripts are not yet persisted;
+their WAV tracks remain the re-transcribable source of truth.
 
 Before capture starts, Scribe checks the recording volume against a configurable
 expected duration (two hours by default) and a configurable 512 MiB free-space
@@ -374,6 +383,13 @@ During the Milestone 4 all-model verification, the checkout remained about
 installations alone total 11,582,028,876 logical bytes. Normal users do not need
 every model installed; the model card reports actual total usage and can remove
 one exact installation without touching source, other models, or sessions.
+Scribe also scans for folders directly under `Models` that are not present in
+the catalogue. It displays each unrecognized folder with its recursive logical
+size and file count, includes that space in the total, and offers removal only
+after an explicit confirmation. Known model folders, the `.Downloads` staging
+area, files, and symbolic links are not offered through this cleanup control.
+Confirmed cleanup moves the selected intact folder to macOS Trash instead of
+unlinking it permanently.
 
 WAV tests write only to a unique temporary directory and remove it after each
 test.
@@ -468,17 +484,24 @@ This check requires the one-time VAD download and real input sources:
 3. Record alternating speech and silence on both microphone and system audio.
 4. Confirm the UI reports that speech detection is running while both WAVs
    continue recording.
-5. Speak continuously for more than 30 seconds, then stop. Confirm speech
+5. Speak continuously past the selected engine's ceiling (30 seconds for
+   Parakeet and 31.5 seconds for Whisper), then stop. Confirm speech
    detection finishes without blocking the UI and both WAVs remain valid.
 6. Run `swift test`; the `LiveSpeechPipelineTests` and
-   `TranscriptOverlapDeduplicatorTests` suites verify the exact 30-second
-   ceiling, 14-second windows, 1.5-second overlaps, source offsets, transient
+   `TranscriptOverlapDeduplicatorTests` suites verify engine-aware ceilings,
+   selected window geometry, 1.5-second overlaps, source offsets, transient
    spool round trips, seam removal, and bounded one-hour silence processing.
 
-The ordinary suite also runs a committed Parakeet batch-seam regression when
-the selected model is installed. It places a window boundary inside a word
-identified by one-window inference and requires the overlapped result to retain
-the baseline word count while remaining within the golden WER threshold.
+The ordinary suite also runs a committed Parakeet batch-seam sweep when the
+selected model is installed. A production-sized 14-second/1.5-second window grid
+is shifted across whole-second fixture positions from 2 through 18 seconds. The
+test reports substitution, insertion, and deletion counts at 125, 250, and
+500 ms seam tolerances, rejects any dropped reference word, and applies a 0.06
+WER ceiling derived from the measured distribution to the production path.
+Batch stitching prefers the later window's complete boundary rendering; the
+measured worst case is now 0.0392 at all three tolerances, down from 0.0588.
+No sweep position has a deletion; the two worst-case errors are one substitution
+and one insertion.
 
 ## Milestone 3C acceptance check
 
@@ -490,9 +513,9 @@ This check uses the already-downloaded VAD and Parakeet models:
    row appears.
 4. Play system speech and confirm final **Others** rows use the system track's
    timeline offset.
-5. Speak continuously for longer than 16 seconds. Confirm a **Partial** row
-   appears and is replaced by a **Final** row after silence or the 30-second
-   ceiling, without duplicated overlap text.
+5. Speak continuously past one selected-model window plus overlap. Confirm a
+   **Partial** row appears and is replaced by a **Final** row after silence or
+   the engine-aware ceiling, without duplicated overlap text.
 6. Stop while ASR has queued work. Confirm the UI reports disk buffering or
    catch-up, then completion, while both WAVs remain valid.
 7. Run `swift test`; `LiveTranscriptionPipelineTests` covers partial

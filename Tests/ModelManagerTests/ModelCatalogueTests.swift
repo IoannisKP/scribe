@@ -67,6 +67,16 @@ final class ModelCatalogueTests: XCTestCase {
         )
         XCTAssertTrue(turbo.supportedLanguages.contains("el"))
         XCTAssertTrue(turbo.supportedLanguages.contains("sv"))
+        let largeV3 = try XCTUnwrap(
+            catalogue[ScribeModelIdentifiers.whisperLargeV3]
+        )
+        XCTAssertNotNil(largeV3.liveLatencyNote)
+        XCTAssertTrue(
+            largeV3.liveLatencyNote?.contains("31.5 seconds") == true
+        )
+        XCTAssertTrue(
+            largeV3.liveLatencyNote?.contains("1.4 seconds") == true
+        )
     }
 
     func testWhisperCatalogueRecordsMeasuredDiskAndPeakMemory()
@@ -134,7 +144,6 @@ final class ModelCatalogueTests: XCTestCase {
             installationDirectoryName:
                 original.installationDirectoryName,
             supportedLanguages: ["en"],
-            supportsLiveProcessing: false,
             windowGeometry: ModelWindowGeometry(
                 duration: 30,
                 overlap: 0
@@ -206,7 +215,6 @@ final class ModelCatalogueTests: XCTestCase {
             task: .transcription,
             installationDirectoryName: directory,
             supportedLanguages: ["en"],
-            supportsLiveProcessing: false,
             windowGeometry: geometry,
             parameterCountMillions: parameterCountMillions
         )

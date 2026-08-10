@@ -234,7 +234,6 @@ final class ModelDownloadControllerTests: XCTestCase {
             task: .transcription,
             installationDirectoryName: "test-download",
             supportedLanguages: ["en"],
-            supportsLiveProcessing: false,
             windowGeometry: .init(duration: 30, overlap: 0)
         )
         let artifact = try ModelArtifactIntegrity(

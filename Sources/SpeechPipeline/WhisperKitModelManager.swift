@@ -95,6 +95,18 @@ public actor WhisperKitModelManager {
         try await registry.resourceSafety(of: model.modelIdentifier)
     }
 
+    public func unrecognizedModelDirectories()
+        async throws -> [UnrecognizedModelDirectory]
+    {
+        try await registry.unrecognizedDirectories()
+    }
+
+    public func removeUnrecognizedModelDirectory(named name: String)
+        async throws
+    {
+        _ = try await registry.removeUnrecognizedDirectory(named: name)
+    }
+
     @discardableResult
     public func download(_ model: WhisperModel) async throws -> URL {
         let currentAvailability = try await availability(of: model)
@@ -167,7 +179,7 @@ public actor WhisperKitModelManager {
     }
 
     public func removeModel(_ model: WhisperModel) async throws {
-        try await registry.removeInstallation(of: model.modelIdentifier)
+        _ = try await registry.removeInstallation(of: model.modelIdentifier)
     }
 
     private func resolvedArtifacts(

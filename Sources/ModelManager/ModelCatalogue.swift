@@ -112,7 +112,6 @@ public enum ScribeModelCatalogue {
                     "pl", "pt", "ro", "ru", "sk", "sl", "es", "sv",
                     "uk",
                 ],
-                supportsLiveProcessing: true,
                 windowGeometry: ModelWindowGeometry(
                     duration: 14,
                     overlap: 1.5
@@ -130,7 +129,6 @@ public enum ScribeModelCatalogue {
                 installationDirectoryName:
                     "parakeet-tdt-0.6b-v2",
                 supportedLanguages: ["en"],
-                supportsLiveProcessing: true,
                 windowGeometry: ModelWindowGeometry(
                     duration: 14,
                     overlap: 1.5
@@ -147,7 +145,6 @@ public enum ScribeModelCatalogue {
                 task: .voiceActivityDetection,
                 installationDirectoryName: "silero-vad",
                 supportedLanguages: [],
-                supportsLiveProcessing: true,
                 windowGeometry: nil
             ),
         ] + whisperDescriptors())
@@ -233,7 +230,8 @@ public enum ScribeModelCatalogue {
                 speed: .quality,
                 installedBytes: 3_093_083_359,
                 peakMemoryBytes: 4_440_883_200,
-                geometry: geometry
+                geometry: geometry,
+                liveLatencyNote: "Live latency measured on an M4 Pro: the first partial needs 31.5 seconds of audio plus about 5.0 seconds of inference. Closing a segment runs a padded 30-second tail pass, measured at about 1.4 seconds for 1.5 seconds of new speech."
             ),
             try whisper(
                 id: ScribeModelIdentifiers.whisperLargeV3Turbo,
@@ -327,7 +325,8 @@ public enum ScribeModelCatalogue {
         speed: ModelSpeedRating,
         installedBytes: Int64,
         peakMemoryBytes: Int64,
-        geometry: ModelWindowGeometry
+        geometry: ModelWindowGeometry,
+        liveLatencyNote: String? = nil
     ) throws -> ModelDescriptor {
         try ModelDescriptor(
             id: id,
@@ -337,7 +336,6 @@ public enum ScribeModelCatalogue {
             task: .transcription,
             installationDirectoryName: folder,
             supportedLanguages: languages,
-            supportsLiveProcessing: true,
             windowGeometry: geometry,
             parameterCountMillions: parameters,
             quantization: quantization,
@@ -349,7 +347,8 @@ public enum ScribeModelCatalogue {
                 evidence: .measured(
                     description: "Scribe golden fixture on an M4 Pro Mac, macOS 26.5.2, 2026-08-03, WhisperKit 1.0.0. Download bytes came from the SHA-256 manifest, installed bytes from recursive regular-file accounting after verification, and peak RSS from getrusage in a fresh first-load test process."
                 )
-            )
+            ),
+            liveLatencyNote: liveLatencyNote
         )
     }
 

@@ -44,6 +44,20 @@ public struct WordTiming: Equatable, Sendable {
     }
 }
 
+extension Array where Element == WordTiming {
+    var orderedByAbsoluteTime: [WordTiming] {
+        enumerated().sorted { lhs, rhs in
+            if lhs.element.startTime != rhs.element.startTime {
+                return lhs.element.startTime < rhs.element.startTime
+            }
+            if lhs.element.endTime != rhs.element.endTime {
+                return lhs.element.endTime < rhs.element.endTime
+            }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+}
+
 public struct TranscriptSegment: Equatable, Sendable {
     public let text: String
     public let startTime: TimeInterval

@@ -137,6 +137,47 @@ final class ParakeetTranscriptionEngineTests: XCTestCase {
         XCTAssertNotEqual(segment.endTime, chunk.endTime)
     }
 
+    func testUnorderedBackendWordsAreMappedChronologically()
+        async throws
+    {
+        let backend = ParakeetBackendSpy(
+            result: ParakeetBackendResult(
+                text: "Early late",
+                confidence: 0.9,
+                duration: 6,
+                words: [
+                    ParakeetBackendWord(
+                        text: "late",
+                        startTime: 5,
+                        endTime: 5.75
+                    ),
+                    ParakeetBackendWord(
+                        text: "early",
+                        startTime: 4,
+                        endTime: 4.5
+                    ),
+                ]
+            )
+        )
+        let engine = ParakeetTranscriptionEngine(
+            model: .v3Multilingual,
+            modelDirectory: URL(fileURLWithPath: "/tmp/model"),
+            backend: backend
+        )
+        let chunk = AudioChunk(
+            samples: Array(repeating: 0, count: 320_000),
+            startTime: 10,
+            source: .microphone
+        )
+
+        let segments = try await engine.transcribe(chunk)
+        let segment = try XCTUnwrap(segments.first)
+
+        XCTAssertEqual(segment.words?.map(\.text), ["early", "late"])
+        XCTAssertEqual(segment.startTime, 14)
+        XCTAssertEqual(segment.endTime, 15.75)
+    }
+
     func testResultDurationRemainsFallbackWhenWordsAreUnavailable()
         async throws
     {

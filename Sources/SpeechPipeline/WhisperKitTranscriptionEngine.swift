@@ -175,7 +175,7 @@ public actor WhisperKitTranscriptionEngine: TranscriptionEngine {
                     endTime: chunk.startTime + wordEnd,
                     confidence: word.probability
                 )
-            }
+            }.orderedByAbsoluteTime
             let absoluteStart = words.first?.startTime
                 ?? chunk.startTime + localStart
             let absoluteEnd = words.last?.endTime

@@ -19,6 +19,23 @@ public struct ModelDiskUsage: Equatable, Sendable {
     }
 }
 
+public struct UnrecognizedModelDirectory:
+    Identifiable,
+    Equatable,
+    Sendable
+{
+    public var id: String { name }
+    public let name: String
+    public let url: URL
+    public let diskUsage: ModelDiskUsage
+
+    public init(name: String, url: URL, diskUsage: ModelDiskUsage) {
+        self.name = name
+        self.url = url
+        self.diskUsage = diskUsage
+    }
+}
+
 public enum ModelDiskAccountingError:
     Error,
     LocalizedError,
@@ -41,7 +58,12 @@ public actor ModelDiskAccounting {
         of descriptor: ModelDescriptor,
         in paths: ModelStoragePaths
     ) throws -> ModelDiskUsage {
-        let directory = paths.installationDirectory(for: descriptor)
+        try usage(
+            ofDirectory: paths.installationDirectory(for: descriptor)
+        )
+    }
+
+    public func usage(ofDirectory directory: URL) throws -> ModelDiskUsage {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(
             atPath: directory.path,
