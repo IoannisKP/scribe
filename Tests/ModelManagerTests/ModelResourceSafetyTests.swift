@@ -178,7 +178,6 @@ final class ModelResourceSafetyTests: XCTestCase {
             task: .transcription,
             installationDirectoryName: "resource-test",
             supportedLanguages: ["en"],
-            supportsLiveProcessing: false,
             windowGeometry: .init(duration: 30, overlap: 0),
             resourceProfile: profile
         )

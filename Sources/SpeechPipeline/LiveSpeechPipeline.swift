@@ -42,6 +42,10 @@ public struct LiveSpeechSegmentationConfiguration:
         var resolved = self
         resolved.windowDuration = engine.preferredWindowDuration
         resolved.windowOverlap = engine.preferredOverlap
+        resolved.maximumSpeechDuration = max(
+            maximumSpeechDuration,
+            engine.preferredWindowDuration + engine.preferredOverlap
+        )
         return resolved
     }
 }
@@ -884,9 +888,12 @@ struct LiveSpeechSourceProcessor {
             )
             windows.append(contentsOf: result.windows)
             segmentCount += result.emittedSegmentCount
+            let continuationOverlap = sampleCount(
+                configuration.windowOverlap
+            )
             activeSpeechStart = hardEnd
-            nextWindowStart = hardEnd
-            hasEmittedWindowForActiveSegment = false
+            nextWindowStart = hardEnd - continuationOverlap
+            hasEmittedWindowForActiveSegment = true
             if let pendingSilenceStart,
                 pendingSilenceStart < hardEnd
             {

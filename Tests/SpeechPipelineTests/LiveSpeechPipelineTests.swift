@@ -49,6 +49,60 @@ final class LiveSpeechPipelineTests: XCTestCase {
             windows.map(\.samples.count),
             [64_000, 64_000, 48_000]
         )
+        XCTAssertEqual(configuration.maximumSpeechDuration, 30)
+    }
+
+    func testWhisperGeometryExtendsCeilingAndEmitsAPartialWindow()
+        async throws
+    {
+        let engine = GeometryTranscriptionEngine(
+            preferredWindowDuration: 30,
+            preferredOverlap: 1.5
+        )
+        let configuration = LiveSpeechSegmentationConfiguration.default
+            .usingWindowGeometry(from: engine)
+        var processor = LiveSpeechSourceProcessor(
+            source: .microphone,
+            trackStartTime: 0,
+            configuration: configuration
+        )
+        let detector = EnergyVoiceActivityDetector()
+        let samplesPerSecond = Int(CanonicalAudioFormat.sampleRate)
+        let speech = Array(
+            repeating: Float(0.8),
+            count: samplesPerSecond
+        )
+        var windows: [LiveSpeechWindow] = []
+
+        for second in 0..<32 {
+            let result = try await processor.ingest(
+                CanonicalAudioBlock(
+                    source: .microphone,
+                    firstSampleIndex:
+                        UInt64(second * samplesPerSecond),
+                    samples: speech
+                ),
+                detector: detector
+            )
+            windows.append(contentsOf: result.windows)
+        }
+
+        XCTAssertEqual(configuration.maximumSpeechDuration, 31.5)
+        let firstSegment = windows.filter {
+            $0.speechSegmentIndex == 0
+        }
+        XCTAssertEqual(
+            firstSegment.map(\.firstSampleIndex),
+            [0, 456_000]
+        )
+        XCTAssertEqual(
+            firstSegment.map(\.samples.count),
+            [480_000, 48_000]
+        )
+        XCTAssertEqual(
+            firstSegment.map(\.isFinalWindow),
+            [false, true]
+        )
     }
 
     func testContinuousSpeechUsesThirtySecondCeilingAndOverlappingWindows()
@@ -121,7 +175,8 @@ final class LiveSpeechPipelineTests: XCTestCase {
                 $0.samples.count <= 224_000
             }
         )
-        XCTAssertEqual(secondSegment[0].firstSampleIndex, 480_000)
+        XCTAssertEqual(secondSegment[0].firstSampleIndex, 456_000)
+        XCTAssertEqual(secondSegment[0].overlapSampleCount, 24_000)
         XCTAssertLessThanOrEqual(
             secondSegment[0].samples.count,
             224_000

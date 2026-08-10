@@ -1,5 +1,6 @@
 @preconcurrency import AppKit
 import AudioCapture
+import ModelManager
 import SpeechPipeline
 import SwiftUI
 
@@ -230,6 +231,8 @@ private struct RecordingView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
     @State private var showsDeleteModelConfirmation = false
     @State private var showsDeleteVADConfirmation = false
+    @State private var unrecognizedDirectoryPendingRemoval:
+        UnrecognizedModelDirectory?
 
     var body: some View {
         ScrollView {
@@ -497,6 +500,16 @@ private struct RecordingView: View {
                         .font(.caption)
                     Text(recorder.modelResourceText)
                         .font(.caption.monospacedDigit())
+                    if let latencyNote = recorder
+                        .selectedModelDescriptor.liveLatencyNote
+                    {
+                        Label(
+                            latencyNote,
+                            systemImage: "clock.badge.exclamationmark"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    }
                 }
 
                 HStack {
@@ -549,6 +562,60 @@ private struct RecordingView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
 
+                if !recorder.unrecognizedModelDirectories.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(
+                            "Unrecognized model data",
+                            systemImage: "externaldrive.badge.questionmark"
+                        )
+                        .font(.headline)
+                        .foregroundStyle(.orange)
+
+                        Text(
+                            "These folders are not managed by the model catalogue. Review them before removing anything."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        ForEach(
+                            recorder.unrecognizedModelDirectories
+                        ) { directory in
+                            HStack(alignment: .center, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(directory.name)
+                                        .font(.callout.monospaced())
+                                    Text(
+                                        "\(recorder.unrecognizedModelDirectorySizeText(directory)) · \(directory.diskUsage.regularFileCount) files"
+                                    )
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Button("Move to Trash…", role: .destructive) {
+                                    unrecognizedDirectoryPendingRemoval =
+                                        directory
+                                }
+                                .disabled(
+                                    recorder
+                                        .removingUnrecognizedModelDirectoryName
+                                        != nil
+                                        || recorder.isDownloadingModel
+                                        || recorder.isDownloadingSileroVAD
+                                        || recorder.isRecording
+                                        || recorder.isTranscribing
+                                )
+                            }
+                            .padding(8)
+                            .background(
+                                .orange.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 8)
+                            )
+                        }
+                    }
+                }
+
                 Divider()
 
                 HStack(alignment: .center, spacing: 12) {
@@ -571,7 +638,7 @@ private struct RecordingView: View {
                                 || recorder.isTranscribing
                         )
                     } else {
-                        Button("Delete…", role: .destructive) {
+                        Button("Move to Trash…", role: .destructive) {
                             showsDeleteVADConfirmation = true
                         }
                         .disabled(
@@ -675,30 +742,59 @@ private struct RecordingView: View {
             .padding(8)
         }
         .confirmationDialog(
-            "Delete \(recorder.selectedModelDescriptor.displayName)?",
+            "Move \(recorder.selectedModelDescriptor.displayName) to Trash?",
             isPresented: $showsDeleteModelConfirmation
         ) {
-            Button("Delete Model", role: .destructive) {
+            Button("Move to Trash", role: .destructive) {
                 recorder.deleteSelectedModel()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "The model can be installed again later. Recordings and transcripts are not affected."
+                "The model folder moves to Trash and can be recovered there. Recordings and transcripts are not affected."
             )
         }
         .confirmationDialog(
-            "Delete Silero VAD?",
+            "Move Silero VAD to Trash?",
             isPresented: $showsDeleteVADConfirmation
         ) {
-            Button("Delete Model", role: .destructive) {
+            Button("Move to Trash", role: .destructive) {
                 recorder.deleteSileroVAD()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Live speech detection will be unavailable until the model is installed again."
+                "The model folder moves to Trash and can be recovered there. Live speech detection will be unavailable until it is restored or installed again."
             )
+        }
+        .confirmationDialog(
+            "Move unrecognized model data to Trash?",
+            isPresented: Binding(
+                get: {
+                    unrecognizedDirectoryPendingRemoval != nil
+                },
+                set: { isPresented in
+                    if !isPresented {
+                        unrecognizedDirectoryPendingRemoval = nil
+                    }
+                }
+            )
+        ) {
+            if let directory = unrecognizedDirectoryPendingRemoval {
+                Button(
+                    "Move \(directory.name) to Trash",
+                    role: .destructive
+                ) {
+                    recorder.removeUnrecognizedModelDirectory(directory)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let directory = unrecognizedDirectoryPendingRemoval {
+                Text(
+                    "This moves the \(recorder.unrecognizedModelDirectorySizeText(directory)) folder to Trash, where it can be recovered. Recordings and transcripts are not affected."
+                )
+            }
         }
     }
 
@@ -715,7 +811,7 @@ private struct RecordingView: View {
                 }
                 .buttonStyle(.borderedProminent)
             } else if recorder.selectedModelCanDelete {
-                Button("Delete…", role: .destructive) {
+                Button("Move to Trash…", role: .destructive) {
                     showsDeleteModelConfirmation = true
                 }
                 .disabled(

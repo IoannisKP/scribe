@@ -35,7 +35,7 @@ ordering.
 identity, catalogue metadata, and the canonical Application Support model
 layout. The built-in catalogue describes Parakeet v3/v2, Silero, and twelve
 verified Whisper variants, including provider, task, language coverage,
-live-processing capability, safe installation folder, transcription geometry,
+safe installation folder, transcription geometry,
 parameter/quantization/speed labels, and evidence-backed disk/RAM requirements.
 Whisper declares exact 30-second windows with 1.5-second overlap; Parakeet keeps
 its 14-second geometry. `ManagedModelRegistry` owns provider-neutral
@@ -60,6 +60,12 @@ rather than promoting mismatched files.
 
 `ModelDiskAccounting` recursively measures actual installed logical and
 allocated bytes while refusing to follow symbolic links.
+`ManagedModelRegistry` also scans direct child folders that match neither a
+catalogue installation nor the internal `.Downloads` staging area. These
+unrecognized folders are measured, included in the UI's total, and movable to
+macOS Trash only through a confirmation-protected exact-child operation that
+rechecks path and symlink safety. Managed transcription models and Silero VAD
+use the same recoverable removal path.
 `ModelResourceSafetyEvaluator` can compare evidence-backed download, installed,
 and peak-memory requirements with current disk capacity and physical memory.
 Unknown requirements and unavailable capacity produce a denied evaluation.
@@ -94,11 +100,12 @@ Core Audio process-tap IOProc ┘
           per-source Silero VAD
                      │
                      ▼
-       30 s speech segments → overlapping
-          disk-backed 14 s ASR windows
+    engine-aware speech segments → overlapping
+       engine-selected disk-backed ASR windows
+        (14 s Parakeet / 30 s Whisper)
                      │
                      ▼
-              later live ASR
+            selected live ASR
 ```
 
 The microphone callback receives noninterleaved Float32 channel pointers. A C17
@@ -150,28 +157,64 @@ during recording.
 
 Entry probability is 0.85 and exit probability is 0.70. Scribe adds explicit
 hysteresis, a 150 ms minimum speech duration, 750 ms trailing silence, and
-100 ms boundary padding. Continuous speech is finalized at an exact 30-second
-sample boundary even when no silence occurs.
+100 ms boundary padding. The continuous-speech ceiling has a 30-second baseline
+and is raised, when necessary, to the selected engine's window plus overlap so
+that every live-capable window geometry can emit a partial before finalization.
+It remains 30 seconds for Parakeet and becomes 31.5 seconds for Whisper.
 
-Speech becomes at most 14-second windows. During long active speech, complete
-windows are emitted as partial work before the speech boundary. Every window
-after the first in a segment repeats 1.5 seconds from the preceding window, and
-the tail is explicitly marked final. Windows are
-serialized into one `LiveSpeechWindows/<source>.speechwindows` file per source;
-the pipeline holds only its current detector frame, active segment samples,
-and counters in memory.
+Speech is divided with the selected engine's declared geometry: 14-second
+windows for Parakeet and 30-second windows for Whisper, currently with a
+1.5-second overlap for both. During long active speech, complete windows are
+emitted as partial work once one window plus its overlap is available. Whisper's
+30-second window therefore emits as a nonfinal partial after 31.5 seconds of
+continuous speech, immediately followed by the overlapping final tail at the
+same engine-derived hard boundary. Every window after the first in a segment
+repeats the selected overlap from the preceding window, and the tail is
+explicitly marked final. Windows are serialized into one
+`LiveSpeechWindows/<source>.speechwindows` file per source; the pipeline holds
+only its current detector frame, active segment samples, and counters in memory.
 
-`TranscriptOverlapDeduplicator` removes the longest matching suffix/prefix only
-for adjacent segments from the same source. It uses normalized timed words when
-available and a conservative normalized-token fallback otherwise.
+A hard ceiling starts a new technical speech segment and row, but its first
+window reaches back by the selected engine's overlap. The prior finalized seam
+is retained per source. When that continuation produces timed words, its more
+complete rendering replaces only the preceding row's overlap tail; the prior
+row keeps its stable ID, timeline position, and final status. The transcript UI
+must therefore allow the last few words of a final row to be corrected once.
+Ordinary partial windows within one row retain the earlier rendering and do not
+rewrite already accepted text.
+
+`TranscriptOverlapDeduplicator` operates only on adjacent segments from the
+same source. With word timings, it removes words whose starts fall inside the
+already-emitted time range; a 250 ms seam tolerance removes an exact or strongly
+prefix-related boundary rendering when ASR timestamps jitter across the range
+edge. Untimed output uses normalized suffix/prefix matching and tolerates one
+mismatched final token only after two exact anchor tokens.
+
+Timed-word arrays have one module-wide invariant: consumers order them by
+absolute start time, then end time. Both engine adapters normalize at their
+mapping boundary; the ordinary and later-window overlap paths normalize before
+trimming; and live row assembly normalizes before deriving row bounds. Segment
+and row start/end values therefore come from the earliest and latest timed word,
+not provider array position.
+
+The Parakeet golden regression shifts a production-sized 14-second/1.5-second
+window grid so a seam crosses each whole-second fixture position from 2 through
+18 seconds. It records substitutions, insertions, and deletions independently at
+125, 250, and 500 ms seam tolerances. Batch stitching prefers the later
+window's more complete overlap rendering. A previous-window word is retained
+only when its complete time span ends before the replacement threshold; a word
+that straddles the seam is replaced by the later rendering. The production path
+has a 0.06 WER ceiling derived from the observed 0.0392 worst case plus one
+reference-word edit; all three tolerances produced the same worst case, and any
+deletion fails the sweep regardless of total WER.
 
 ## Live transcription
 
 `LiveTranscriptionPipeline` owns one selected `TranscriptionEngine` and
-round-robins the microphone and system window readers. Parakeet preparation,
-Core ML inference, result validation, overlap removal, and row assembly remain
-actor-isolated. The main actor polls immutable state and row snapshots at
-250 ms intervals; it never runs inference or reads audio files.
+round-robins the microphone and system window readers. Selected-engine
+preparation, local inference, result validation, overlap removal, and row
+assembly remain actor-isolated. The main actor polls immutable state and row
+snapshots at 250 ms intervals; it never runs inference or reads audio files.
 
 Each source/segment pair has a stable row identity. Nonfinal windows extend its
 working transcript after source-aware seam removal. The final window publishes
@@ -325,9 +368,9 @@ format declarations.
 ```text
 capture-session.json
         │
-        ├── microphone.wav ── bounded 14 s reader ─┐
+        ├── microphone.wav ── engine-sized reader ─┐
         │                                          ├─ earliest chunk first
-        └── system.wav ────── bounded 14 s reader ─┘
+        └── system.wav ────── engine-sized reader ─┘
                                                         │
                                                TranscriptionEngine
                                                         │

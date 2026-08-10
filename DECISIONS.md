@@ -787,3 +787,99 @@ no-substitution contract already enforced by adapters. Explicit fallback keeps
 recording recoverable without misrepresenting which model produced text. Shared
 manager state makes storage and safety figures auditable, while scoped confirmed
 deletion cannot affect another model or any session recording.
+
+## 2026-08-11 — Let forced live continuations correct the finalized overlap tail
+
+**Decision:** When continuous speech reaches its engine-aware hard ceiling,
+carry the selected engine's overlap into the first window of the continuation
+segment. Keep a separate speech-segment and row identity, but retain the prior
+final seam per source. When the continuation's first timed result arrives,
+prefer that later rendering: replace only the preceding finalized row's
+overlapping tail and keep the continuation text. Preserve the preceding row's
+stable ID and final state, so the live view updates it in place without removing
+or reordering the row. Treat **Final** as “all audio for this row has arrived,”
+not as a guarantee that its overlap tail can never be corrected. Batch output
+has no display-stability constraint and should likewise prefer the later
+window's more complete boundary context.
+
+**Alternatives:** Keep the earlier finalized rendering and never rewrite the
+live view; select between windows by reported confidence; merge every
+ceiling-forced continuation into one unbounded speech segment and row.
+
+**Reasoning:** The earlier window ends at an arbitrary sample boundary and can
+decode a split word as corrupted fragments. The continuation has overlap before
+that boundary and is systematically the better rendering. Keeping the earlier
+text makes corruption permanent. Confidence is not a reliable common policy:
+Whisper exposes per-word probabilities, while the Parakeet adapter currently
+repeats segment confidence on its words, and scores from independent windows
+are not necessarily calibrated. A narrowly bounded, one-time correction gives
+Milestone 5 better transcript text while stable row identity limits the visual
+cost to the last few words changing in place.
+
+Batch stitching now applies that same later-window preference. The reconciler
+keeps an earlier-window word only when its full timed span ends before the
+replacement threshold, rather than testing its start as if the word were a
+point. This prevents a seam-straddling rendering from surviving alongside the
+later complete rendering. The 17-position Parakeet seam sweep improved from the
+previous 0.0588 worst case to 0.0392 at 125, 250, and 500 ms. No position lost a
+word; the worst result contains one substitution and one insertion.
+
+## 2026-08-11 — Remove the unused live-processing catalogue flag
+
+**Decision:** Remove `supportsLiveProcessing` from `ModelDescriptor`. Keep the
+current model picker behavior: every transcription model with valid window
+geometry remains eligible for windowed live transcription, subject to local
+installation and memory safety. Keep `supportsStreaming` on the engine as the
+runtime distinction; neither Parakeet nor Whisper currently streams.
+
+**Alternatives:** Mark slow or large Whisper variants ineligible for live use;
+derive eligibility dynamically from measured latency and the current Mac;
+introduce separate live and durable-transcript model pickers.
+
+**Reasoning:** The deleted flag was uniformly true, included Silero VAD, and no
+code read it. A static boolean cannot express the actual tradeoff: Large v3 is
+window-capable but has high first-partial latency and memory cost. Preserving
+selection avoids an unrequested product restriction, while the model card now
+discloses Large v3's measured live latency. A separate live-model policy remains
+an explicit future product decision rather than misleading catalogue metadata.
+
+## 2026-08-11 — Surface and safely remove unrecognized model folders
+
+**Decision:** Scan direct child folders under the canonical Models directory,
+excluding catalogue installation names and the managed `.Downloads` staging
+area. Recursively report each unrecognized folder's logical size and file count,
+include it in total local-model disk usage, and expose an individually confirmed
+move-to-Trash action. Revalidate the folder name, parent, catalogue status,
+directory type, and non-symlink status immediately before removal. Use the same
+macOS Trash operation for catalogue-managed transcription models and Silero VAD;
+never unlink a user-visible model folder directly.
+
+**Alternatives:** Count only catalogue entries; silently delete failed or old
+downloads; expose the whole Models directory in Finder and leave cleanup manual.
+
+**Reasoning:** Provider evaluation and catalogue changes can leave substantial
+data that ordinary model controls cannot see. Permanent deletion risks removing
+user-placed or diagnostically useful data without recovery, and a large model
+should not be less recoverable than a session recording. An explicit orphan
+card makes disk accounting truthful while keeping removal scoped to one reviewed
+folder and away from known models, active staging, recordings, and transcripts.
+Moving the intact folder to Trash preserves the normal macOS recovery path.
+
+## 2026-08-11 — Normalize timed words before deriving text geometry
+
+**Decision:** Order every consumed timed-word array by absolute start time and
+then end time. Normalize in both engine adapters, both overlap strategies, and
+live row assembly. Derive timed segment and live-row bounds from the ordered
+first and last words. Keep validation of individual finite ranges unchanged.
+
+**Alternatives:** Trust provider order; sort only in the ceiling reconciliation;
+reject unordered output instead of accepting and normalizing it.
+
+**Reasoning:** Provider order is customary but was not an enforced contract.
+Array position previously could invert engine segment bounds, return a trimmed
+overlap remainder in the wrong order with clipped bounds, and assign a live row
+a late start that changed transcript ordering and seek position. Normalization
+at every consumption boundary makes the invariant explicit and protects mock,
+provider, and future-engine output alike. Existing Scribe sessions contain WAVs
+and capture manifests, not persisted transcript rows, so no stored transcript
+migration or re-derivation is required.

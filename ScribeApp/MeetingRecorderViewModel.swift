@@ -70,6 +70,10 @@ final class MeetingRecorderViewModel: ObservableObject {
         ModelResourceSafetyEvaluation?
     @Published private(set) var modelDiskUsage: ModelDiskUsage?
     @Published private(set) var totalModelDiskUsageBytes: Int64 = 0
+    @Published private(set) var unrecognizedModelDirectories:
+        [UnrecognizedModelDirectory] = []
+    @Published private(set) var removingUnrecognizedModelDirectoryName:
+        String?
     @Published private(set) var suggestedAvailableModel:
         TranscriptionModelSelection?
     @Published private(set) var transcriptionState:
@@ -338,7 +342,13 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     var totalModelDiskText: String {
-        "All installed local models use \(Self.bytes(totalModelDiskUsageBytes))"
+        "All local model data uses \(Self.bytes(totalModelDiskUsageBytes))"
+    }
+
+    func unrecognizedModelDirectorySizeText(
+        _ directory: UnrecognizedModelDirectory
+    ) -> String {
+        Self.bytes(directory.diskUsage.logicalBytes)
     }
 
     var modelSafetyText: String {
@@ -771,6 +781,33 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
+    func removeUnrecognizedModelDirectory(
+        _ directory: UnrecognizedModelDirectory
+    ) {
+        guard
+            removingUnrecognizedModelDirectoryName == nil,
+            !isDownloadingModel,
+            !isDownloadingSileroVAD,
+            !isTranscribing,
+            !isRecording
+        else {
+            return
+        }
+        removingUnrecognizedModelDirectoryName = directory.name
+        errorMessage = nil
+        Task {
+            do {
+                try await removeUnrecognizedModelDirectory(
+                    named: directory.name
+                )
+                await refreshTotalModelDiskUsage()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            removingUnrecognizedModelDirectoryName = nil
+        }
+    }
+
     func selectSuggestedModel() {
         guard let suggestedAvailableModel else { return }
         selectedTranscriptionModel = suggestedAvailableModel
@@ -1099,7 +1136,55 @@ final class MeetingRecorderViewModel: ObservableObject {
             )
             total = overflow ? .max : sum
         }
+        do {
+            let unrecognized = try await loadUnrecognizedModelDirectories()
+            unrecognizedModelDirectories = unrecognized
+            for directory in unrecognized {
+                let (sum, overflow) = total.addingReportingOverflow(
+                    directory.diskUsage.logicalBytes
+                )
+                total = overflow ? .max : sum
+            }
+        } catch {
+            unrecognizedModelDirectories = []
+            errorMessage =
+                "Scribe could not scan unrecognized model data: \(error.localizedDescription)"
+        }
         totalModelDiskUsageBytes = total
+    }
+
+    private func loadUnrecognizedModelDirectories()
+        async throws -> [UnrecognizedModelDirectory]
+    {
+        if let fluidAudioModelManager {
+            return try await fluidAudioModelManager
+                .unrecognizedModelDirectories()
+        }
+        if let whisperKitModelManager {
+            return try await whisperKitModelManager
+                .unrecognizedModelDirectories()
+        }
+        throw LiveAudioTransportError.operationFailed(
+            "Local model storage is unavailable."
+        )
+    }
+
+    private func removeUnrecognizedModelDirectory(named name: String)
+        async throws
+    {
+        if let fluidAudioModelManager {
+            try await fluidAudioModelManager
+                .removeUnrecognizedModelDirectory(named: name)
+            return
+        }
+        if let whisperKitModelManager {
+            try await whisperKitModelManager
+                .removeUnrecognizedModelDirectory(named: name)
+            return
+        }
+        throw LiveAudioTransportError.operationFailed(
+            "Local model storage is unavailable."
+        )
     }
 
     private func refreshSuggestedAvailableModel(

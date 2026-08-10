@@ -55,12 +55,12 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
     public let task: ModelTask
     public let installationDirectoryName: String
     public let supportedLanguages: [String]
-    public let supportsLiveProcessing: Bool
     public let windowGeometry: ModelWindowGeometry?
     public let parameterCountMillions: Int?
     public let quantization: ModelQuantization?
     public let speedRating: ModelSpeedRating?
     public let resourceProfile: ModelResourceProfile?
+    public let liveLatencyNote: String?
 
     public init(
         id: ModelIdentifier,
@@ -70,12 +70,12 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         task: ModelTask,
         installationDirectoryName: String,
         supportedLanguages: [String],
-        supportsLiveProcessing: Bool,
         windowGeometry: ModelWindowGeometry?,
         parameterCountMillions: Int? = nil,
         quantization: ModelQuantization? = nil,
         speedRating: ModelSpeedRating? = nil,
-        resourceProfile: ModelResourceProfile? = nil
+        resourceProfile: ModelResourceProfile? = nil,
+        liveLatencyNote: String? = nil
     ) throws {
         guard !id.rawValue.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -136,12 +136,12 @@ public struct ModelDescriptor: Identifiable, Equatable, Codable, Sendable {
         self.task = task
         self.installationDirectoryName = installationDirectoryName
         self.supportedLanguages = Array(Set(supportedLanguages)).sorted()
-        self.supportsLiveProcessing = supportsLiveProcessing
         self.windowGeometry = windowGeometry
         self.parameterCountMillions = parameterCountMillions
         self.quantization = quantization
         self.speedRating = speedRating
         self.resourceProfile = resourceProfile
+        self.liveLatencyNote = liveLatencyNote
     }
 
     private static func isSafePathComponent(_ component: String) -> Bool {
