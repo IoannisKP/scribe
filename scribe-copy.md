@@ -1,38 +1,320 @@
 # Scribe copy
 
-This file inventories user-facing Scribe text that is easy to miss during
-implementation reviews.
+Every user-facing string in the app. Implement as one centralized strings file,
+not scattered literals. Extend from the rules below rather than inventing a new
+voice per screen.
 
-## Model storage and recovery
+## Rules
 
-### Installed transcription model
+- Sentence case everywhere. Buttons, headings, labels, menu items. Never title
+  case, never all caps.
+- Verb first on every action. “Download model”, not “Model download”. “Start
+  recording”, not “Recording”.
+- No terminal punctuation on labels, buttons, or headings. Helper text and error
+  bodies do take periods.
+- Errors say what happened, then what to do, in that order. One sentence each,
+  two lines maximum. No “Error:” prefix. Never surface a raw OSStatus or
+  exception string in the main message. Put the technical detail behind a
+  “Details” disclosure for the person who wants it.
+- Name the actual component that failed. Never a plausible-sounding guess. If
+  Silero is missing, say Silero. This rule already exists in the pipeline; the
+  copy has to honour it.
+- Never blame the user and never apologise. “Couldn't reach Hugging Face”, not
+  “Sorry, we were unable to complete your request.”
+- Cut “please”, “simply”, “just”, “successfully”, “easy”. The success state is
+  the confirmation; it does not need the word.
+- Use contractions. “Couldn't”, “isn't”, “you'll”.
+- The rule that matters most in this app: a transcription failure must never
+  read as a recording failure. Audio is irreplaceable, text can be regenerated.
+  Any message about transcription must state that the recording is unaffected.
 
-- Action: **Move to Trash…**
-- Confirmation title: **Move {model name} to Trash?**
-- Confirm button: **Move to Trash**
-- Message: **The model folder moves to Trash and can be recovered there.
-  Recordings and transcripts are not affected.**
+## Permissions
 
-### Silero VAD
+### Microphone, before asking
 
-- Action: **Move to Trash…**
-- Confirmation title: **Move Silero VAD to Trash?**
-- Confirm button: **Move to Trash**
-- Message: **The model folder moves to Trash and can be recovered there. Live
-  speech detection will be unavailable until it is restored or installed
+- Title: **Record your voice**
+- Body: **Scribe needs microphone access to capture your side of the
+  conversation.**
+- Button: **Allow microphone**
+
+### Microphone, denied
+
+- Title: **Microphone access is off**
+- Body: **Scribe can't record your voice until you turn this on in System
+  Settings.**
+- Button: **Open System Settings**
+
+### System audio, before asking
+
+- Title: **Record the other participants**
+- Body: **Scribe captures what you hear without joining the call. This uses
+  audio only, never your screen.**
+- Button: **Allow system audio**
+
+### System audio, denied
+
+- Title: **System audio access is off**
+- Body: **Scribe can record you, but not the people you're talking to.**
+- Button: **Open System Settings**
+
+### Both granted
+
+- Title: **You're set**
+- Body: **Scribe records both sides separately, so you always know who said
+  what.**
+- Button: **Continue**
+
+## First run, model download
+
+### Downloading
+
+- Title: **Downloading the transcription model**
+- Body: **One time, about 600 MB. Everything after this runs offline on your
+  Mac.**
+- Progress: **240 MB of 600 MB**
+- Cancel: **Cancel download**
+
+### Download failed
+
+- Message: **Couldn't reach the model server. Check your connection and try
   again.**
+- Button: **Retry**
 
-### Unrecognized model folder
+### Download cancelled
+
+- Message: **Download cancelled. Nothing was installed.**
+- Button: **Download model**
+
+### Complete
+
+- Title: **Ready**
+- Body: **Nothing you record leaves this Mac.**
+- Button: **Start your first recording**
+
+## Recording
+
+- Start: **Start recording**
+- Stop: **Stop recording**
+- Menu bar idle: **Start recording**
+- Menu bar active: **Recording · 12:04**
+- Both tracks live: **You · Others** (level meters, no text needed)
+
+### System track silent for more than 30 seconds
+
+**Nothing plays through your Mac right now**
+
+This is a status line, not a warning. A quiet remote side is normal, and a
+header-only system track is a valid recording. Never style this as an error.
+
+### Live transcription waiting for the first result
+
+**Listening. First text in about 15 seconds.**
+
+State the actual delay. Users forgive a wait they were told about.
+
+### Transcription running behind
+
+**Catching up on transcription. Recording is unaffected.**
+
+### Buffering to disk
+
+**Transcription is buffering. Recording is unaffected.**
+
+### Selected model isn't installed
+
+- Message: **Recording without transcription. Parakeet v3 Multilingual isn't
+  installed.**
+- Button: **Download it**
+
+### Selected model failed to load
+
+- Message: **Recording without transcription. Whisper Large v3 couldn't
+  load.**
+- Secondary: **Details**
+- Button: **Choose another model**
+
+### Fallback offer, after a failure
+
+- Message: **Whisper Small is installed and would fit. Switch to it?**
+- Buttons: **Switch to Whisper Small** · **Keep recording without
+  transcription**
+
+Never auto-switch. The user clicks or nothing changes.
+
+### Silero missing
+
+- Message: **Live transcription needs Silero. Recording and the full transcript
+  afterwards work without it.**
+- Button: **Download Silero**
+
+## Disk
+
+### Preflight refusal
+
+- Title: **Not enough space to record**
+- Body: **A two hour session needs about 2.3 GB. You have 1.1 GB free.**
+- Buttons: **Manage models** · **Cancel**
+
+### Stopped mid-recording
+
+- Title: **Recording stopped, disk full**
+- Body: **Both audio files were saved and are complete up to 18:42.**
+- Button: **Reveal in Finder**
+
+The first line has to say the audio survived. That is the only thing the user
+cares about in this moment.
+
+## Transcript rows
+
+- Source labels: **You** · **Others**
+- Partial state: **Partial**
+- Final state: no label. Absence of “Partial” is the signal.
+
+### A finalized row corrects itself
+
+No message. Animate the changed words with a brief highlight, roughly 800 ms,
+then let it settle. A visible explanation would draw more attention to the
+correction than the correction deserves.
+
+### No transcript exists
+
+- Title: **No transcript yet**
+- Body: **This session was recorded without a model installed.**
+- Button: **Transcribe now**
+
+## Re-transcribing
+
+- Button: **Transcribe again**
+- Model picker label: **Transcribe with**
+- In progress: **Transcribing with Whisper Large v3. About 3 minutes.**
+- Complete: **Done. Your earlier transcript is kept as
+  transcript-parakeet-v3.md.**
+
+That sentence is the whole feature. It tells the user nothing was lost and
+names the file they can go find.
+
+## Session artifacts
+
+- Rail labels: **Notes** · **Transcript** · **Summary** · **Audio**
+- Provenance badges: **Local** · **Claude** · **GPT**
+- Copy actions: **Copy notes** · **Copy transcript** · **Copy summary**
+- Reveal: **Reveal in Finder**
+- Drag hint: **Drag any row to Finder or another app**
+
+### Empty notes
+
+- Placeholder: **Type while you listen**
+
+Not “Start typing your notes here.” The placeholder should be the shortest true
+instruction.
+
+### Empty sessions list
+
+- Title: **No recordings yet**
+- Body: **Start one from the menu bar or press the record button above.**
+- Button: **Start recording**
+
+## Summary generation
+
+- Button: **Generate summary**
+- Template label: **Using**
+- Local generation: **Generating summary on this Mac. About 40 seconds.**
+
+### Cloud generation, before sending
+
+- Title: **Send to Claude?**
+- Body: **Your transcript and notes will be sent to Anthropic. About 12,000
+  tokens.**
+- Buttons: **Send** · **Cancel**
+
+Say the destination company by name. “Send to the cloud” is vague where
+vagueness is exactly what erodes trust.
+
+### Cloud generation running
+
+**Sending to Claude**
+
+### Failed
+
+- Message: **Claude didn't respond. Your transcript and notes are untouched.**
+- Button: **Try again**
+
+### Complete
+
+No message. The summary appearing in the rail is the confirmation.
+
+## Models screen
+
+- Title: **Models**
+- Sections: **Installed** · **Available**
+- Per model: name, size on disk, memory needed, languages
+- Actions: **Download** · **Pause** · **Resume** · **Cancel** · **Move to
+  Trash…**
+
+### Model removal confirmation
+
+- Title: **Move Whisper Large v3 to Trash?**
+- Body: **The 3.1 GB model folder moves to Trash. You can recover it there or
+  download it again later. Recordings and transcripts are unaffected.**
+- Buttons: **Move to Trash** · **Cancel**
+
+### Silero removal confirmation
+
+- Title: **Move Silero VAD to Trash?**
+- Body: **The model folder moves to Trash and can be recovered there. Live
+  speech detection will be unavailable until Silero is restored or installed
+  again. Recordings and transcripts are unaffected.**
+- Buttons: **Move to Trash** · **Cancel**
+
+### Memory warning before load
+
+- Message: **Whisper Large v3 needs about 4.4 GB. You have 3.2 GB available.**
+- Button: **Choose a smaller model**
+
+### Unrecognized folder
 
 - Section title: **Unrecognized model data**
-- Explanation: **These folders are not managed by the model catalogue. Review
-  them before removing anything.**
-- Action: **Move to Trash…**
-- Confirmation title: **Move unrecognized model data to Trash?**
-- Confirm button: **Move {folder name} to Trash**
-- Message: **This moves the {size} folder to Trash, where it can be recovered.
-  Recordings and transcripts are not affected.**
+- Body: **Scribe didn't put these here and doesn't use them.**
+- Per row: folder name, size
+- Actions: **Reveal in Finder** · **Move to Trash…**
 
-Moving a model folder to Trash removes it from Scribe's available storage and
-disk total immediately. The user can restore the intact folder from macOS Trash
-until Trash is emptied.
+### Unrecognized folder removal confirmation
+
+- Title: **Move openai_whisper-small_216MB to Trash?**
+- Body: **The 220 MB folder moves from your models folder to Trash, where it can
+  be recovered. Recordings and transcripts are unaffected.**
+- Buttons: **Move to Trash** · **Cancel**
+
+## API keys
+
+- Label: **Anthropic API key**
+- Placeholder: **sk-ant-...**
+- Helper: **Stored in your Keychain. Never written to disk or logs.**
+- Button: **Test key**
+- Valid: **Key works**
+- Invalid message: **That key was rejected. Check it hasn't expired.**
+- No key set: **Add an API key to use Claude or GPT. Local summaries work
+  without one.**
+
+## Settings
+
+### Where sessions are saved
+
+- Label: **Save recordings to**
+- Value: **~/Documents/Scribe**
+- Button: **Change**
+- Helper: **Each session is a folder holding your audio, transcript, notes, and
+  summary as ordinary files.**
+
+That sentence is doing real work. It tells the user their data isn't trapped in
+the app, which is the main thing that separates this from every cloud
+alternative.
+
+## What not to write
+
+- No “Oops” or “Uh oh”.
+- No “Something went wrong” without saying what.
+- No progress spinner without an estimate, wherever an estimate exists.
+- No “Are you sure?” as a title. Name the thing being confirmed.
+- No exclamation marks anywhere in system copy.
+- No message about transcription that omits the recording's status.
