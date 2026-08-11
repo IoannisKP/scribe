@@ -396,6 +396,43 @@ Every successful transcription writes the current Markdown, JSON, and SRT
 artifacts and an immutable model/date revision under `Transcriptions`, so
 re-transcription never destroys the earlier durable transcript.
 
+Audio and video files can be imported through **File → Import audio or video…**
+or Command-O. The placeholder window also accepts a file drop through one root
+drop handler; the designed sessions-library drop target remains part of the
+views order. Import creates one session source, never synthetic “You” and
+“Others” tracks:
+
+```text
+~/Documents/Scribe/2026-08-11 12.00 — Interview/
+    Interview.mov             # original bytes and filename retained
+    audio.wav                 # 16 kHz mono Int16 derivative
+    notes.md
+    session.json              # source=importedFile, original name and format
+    transcript.md
+    transcript.json
+    transcript.srt
+    Transcriptions/<date — model — revision>/transcript.{md,json,srt}
+```
+
+`AVAssetReader` decodes only the first audio track and streams bounded sample
+buffers into the existing durable Int16 writer; video frames are never decoded
+or copied into `audio.wav`. Batch transcription then uses the selected engine
+and emits `.imported` segments. Markdown and the app's transcript rows omit a
+source label, while JSON records `"source": "imported"`. The manifest contains
+one logical audio track and two audio-related artifacts, allowing the reading
+view to show **Audio 1** while listing both original and derivative.
+
+Unsupported files, corrupt assets, playable video without an audio track, and
+assets with no samples produce distinct actionable failures and leave the
+source untouched. A multi-hour file is copied and converted sequentially with
+bounded memory; time and disk use scale with duration, with the canonical WAV
+adding 32,000 bytes per second before transcription artifacts. RIFF's 4 GiB
+payload ceiling is about 37.3 hours at this format. A source already in canonical
+format is still retained independently and decoded into a separate derivative.
+If its filename is already `audio.wav`, the byte-identical original is stored as
+`Original/audio.wav` so the required canonical derivative can keep the reserved
+root name.
+
 Before capture starts, Scribe checks the recording volume against a configurable
 expected duration (two hours by default) and a configurable 512 MiB free-space
 reserve. The estimate is deliberately conservative: 320,000 bytes per second

@@ -335,7 +335,7 @@ final class LiveTranscriptionPipelineTests: XCTestCase {
         let speech = Array(repeating: Float(0.8), count: 16_000)
         let silence = Array(repeating: Float.zero, count: 16_000)
         let samples = speech + silence
-        for source in AudioSource.allCases {
+        for source in AudioSource.liveCaptureSources {
             await transport.receive(
                 CanonicalAudioBlock(
                     source: source,
@@ -509,7 +509,7 @@ private actor VirtualHourWindowProvider:
     func pipelineState() async -> LiveSpeechPipelineState {
         let deliveredCount = delivered.values.reduce(0, +)
         let total = windowCountPerSource
-            * UInt64(AudioSource.allCases.count)
+            * UInt64(AudioSource.liveCaptureSources.count)
         return .completed(
             pendingWindowCount: total - deliveredCount
         )

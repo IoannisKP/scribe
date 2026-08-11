@@ -71,6 +71,25 @@ final class CaptureSessionManifestTests: XCTestCase {
         }
     }
 
+    func testImportedManifestHasOneUnattributedTrackAndImportMetadata()
+        throws
+    {
+        let manifest = CaptureSessionManifest.importedFile(
+            title: "Interview",
+            createdAt: Date(timeIntervalSince1970: 10),
+            originalFilename: "Interview.mov",
+            originalFormat: "mov",
+            originalRelativePath: "Interview.mov"
+        )
+
+        XCTAssertNoThrow(try manifest.validate())
+        XCTAssertEqual(manifest.source, .importedFile)
+        XCTAssertEqual(manifest.tracks.map(\.source), [.imported])
+        XCTAssertEqual(manifest.originalFilename, "Interview.mov")
+        XCTAssertEqual(manifest.originalFormat, "mov")
+        XCTAssertEqual(manifest.artifacts.map(\.kind), [.originalImport, .audio])
+    }
+
     func testReadsLegacyStartTimeAsEstimatedCanonicalSamples() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -3,6 +3,13 @@ import Foundation
 public enum AudioSource: String, Codable, CaseIterable, Hashable, Sendable {
     case microphone
     case system
+    case imported
+
+    /// Sources that exist only for a live, isolated two-track capture.
+    public static let liveCaptureSources: [AudioSource] = [
+        .microphone,
+        .system
+    ]
 }
 
 public struct AudioTrackCaptureResult: Equatable, Sendable {

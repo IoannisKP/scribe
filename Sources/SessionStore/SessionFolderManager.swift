@@ -52,6 +52,45 @@ public struct SessionFolderManager: @unchecked Sendable {
         }
     }
 
+    public func createImportedSession(
+        in library: URL,
+        title: String,
+        originalFilename: String,
+        originalFormat: String,
+        originalRelativePath: String,
+        date: Date = Date()
+    ) throws -> CreatedSession {
+        try fileManager.createDirectory(
+            at: library,
+            withIntermediateDirectories: true
+        )
+        let cleanTitle = Self.cleanTitle(title)
+        let directory = availableDirectory(
+            in: library,
+            baseName: folderBaseName(title: cleanTitle, date: date)
+        )
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        do {
+            let manifest = CaptureSessionManifest.importedFile(
+                title: cleanTitle,
+                createdAt: date,
+                originalFilename: originalFilename,
+                originalFormat: originalFormat,
+                originalRelativePath: originalRelativePath
+            )
+            try manifest.write(to: directory)
+            let notesURL = directory.appendingPathComponent("notes.md")
+            try Data().write(to: notesURL, options: .withoutOverwriting)
+            return CreatedSession(directory: directory, manifest: manifest)
+        } catch {
+            try? fileManager.removeItem(at: directory)
+            throw error
+        }
+    }
+
     private func availableDirectory(in library: URL, baseName: String) -> URL {
         var suffix = 1
         while true {
@@ -65,6 +104,13 @@ public struct SessionFolderManager: @unchecked Sendable {
             }
             suffix += 1
         }
+    }
+
+    private func folderBaseName(title: String, date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH.mm"
+        return "\(formatter.string(from: date)) — \(title)"
     }
 
     private static func cleanTitle(_ title: String) -> String {

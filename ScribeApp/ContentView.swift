@@ -5,7 +5,7 @@ import SpeechPipeline
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var recorder = MeetingRecorderViewModel()
+    @ObservedObject var recorder: MeetingRecorderViewModel
 
     var body: some View {
         Group {
@@ -21,6 +21,11 @@ struct ContentView: View {
             alignment: .topLeading
         )
         .padding(40)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard recorder.canImportMedia, !urls.isEmpty else { return false }
+            recorder.importMediaFiles(urls)
+            return true
+        }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification
@@ -476,7 +481,8 @@ private struct RecordingView: View {
                     }
                     .pickerStyle(.menu)
                     .disabled(
-                        recorder.isDownloadingModel
+                        recorder.isBusy
+                            || recorder.isDownloadingModel
                             || recorder.isDownloadingSileroVAD
                             || recorder.isRecording
                             || recorder.isTranscribing
@@ -700,6 +706,14 @@ private struct RecordingView: View {
                 )
                 .font(.callout)
 
+                if let importStatus = recorder.mediaImportStatusText {
+                    Label(importStatus, systemImage: "square.and.arrow.down")
+                        .font(.callout)
+                        .foregroundStyle(
+                            recorder.isImportingMedia ? .orange : .secondary
+                        )
+                }
+
                 if
                     recorder.transcriptSegments.isEmpty,
                     recorder.liveTranscriptRows.isEmpty
@@ -861,12 +875,14 @@ private struct TranscriptSegmentRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 54, alignment: .leading)
 
-            Text(segment.source == .microphone ? "You" : "Others")
-                .font(.caption.bold())
-                .foregroundStyle(
-                    segment.source == .microphone ? .blue : .purple
-                )
-                .frame(width: 50, alignment: .leading)
+            if segment.source != .imported {
+                Text(segment.source == .microphone ? "You" : "Others")
+                    .font(.caption.bold())
+                    .foregroundStyle(
+                        segment.source == .microphone ? .blue : .purple
+                    )
+                    .frame(width: 50, alignment: .leading)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 if let isFinal {

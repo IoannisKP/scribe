@@ -177,6 +177,118 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testImportedTranscriptOmitsLiveSourceLabels() throws {
+        try withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createImportedSession(
+                in: root,
+                title: "Lecture",
+                originalFilename: "lecture.m4a",
+                originalFormat: "m4a",
+                originalRelativePath: "lecture.m4a"
+            )
+            _ = try TranscriptArtifactWriter().write(
+                segments: [
+                    TranscriptSegment(
+                        text: "Imported words",
+                        startTime: 1,
+                        endTime: 2,
+                        source: .imported
+                    )
+                ],
+                modelIdentifier: "test",
+                to: created.directory
+            )
+
+            let markdown = try String(
+                contentsOf: created.directory.appendingPathComponent(
+                    "transcript.md"
+                ),
+                encoding: .utf8
+            )
+            XCTAssertTrue(markdown.contains("**00:01**"))
+            XCTAssertFalse(markdown.contains("You"))
+            XCTAssertFalse(markdown.contains("Others"))
+            let json = try String(
+                contentsOf: created.directory.appendingPathComponent(
+                    "transcript.json"
+                ),
+                encoding: .utf8
+            )
+            XCTAssertTrue(json.contains("\"source\" : \"imported\""))
+        }
+    }
+
+    func testCanonicalNamedImportKeepsOriginalIntactAndCreatesDerivative()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let sourceDirectory = root.appendingPathComponent("Source")
+            let library = root.appendingPathComponent("Library")
+            try FileManager.default.createDirectory(
+                at: sourceDirectory,
+                withIntermediateDirectories: true
+            )
+            let source = sourceDirectory.appendingPathComponent("audio.wav")
+            let writer = try Int16WAVWriter(url: source)
+            try await writer.append(
+                (0..<1_600).map { index in
+                    sin(Float(index) * 2 * .pi * 440 / 16_000) * 0.5
+                }
+            )
+            try await writer.finish()
+            let original = try Data(contentsOf: source)
+
+            let imported = try await SessionMediaImporter().importFile(
+                at: source,
+                into: library,
+                date: Date(timeIntervalSince1970: 1_735_732_800)
+            )
+
+            XCTAssertEqual(
+                imported.originalURL.lastPathComponent,
+                "audio.wav"
+            )
+            XCTAssertEqual(
+                imported.originalURL.deletingLastPathComponent()
+                    .lastPathComponent,
+                "Original"
+            )
+            XCTAssertEqual(try Data(contentsOf: source), original)
+            XCTAssertEqual(try Data(contentsOf: imported.originalURL), original)
+            XCTAssertTrue(
+                FileManager.default.fileExists(
+                    atPath: imported.canonicalAudioURL.path
+                )
+            )
+            let manifest = try CaptureSessionManifest.load(
+                from: imported.directory
+            )
+            XCTAssertEqual(manifest.source, .importedFile)
+            XCTAssertEqual(manifest.title, "audio")
+            XCTAssertEqual(manifest.originalFilename, "audio.wav")
+            XCTAssertEqual(manifest.originalFormat, "wav")
+            XCTAssertEqual(manifest.tracks.map(\.source), [.imported])
+            XCTAssertEqual(manifest.tracks.count, 1)
+            XCTAssertEqual(manifest.artifacts.count, 2)
+
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            _ = try await SessionReconciler(index: index).reconcile(
+                availability: .available(library)
+            )
+            let reconciled = try CaptureSessionManifest.load(
+                from: imported.directory
+            )
+            XCTAssertEqual(
+                reconciled.artifacts.first {
+                    $0.relativePath == "Original/audio.wav"
+                }?.kind,
+                .originalImport
+            )
+        }
+    }
+
     func testLegacyMigrationMovesFolderAndMarksTimingEstimated() throws {
         try withTemporaryDirectory { root in
             let legacyRoot = root.appendingPathComponent("Legacy", isDirectory: true)

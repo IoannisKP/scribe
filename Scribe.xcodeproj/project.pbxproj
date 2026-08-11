@@ -72,6 +72,8 @@
 		10000000000000000000003F /* LegacySessionMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003D /* LegacySessionMigrator.swift */; };
 		100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003E /* SessionLibraryMonitor.swift */; };
 		100000000000000000000041 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 510000000000000000000003 /* GRDB */; };
+		100000000000000000000042 /* ImportedMediaConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003F /* ImportedMediaConverter.swift */; };
+		100000000000000000000043 /* SessionMediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000040 /* SessionMediaImporter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -191,6 +193,8 @@
 		11000000000000000000003C /* TranscriptArtifactWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptArtifactWriter.swift; sourceTree = "<group>"; };
 		11000000000000000000003D /* LegacySessionMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySessionMigrator.swift; sourceTree = "<group>"; };
 		11000000000000000000003E /* SessionLibraryMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryMonitor.swift; sourceTree = "<group>"; };
+		11000000000000000000003F /* ImportedMediaConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedMediaConverter.swift; sourceTree = "<group>"; };
+		110000000000000000000040 /* SessionMediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMediaImporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -271,6 +275,7 @@
 			children = (
 				110000000000000000000003 /* AudioTypes.swift */,
 				110000000000000000000036 /* FirstSampleHostTime.swift */,
+				11000000000000000000003F /* ImportedMediaConverter.swift */,
 				11000000000000000000001D /* CanonicalAudioBlock.swift */,
 				110000000000000000000017 /* CaptureSessionManifest.swift */,
 				110000000000000000000004 /* FloatRingBuffer.swift */,
@@ -369,6 +374,7 @@
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
+				110000000000000000000040 /* SessionMediaImporter.swift */,
 			);
 			path = SessionStore;
 			sourceTree = "<group>";
@@ -509,6 +515,7 @@
 			files = (
 				100000000000000000000003 /* AudioTypes.swift in Sources */,
 				100000000000000000000038 /* FirstSampleHostTime.swift in Sources */,
+				100000000000000000000042 /* ImportedMediaConverter.swift in Sources */,
 				10000000000000000000001C /* CanonicalAudioBlock.swift in Sources */,
 				100000000000000000000013 /* CaptureSessionManifest.swift in Sources */,
 				100000000000000000000004 /* FloatRingBuffer.swift in Sources */,
@@ -543,6 +550,7 @@
 				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
+				100000000000000000000043 /* SessionMediaImporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
