@@ -62,6 +62,16 @@
 		100000000000000000000035 /* WhisperKitModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000033 /* WhisperKitModelManager.swift */; };
 		100000000000000000000036 /* WhisperKitTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000034 /* WhisperKitTranscriptionEngine.swift */; };
 		100000000000000000000037 /* ResidentTranscriptionEngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000035 /* ResidentTranscriptionEngineCoordinator.swift */; };
+		100000000000000000000038 /* FirstSampleHostTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000036 /* FirstSampleHostTime.swift */; };
+		100000000000000000000039 /* SessionLibraryLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000037 /* SessionLibraryLocation.swift */; };
+		10000000000000000000003A /* SessionFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000038 /* SessionFolderManager.swift */; };
+		10000000000000000000003B /* SessionArtifactPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000039 /* SessionArtifactPolicy.swift */; };
+		10000000000000000000003C /* SessionIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003A /* SessionIndex.swift */; };
+		10000000000000000000003D /* SessionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003B /* SessionReconciler.swift */; };
+		10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003C /* TranscriptArtifactWriter.swift */; };
+		10000000000000000000003F /* LegacySessionMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003D /* LegacySessionMigrator.swift */; };
+		100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003E /* SessionLibraryMonitor.swift */; };
+		100000000000000000000041 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 510000000000000000000003 /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -172,6 +182,15 @@
 		110000000000000000000033 /* WhisperKitModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelManager.swift; sourceTree = "<group>"; };
 		110000000000000000000034 /* WhisperKitTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitTranscriptionEngine.swift; sourceTree = "<group>"; };
 		110000000000000000000035 /* ResidentTranscriptionEngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResidentTranscriptionEngineCoordinator.swift; sourceTree = "<group>"; };
+		110000000000000000000036 /* FirstSampleHostTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstSampleHostTime.swift; sourceTree = "<group>"; };
+		110000000000000000000037 /* SessionLibraryLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryLocation.swift; sourceTree = "<group>"; };
+		110000000000000000000038 /* SessionFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionFolderManager.swift; sourceTree = "<group>"; };
+		110000000000000000000039 /* SessionArtifactPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionArtifactPolicy.swift; sourceTree = "<group>"; };
+		11000000000000000000003A /* SessionIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIndex.swift; sourceTree = "<group>"; };
+		11000000000000000000003B /* SessionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconciler.swift; sourceTree = "<group>"; };
+		11000000000000000000003C /* TranscriptArtifactWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptArtifactWriter.swift; sourceTree = "<group>"; };
+		11000000000000000000003D /* LegacySessionMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySessionMigrator.swift; sourceTree = "<group>"; };
+		11000000000000000000003E /* SessionLibraryMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -186,6 +205,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000041 /* GRDB in Frameworks */,
 				100000000000000000000008 /* AudioCapture.framework in Frameworks */,
 				100000000000000000000028 /* ModelManager.framework in Frameworks */,
 				100000000000000000000018 /* SpeechPipeline.framework in Frameworks */,
@@ -240,6 +260,7 @@
 				150000000000000000000004 /* AudioCapture */,
 				150000000000000000000009 /* ModelManager */,
 				150000000000000000000008 /* SpeechPipeline */,
+				15000000000000000000000A /* SessionStore */,
 				150000000000000000000005 /* CAudioRingBuffer */,
 			);
 			path = Sources;
@@ -249,6 +270,7 @@
 			isa = PBXGroup;
 			children = (
 				110000000000000000000003 /* AudioTypes.swift */,
+				110000000000000000000036 /* FirstSampleHostTime.swift */,
 				11000000000000000000001D /* CanonicalAudioBlock.swift */,
 				110000000000000000000017 /* CaptureSessionManifest.swift */,
 				110000000000000000000004 /* FloatRingBuffer.swift */,
@@ -267,6 +289,34 @@
 				110000000000000000000009 /* AudioCapture-Bridging-Header.h */,
 			);
 			path = AudioCapture;
+			sourceTree = "<group>";
+		};
+		150000000000000000000005 /* CAudioRingBuffer */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000007 /* CAudioRingBuffer.c */,
+				150000000000000000000006 /* include */,
+			);
+			path = CAudioRingBuffer;
+			sourceTree = "<group>";
+		};
+		150000000000000000000006 /* include */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000008 /* CAudioRingBuffer.h */,
+			);
+			path = include;
+			sourceTree = "<group>";
+		};
+		150000000000000000000007 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				11000000000000000000000C /* AudioCapture.framework */,
+				110000000000000000000026 /* ModelManager.framework */,
+				11000000000000000000001B /* SpeechPipeline.framework */,
+				11000000000000000000000D /* Scribe.app */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 		150000000000000000000008 /* SpeechPipeline */ = {
@@ -308,32 +358,19 @@
 			path = ModelManager;
 			sourceTree = "<group>";
 		};
-		150000000000000000000005 /* CAudioRingBuffer */ = {
+		15000000000000000000000A /* SessionStore */ = {
 			isa = PBXGroup;
 			children = (
-				110000000000000000000007 /* CAudioRingBuffer.c */,
-				150000000000000000000006 /* include */,
+				110000000000000000000037 /* SessionLibraryLocation.swift */,
+				110000000000000000000038 /* SessionFolderManager.swift */,
+				110000000000000000000039 /* SessionArtifactPolicy.swift */,
+				11000000000000000000003A /* SessionIndex.swift */,
+				11000000000000000000003B /* SessionReconciler.swift */,
+				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
+				11000000000000000000003D /* LegacySessionMigrator.swift */,
+				11000000000000000000003E /* SessionLibraryMonitor.swift */,
 			);
-			path = CAudioRingBuffer;
-			sourceTree = "<group>";
-		};
-		150000000000000000000006 /* include */ = {
-			isa = PBXGroup;
-			children = (
-				110000000000000000000008 /* CAudioRingBuffer.h */,
-			);
-			path = include;
-			sourceTree = "<group>";
-		};
-		150000000000000000000007 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				11000000000000000000000C /* AudioCapture.framework */,
-				110000000000000000000026 /* ModelManager.framework */,
-				11000000000000000000001B /* SpeechPipeline.framework */,
-				11000000000000000000000D /* Scribe.app */,
-			);
-			name = Products;
+			path = SessionStore;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -371,6 +408,9 @@
 				230000000000000000000005 /* PBXTargetDependency */,
 			);
 			name = Scribe;
+			packageProductDependencies = (
+				510000000000000000000003 /* GRDB */,
+			);
 			productName = Scribe;
 			productReference = 11000000000000000000000D /* Scribe.app */;
 			productType = "com.apple.product-type.application";
@@ -449,6 +489,7 @@
 			packageReferences = (
 				500000000000000000000001 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				500000000000000000000002 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				500000000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -467,6 +508,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000003 /* AudioTypes.swift in Sources */,
+				100000000000000000000038 /* FirstSampleHostTime.swift in Sources */,
 				10000000000000000000001C /* CanonicalAudioBlock.swift in Sources */,
 				100000000000000000000013 /* CaptureSessionManifest.swift in Sources */,
 				100000000000000000000004 /* FloatRingBuffer.swift in Sources */,
@@ -493,6 +535,14 @@
 				100000000000000000000001 /* ScribeApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
 				10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */,
+				100000000000000000000039 /* SessionLibraryLocation.swift in Sources */,
+				10000000000000000000003A /* SessionFolderManager.swift in Sources */,
+				10000000000000000000003B /* SessionArtifactPolicy.swift in Sources */,
+				10000000000000000000003C /* SessionIndex.swift in Sources */,
+				10000000000000000000003D /* SessionReconciler.swift in Sources */,
+				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
+				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
+				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -914,6 +964,14 @@
 				version = 1.0.0;
 			};
 		};
+		500000000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 7.11.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -926,6 +984,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 500000000000000000000002 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
+		};
+		510000000000000000000003 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 500000000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

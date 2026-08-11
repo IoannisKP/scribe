@@ -135,7 +135,6 @@ public actor DualTrackRecordingCoordinator {
 
         activePaths = paths
         state = .starting(paths: paths)
-        let clock = ContinuousClock()
 
         do {
             try await microphoneCapture.startRecording(
@@ -151,8 +150,6 @@ public actor DualTrackRecordingCoordinator {
                 error.localizedDescription
             )
         }
-        let microphoneStart = clock.now
-
         do {
             try await systemCapture.startRecording(to: paths.systemURL)
         } catch {
@@ -166,19 +163,19 @@ public actor DualTrackRecordingCoordinator {
             state = .failed(message: message, paths: paths)
             throw AudioCaptureError.dualTrackStartFailed(message)
         }
-        let systemStartTime = Self.timeInterval(
-            microphoneStart.duration(to: clock.now)
-        )
-
         do {
-            let manifest = CaptureSessionManifest.dualTrack(
-                microphoneStartTime: 0,
-                systemStartTime: systemStartTime
-            )
-            try manifest.write(to: paths.sessionDirectory)
+            if !FileManager.default.fileExists(
+                atPath: paths.manifestURL.path
+            ) {
+                try CaptureSessionManifest.pendingDualTrack(
+                    sessionID: UUID(),
+                    title: paths.sessionDirectory.lastPathComponent,
+                    createdAt: Date()
+                ).write(to: paths.sessionDirectory)
+            }
         } catch {
             var message =
-                "Writing capture-session timing metadata failed: \(error.localizedDescription)"
+                "Writing session metadata failed: \(error.localizedDescription)"
             do {
                 _ = try await systemCapture.stopCapture()
             } catch {
@@ -276,6 +273,25 @@ public actor DualTrackRecordingCoordinator {
             throw AudioCaptureError.dualTrackStopFailed(message)
         }
 
+        do {
+            let offsets = AudioHostTime.normalizedCanonicalOffsets(
+                microphoneHostTime: microphoneResult.firstSampleHostTime,
+                systemHostTime: systemResult.firstSampleHostTime
+            )
+            let manifest = try CaptureSessionManifest.load(
+                from: paths.sessionDirectory
+            ).replacingTrackOffsets(
+                microphone: offsets.microphone,
+                system: offsets.system
+            )
+            try manifest.write(to: paths.sessionDirectory)
+        } catch {
+            let message =
+                "The audio files were finalized, but sample-accurate track timing could not be saved: \(error.localizedDescription)"
+            state = .failed(message: message, paths: paths)
+            throw AudioCaptureError.dualTrackStopFailed(message)
+        }
+
         let result = DualTrackCaptureResult(
             paths: paths,
             microphone: microphoneResult,
@@ -307,9 +323,4 @@ public actor DualTrackRecordingCoordinator {
         }
     }
 
-    private static func timeInterval(_ duration: Duration) -> TimeInterval {
-        let components = duration.components
-        return Double(components.seconds)
-            + Double(components.attoseconds) / 1_000_000_000_000_000_000
-    }
 }

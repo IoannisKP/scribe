@@ -4,8 +4,14 @@ import XCTest
 
 final class DualTrackRecordingCoordinatorTests: XCTestCase {
     func testStartsAndStopsIndependentTrackFiles() async throws {
-        let microphone = FakeTrackCapture(source: .microphone)
-        let system = FakeTrackCapture(source: .system)
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            firstSampleHostTime: 1_000_000
+        )
+        let system = FakeTrackCapture(
+            source: .system,
+            firstSampleHostTime: 2_000_000
+        )
         let coordinator = DualTrackRecordingCoordinator(
             microphoneCapture: microphone,
             systemCapture: system,
@@ -47,10 +53,20 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
             manifest.track(for: .microphone)?.startTime,
             0
         )
-        let systemStartTime = try XCTUnwrap(
-            manifest.track(for: .system)?.startTime
+        let systemStartSample = try XCTUnwrap(
+            manifest.track(for: .system)?.startSampleOffset
         )
-        XCTAssertGreaterThanOrEqual(systemStartTime, 0)
+        XCTAssertEqual(
+            systemStartSample,
+            AudioHostTime.canonicalSampleOffset(
+                from: 1_000_000,
+                to: 2_000_000
+            )
+        )
+        XCTAssertEqual(
+            manifest.track(for: .system)?.timingPrecision,
+            .sampleAccurate
+        )
     }
 
     func testSystemStartFailureStopsAlreadyRunningMicrophone() async {
@@ -283,6 +299,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     let source: AudioSource
     let startFailure: AudioCaptureError?
     let stopFailure: AudioCaptureError?
+    let capturedFirstSampleHostTime: UInt64?
     private(set) var startCount = 0
     private(set) var stopCount = 0
     private var outputURL: URL?
@@ -290,11 +307,13 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     init(
         source: AudioSource,
         startFailure: AudioCaptureError? = nil,
-        stopFailure: AudioCaptureError? = nil
+        stopFailure: AudioCaptureError? = nil,
+        firstSampleHostTime: UInt64? = nil
     ) {
         self.source = source
         self.startFailure = startFailure
         self.stopFailure = stopFailure
+        self.capturedFirstSampleHostTime = firstSampleHostTime
     }
 
     func startRecording(to outputURL: URL) throws {
@@ -318,7 +337,8 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         return AudioTrackCaptureResult(
             source: source,
             outputURL: outputURL,
-            droppedSampleCount: 0
+            droppedSampleCount: 0,
+            firstSampleHostTime: capturedFirstSampleHostTime
         )
     }
 }

@@ -15,6 +15,22 @@ extern "C" {
 #endif
 
 typedef struct ScribeFloatRingBuffer ScribeFloatRingBuffer;
+typedef struct ScribeAtomicHostTime ScribeAtomicHostTime;
+
+/// A lock-free, write-once latch for the first valid audio host timestamp.
+/// Creation and destruction must not happen on a realtime audio thread.
+ScribeAtomicHostTime * _Nullable scribe_atomic_host_time_create(void);
+void scribe_atomic_host_time_destroy(ScribeAtomicHostTime *latch);
+
+/// Stores `host_time` only when the latch is still empty.
+/// Zero is reserved for the empty state. This function is realtime safe.
+bool scribe_atomic_host_time_capture_first(
+    ScribeAtomicHostTime *latch,
+    uint64_t host_time
+);
+
+/// Returns zero until a valid host timestamp has been captured.
+uint64_t scribe_atomic_host_time_load(const ScribeAtomicHostTime *latch);
 
 /// Creates a single-producer, single-consumer ring buffer.
 ///

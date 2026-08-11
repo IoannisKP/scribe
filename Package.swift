@@ -10,7 +10,8 @@ let package = Package(
     products: [
         .library(name: "AudioCapture", targets: ["AudioCapture"]),
         .library(name: "ModelManager", targets: ["ModelManager"]),
-        .library(name: "SpeechPipeline", targets: ["SpeechPipeline"])
+        .library(name: "SpeechPipeline", targets: ["SpeechPipeline"]),
+        .library(name: "SessionStore", targets: ["SessionStore"])
     ],
     dependencies: [
         .package(
@@ -20,6 +21,10 @@ let package = Package(
         .package(
             url: "https://github.com/argmaxinc/argmax-oss-swift.git",
             exact: "1.0.0"
+        ),
+        .package(
+            url: "https://github.com/groue/GRDB.swift.git",
+            exact: "7.11.1"
         )
     ],
     targets: [
@@ -57,6 +62,18 @@ let package = Package(
                 .enableUpcomingFeature("ExistentialAny")
             ]
         ),
+        .target(
+            name: "SessionStore",
+            dependencies: [
+                "AudioCapture",
+                "SpeechPipeline",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
+            path: "Sources/SessionStore",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
         .testTarget(
             name: "AudioCaptureTests",
             dependencies: ["AudioCapture"],
@@ -80,6 +97,14 @@ let package = Package(
             resources: [
                 .process("Fixtures")
             ],
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
+        .testTarget(
+            name: "SessionStoreTests",
+            dependencies: ["SessionStore", "AudioCapture", "SpeechPipeline"],
+            path: "Tests/SessionStoreTests",
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")
             ]

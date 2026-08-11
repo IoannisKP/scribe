@@ -306,6 +306,28 @@ No message. The summary appearing in the rail is the confirmation.
 - Helper: **Each session is a folder holding your audio, transcript, notes, and
   summary as ordinary files.**
 
+### Session location unavailable
+
+- Title: **Session folder unavailable**
+- Body: **Reconnect the drive or server holding your session folder. Your
+  indexed sessions remain listed and nothing has been deleted.**
+- Buttons: **Try again** · **Choose another folder**
+
+### Session folder access expired
+
+- Message: **Scribe no longer has access to this session folder. Choose it
+  again. Your recordings and transcripts are untouched.**
+
+### Session index refresh failed
+
+- Message: **Scribe couldn't refresh its session index. Session folders and
+  their contents are untouched.**
+
+### Copied session folder
+
+- Informational message: **A copied session folder was added as a separate
+  session. The original folder is unchanged.**
+
 That sentence is doing real work. It tells the user their data isn't trapped in
 the app, which is the main thing that separates this from every cloud
 alternative.

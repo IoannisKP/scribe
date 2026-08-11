@@ -352,12 +352,14 @@ The microphone must start before the system tap so Core Audio can resolve and
 exclude Scribe's process. As a result, the two WAV files do not begin at exactly
 the same wall-clock instant.
 
-`DualTrackRecordingCoordinator` records a `ContinuousClock` instant as soon as
-microphone startup succeeds. The microphone track begins at offset zero. After
-system capture successfully starts, its offset is the monotonic duration between
-those two activation completions. Once both tracks are active, the coordinator
-atomically writes `capture-session.json`. Failure to persist that metadata stops
-and finalizes both tracks rather than leaving an unalignable recording active.
+Each realtime callback latches its first successfully accepted frame exactly
+once through a lock-free C atomic. The microphone uses the tap's valid
+`AVAudioTime.hostTime`; the system IOProc uses `inInputTime.mHostTime`, which is
+the acquisition time of the first input frame rather than the scheduling time in
+`inNow`. On stop, the coordinator converts the host-tick delta through
+`mach_timebase_info`, rounds it to the nearest canonical 16 kHz sample, and
+atomically updates `session.json`. A track that captured no sample keeps an
+explicit unavailable offset rather than an invented activation proxy.
 
 The manifest is versioned, validates exactly one relative path per source, and
 rejects traversal paths, negative times, non-finite times, and noncanonical
@@ -366,7 +368,7 @@ format declarations.
 ## Batch speech pipeline
 
 ```text
-capture-session.json
+session.json
         │
         ├── microphone.wav ── engine-sized reader ─┐
         │                                          ├─ earliest chunk first

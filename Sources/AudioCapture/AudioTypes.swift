@@ -9,21 +9,29 @@ public struct AudioTrackCaptureResult: Equatable, Sendable {
     public let source: AudioSource
     public let outputURL: URL
     public let droppedSampleCount: UInt64
+    public let firstSampleHostTime: UInt64?
 
     public init(
         source: AudioSource,
         outputURL: URL,
-        droppedSampleCount: UInt64
+        droppedSampleCount: UInt64,
+        firstSampleHostTime: UInt64? = nil
     ) {
         self.source = source
         self.outputURL = outputURL
         self.droppedSampleCount = droppedSampleCount
+        self.firstSampleHostTime = firstSampleHostTime
     }
 }
 
 public protocol AudioTrackCapturing: Sendable {
     func startRecording(to outputURL: URL) async throws
     func stopCapture() async throws -> AudioTrackCaptureResult
+    func firstSampleHostTime() async -> UInt64?
+}
+
+public extension AudioTrackCapturing {
+    func firstSampleHostTime() async -> UInt64? { nil }
 }
 
 public enum CanonicalAudioFormat {
@@ -57,6 +65,7 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
     case microphoneConsumerFailed(String)
     case audioConsumerFailed(String)
     case audioFormatChangedBeforeBufferedSamplesDrained
+    case hostTimeLatchAllocationFailed
     case systemCaptureAlreadyRunning
     case systemCaptureNotRunning
     case systemOutputDeviceUnavailable
@@ -127,6 +136,8 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
             "Captured audio could not be processed or written: \(message)"
         case .audioFormatChangedBeforeBufferedSamplesDrained:
             "The input format changed before previously captured samples could be drained safely."
+        case .hostTimeLatchAllocationFailed:
+            "Scribe could not allocate first-sample timing storage."
         case .systemCaptureAlreadyRunning:
             "System-audio recording is already active."
         case .systemCaptureNotRunning:

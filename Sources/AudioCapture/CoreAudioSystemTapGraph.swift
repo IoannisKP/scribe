@@ -21,10 +21,14 @@ final class CoreAudioSystemTapGraph: @unchecked Sendable {
 
     init(
         ringBuffer: FloatRingBuffer,
+        firstSampleTime: FirstSampleHostTime,
         tapScope: TapScope = .excludingCurrentProcess
     ) {
         self.ringBuffer = ringBuffer
-        self.realtimeSink = SystemAudioRealtimeSink(ringBuffer: ringBuffer)
+        self.realtimeSink = SystemAudioRealtimeSink(
+            ringBuffer: ringBuffer,
+            firstSampleTime: firstSampleTime
+        )
         self.tapScope = tapScope
     }
 
@@ -99,8 +103,8 @@ final class CoreAudioSystemTapGraph: @unchecked Sendable {
                     &newIOProcID,
                     aggregateDeviceID,
                     nil
-                ) { [realtimeSink] _, inputData, _, _, _ in
-                    realtimeSink.receive(inputData)
+                ) { [realtimeSink] _, inputData, inputTime, _, _ in
+                    realtimeSink.receive(inputData, inputTime: inputTime)
                 },
                 operation: "Registering the system-audio aggregate IOProc"
             )
@@ -248,12 +252,27 @@ enum SystemTapAggregateDescription {
 
 private final class SystemAudioRealtimeSink: @unchecked Sendable {
     private let ringBuffer: FloatRingBuffer
+    private let firstSampleTime: FirstSampleHostTime
 
-    init(ringBuffer: FloatRingBuffer) {
+    init(
+        ringBuffer: FloatRingBuffer,
+        firstSampleTime: FirstSampleHostTime
+    ) {
         self.ringBuffer = ringBuffer
+        self.firstSampleTime = firstSampleTime
     }
 
-    func receive(_ inputData: UnsafePointer<AudioBufferList>) {
-        ringBuffer.writeAudioBufferListMix(inputData)
+    func receive(
+        _ inputData: UnsafePointer<AudioBufferList>,
+        inputTime: UnsafePointer<AudioTimeStamp>
+    ) {
+        let written = ringBuffer.writeAudioBufferListMix(inputData)
+        let timestamp = inputTime.pointee
+        if
+            written > 0,
+            timestamp.mFlags.contains(.hostTimeValid)
+        {
+            firstSampleTime.capture(timestamp.mHostTime)
+        }
     }
 }
