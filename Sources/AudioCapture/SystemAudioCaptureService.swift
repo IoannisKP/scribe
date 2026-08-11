@@ -33,6 +33,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     private var consumer: CanonicalAudioFileConsumer?
     private var drainTask: Task<Void, Never>?
     private var graph: CoreAudioSystemTapGraph?
+    private var firstSampleTime: FirstSampleHostTime?
     private var outputURL: URL?
     private var isRecovering = false
     private var isSleeping = false
@@ -59,7 +60,11 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         do {
             // Ten seconds at the highest conventional Core Audio hardware rate.
             let ringBuffer = try FloatRingBuffer(capacity: 1_920_000)
-            let graph = CoreAudioSystemTapGraph(ringBuffer: ringBuffer)
+            let firstSampleTime = try FirstSampleHostTime()
+            let graph = CoreAudioSystemTapGraph(
+                ringBuffer: ringBuffer,
+                firstSampleTime: firstSampleTime
+            )
             try graph.prepare()
             self.graph = graph
 
@@ -71,6 +76,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 liveSink: liveSink
             )
             self.ringBuffer = ringBuffer
+            self.firstSampleTime = firstSampleTime
             self.consumer = consumer
             self.outputURL = outputURL
             startDrainTask(consumer: consumer)
@@ -137,10 +143,12 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         }
 
         let droppedSampleCount = ringBuffer?.droppedSampleCount ?? 0
+        let capturedFirstSampleHostTime = firstSampleTime?.value
         let result = AudioTrackCaptureResult(
             source: .system,
             outputURL: outputURL,
-            droppedSampleCount: droppedSampleCount
+            droppedSampleCount: droppedSampleCount,
+            firstSampleHostTime: capturedFirstSampleHostTime
         )
         clearPipelineReferences()
 
@@ -155,6 +163,10 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             droppedSampleCount: droppedSampleCount
         )
         return result
+    }
+
+    public func firstSampleHostTime() async -> UInt64? {
+        firstSampleTime?.value
     }
 
     private func startDrainTask(consumer: CanonicalAudioFileConsumer) {
@@ -414,7 +426,8 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         guard
             let ringBuffer,
             let consumer,
-            let outputURL
+            let outputURL,
+            let firstSampleTime
         else {
             return
         }
@@ -436,7 +449,8 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             try await waitUntilDrained(ringBuffer)
 
             let replacementGraph = CoreAudioSystemTapGraph(
-                ringBuffer: ringBuffer
+                ringBuffer: ringBuffer,
+                firstSampleTime: firstSampleTime
             )
             try replacementGraph.prepare()
             try await consumer.reconfigure(
@@ -528,6 +542,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     private func clearPipelineReferences() {
         ringBuffer = nil
+        firstSampleTime = nil
         consumer = nil
         drainTask = nil
         graph = nil

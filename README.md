@@ -38,8 +38,8 @@ transcription:
 
 - the public `TranscriptionEngine` contract, including engine-selected window
   duration and overlap, plus audio, word-timing, and transcript-segment values;
-- `capture-session.json`, which records each source's offset on the shared
-  monotonic session timeline;
+- `session.json`, which records stable session identity, artifact inventory,
+  transcription history, and each source's offset on the shared timeline;
 - bounded canonical-WAV reads sized by the selected engine instead of loading
   an entire long meeting into memory;
 - overlapping batch reads advance by window minus overlap and pass each
@@ -305,14 +305,27 @@ storage paths, and App Store signing profile would then need to be enabled.
   revision `19600a485baa4998812e4654b70d2bab8f2c9949`.
 - [Argmax OSS / WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)
   `1.0.0`, exact revision `25c62997041c134b03ca82731ce2f6fd2cae1eb9`.
+- [GRDB](https://github.com/groue/GRDB.swift) `7.11.1`, exact revision
+  `b83108d10f42680d78f23fe4d4d80fc88dab3212`. GRDB has no transitive package
+  dependencies. It compiles under Swift 6 complete strict concurrency at the
+  macOS 26 target with no warnings in either Debug or Release.
 
 Both Swift Package Manager entry points use exact requirements. The committed
 root `Package.resolved` locks command-line builds, while the Xcode project stores
 the same exact requirements and resolves its workspace lockfile locally.
 
+Resolving GRDB increased `.build` from 3,321,520 KiB to 3,715,368 KiB: a
+393,848 KiB (384.6 MiB) increase before compilation. The checkout accounted for
+158,436 KiB and SwiftPM's bare repository cache for 234,604 KiB. After the first
+Debug compile, `.build` was 3,814,024 KiB, a net increase of 492,504 KiB
+(481.0 MiB) from the pre-GRDB baseline. Direct compiled GRDB objects and its
+Swift module account for another 30,268 KiB; the remaining growth is shared
+SwiftPM build planning and index data. Xcode's separate DerivedData is not
+included in these figures.
+
 ## Data locations
 
-The finished app will keep models and application data under:
+Models and the rebuildable session index remain under:
 
 ```text
 ~/Library/Application Support/Scribe/
@@ -331,20 +344,57 @@ Silero VAD is stored under:
 ~/Library/Application Support/Scribe/Models/silero-vad/silero-vad-unified-256ms-v6.2.1.mlmodelc/
 ```
 
-Microphone recordings are stored under:
+Sessions now default to ordinary folders under `~/Documents/Scribe`, or a
+user-selected folder retained through a security-scoped bookmark:
 
 ```text
-~/Library/Application Support/Scribe/Sessions/<session UUID>/microphone.wav
-~/Library/Application Support/Scribe/Sessions/<session UUID>/system.wav
-~/Library/Application Support/Scribe/Sessions/<session UUID>/capture-session.json
+~/Documents/Scribe/2026-08-11 11.30 — Meeting/
+    session.json
+    microphone.wav
+    system.wav
+    notes.md
+    transcript.md
+    transcript.json
+    transcript.srt
+    Transcriptions/<date — model — revision>/transcript.{md,json,srt}
 ```
 
-The JSON file contains only canonical format metadata, relative audio paths,
-and the two track-start offsets. It contains no transcript or captured audio.
+`session.json` contains the stable UUID, title, creation date, source type,
+canonical format, relative track paths, artifact inventory, and transcription
+history. New live tracks store their relative starts as integer 16 kHz sample
+offsets derived from their first captured audio timestamps. The microphone uses
+`AVAudioTime.hostTime`; the system IOProc uses `inInputTime.mHostTime`, which
+describes the first acquired frame rather than the IO thread's wake time. The
+tick delta is converted with `mach_timebase_info` and normalized so the earlier
+track begins at sample zero. An empty track has no invented timestamp.
+
+Version-1 `capture-session.json` remains readable and is migrated to
+`session.json`. Its seconds-based start value is rounded to the nearest
+canonical sample and explicitly marked `legacyEstimated`; old recordings are
+never presented as having timing precision that was not captured.
+
+GRDB and FTS5 index session metadata, transcript, notes, and summary text under
+`~/Library/Application Support/Scribe/Index`. Session folders are authoritative:
+the database can be deleted and deterministically rebuilt. Launch, activation,
+pre-recording checks, and debounced FSEvents trigger reconciliation. If a
+removable or network location is unavailable, existing rows are marked
+unavailable and never interpreted as mass deletion.
+
+Session UUID, not folder path, is identity. A Finder rename or move updates only
+the indexed path. If a folder is duplicated, the older folder keeps its UUID;
+the newer copy receives a fresh UUID and is indexed as an independent session.
+This is informational and requires no repair from the user.
+
+Additional regular user documents and media are surfaced when their extensions
+identify common documents, images, audio, or video. Hidden files, `.DS_Store`,
+Finder aliases, symbolic links, packages, editor/temporary/download fragments,
+unknown binary types, and Scribe's transient live spool folders are ignored.
+
 Transcript word arrays are normalized by absolute timestamp before segment
 bounds, overlap trimming, row ordering, or future seek positions are derived.
-Existing sessions need no migration because transcripts are not yet persisted;
-their WAV tracks remain the re-transcribable source of truth.
+Every successful transcription writes the current Markdown, JSON, and SRT
+artifacts and an immutable model/date revision under `Transcriptions`, so
+re-transcription never destroys the earlier durable transcript.
 
 Before capture starts, Scribe checks the recording volume against a configurable
 expected duration (two hours by default) and a configurable 512 MiB free-space
@@ -358,7 +408,7 @@ Failure to query free space also triggers the same safe stop.
 While recording, Milestone 3A creates source-specific transient files under:
 
 ```text
-~/Library/Application Support/Scribe/Sessions/<session UUID>/LiveSpool/
+<session folder>/LiveSpool/
 ```
 
 These sequential files bound live-pipeline memory when processing falls behind.
@@ -368,7 +418,7 @@ durable recording of record.
 Milestone 3B also creates speech-window records under:
 
 ```text
-~/Library/Application Support/Scribe/Sessions/<session UUID>/LiveSpeechWindows/
+<session folder>/LiveSpeechWindows/
 ```
 
 Those records contain only VAD-selected canonical samples and window metadata.

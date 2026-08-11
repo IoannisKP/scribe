@@ -70,4 +70,55 @@ final class CaptureSessionManifestTests: XCTestCase {
             )
         }
     }
+
+    func testReadsLegacyStartTimeAsEstimatedCanonicalSamples() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let json = """
+            {
+              "version": 1,
+              "sampleRate": 16000,
+              "channelCount": 1,
+              "tracks": [
+                {"source":"microphone","relativePath":"microphone.wav","startTime":0},
+                {"source":"system","relativePath":"system.wav","startTime":0.0466875}
+              ]
+            }
+            """
+        try Data(json.utf8).write(
+            to: directory.appendingPathComponent(
+                CaptureSessionManifest.legacyFileName
+            )
+        )
+
+        let manifest = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(
+            manifest.track(for: .system)?.startSampleOffset,
+            747
+        )
+        XCTAssertEqual(
+            manifest.track(for: .system)?.timingPrecision,
+            .legacyEstimated
+        )
+    }
+
+    func testNormalizesHostTimesToCanonicalSampleOffsets() {
+        let same = AudioHostTime.normalizedCanonicalOffsets(
+            microphoneHostTime: 10,
+            systemHostTime: 10
+        )
+        XCTAssertEqual(same.microphone, 0)
+        XCTAssertEqual(same.system, 0)
+        let missing = AudioHostTime.normalizedCanonicalOffsets(
+            microphoneHostTime: 10,
+            systemHostTime: nil
+        )
+        XCTAssertEqual(missing.microphone, 0)
+        XCTAssertNil(missing.system)
+    }
 }

@@ -71,8 +71,10 @@ public actor SystemAudioPermissionAuthorizer:
         -> SystemAudioAuthorizationStatus
     {
         let ringBuffer = try FloatRingBuffer(capacity: 4_096)
+        let firstSampleTime = try FirstSampleHostTime()
         let graph = CoreAudioSystemTapGraph(
             ringBuffer: ringBuffer,
+            firstSampleTime: firstSampleTime,
             tapScope: .allProcesses
         )
 

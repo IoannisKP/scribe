@@ -131,6 +131,13 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let whisperKitModelManager: WhisperKitModelManager?
     private let residentEngineCoordinator =
         ResidentTranscriptionEngineCoordinator()
+    private let sessionLocationStore: SessionLibraryLocationStore
+    private let sessionFolderManager = SessionFolderManager()
+    private let transcriptArtifactWriter = TranscriptArtifactWriter()
+    private let legacySessionMigrator = LegacySessionMigrator()
+    private let sessionLibraryMonitor = SessionLibraryMonitor()
+    private let sessionIndex: SessionIndex?
+    private let sessionReconciler: SessionReconciler?
     private let liveTransport: LiveAudioTransport?
     private var liveSpeechPipeline: LiveSpeechPipeline?
     private var liveTranscriptionPipeline:
@@ -138,14 +145,40 @@ final class MeetingRecorderViewModel: ObservableObject {
     private var stateMonitorTask: Task<Void, Never>?
     private var modelDownloadStateMonitorTask: Task<Void, Never>?
     private var handledAutomaticStopSessionDirectory: URL?
+    private var libraryAccessURL: URL?
 
     init() {
         let microphonePermissionAuthorizer =
             SystemMicrophonePermissionAuthorizer()
         let systemAudioPermissionAuthorizer =
             SystemAudioPermissionAuthorizer()
-        let liveTransport: LiveAudioTransport?
         var initializationErrors: [String] = []
+        let sessionLocationStore = SessionLibraryLocationStore()
+        self.sessionLocationStore = sessionLocationStore
+        let sessionIndex: SessionIndex?
+        do {
+            let applicationSupport = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            sessionIndex = try SessionIndex(
+                databaseURL: applicationSupport
+                    .appendingPathComponent("Scribe/Index", isDirectory: true)
+                    .appendingPathComponent("sessions.sqlite")
+            )
+        } catch {
+            sessionIndex = nil
+            initializationErrors.append(
+                "Scribe could not open its rebuildable session index: \(error.localizedDescription)"
+            )
+        }
+        self.sessionIndex = sessionIndex
+        self.sessionReconciler = sessionIndex.map {
+            SessionReconciler(index: $0)
+        }
+        let liveTransport: LiveAudioTransport?
         do {
             liveTransport = try LiveAudioTransport()
         } catch {
@@ -194,6 +227,7 @@ final class MeetingRecorderViewModel: ObservableObject {
 
         startStateMonitor()
         Task {
+            await prepareSessionStorage()
             await refreshPermissionStatus()
             await refreshModelAvailability()
             await refreshTotalModelDiskUsage()
@@ -204,6 +238,10 @@ final class MeetingRecorderViewModel: ObservableObject {
     deinit {
         stateMonitorTask?.cancel()
         modelDownloadStateMonitorTask?.cancel()
+        sessionLibraryMonitor.stop()
+        if let libraryAccessURL {
+            sessionLocationStore.endAccessing(libraryAccessURL)
+        }
     }
 
     var isRecording: Bool {
@@ -925,10 +963,17 @@ final class MeetingRecorderViewModel: ObservableObject {
                 }
 
                 do {
-                    transcriptSegments = try await pipeline.transcribeSession(
+                    let completedSegments = try await pipeline.transcribeSession(
                         at: sessionDirectory
                     )
+                    _ = try transcriptArtifactWriter.write(
+                        segments: completedSegments,
+                        modelIdentifier: selection.id.rawValue,
+                        to: sessionDirectory
+                    )
+                    transcriptSegments = completedSegments
                     transcriptionState = await pipeline.state
+                    await reconcileSessionLibrary()
                     monitor.cancel()
                 } catch {
                     monitor.cancel()
@@ -1555,16 +1600,86 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     private func makeSessionDirectory() throws -> URL {
-        let applicationSupport = try FileManager.default.url(
+        guard case let .available(library) = sessionLocationStore.resolve()
+        else {
+            throw CocoaError(
+                .fileNoSuchFile,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "The selected session folder is unavailable. Reconnect its volume or choose another folder."
+                ]
+            )
+        }
+        if libraryAccessURL == nil {
+            guard sessionLocationStore.beginAccessing(library) else {
+                throw CocoaError(
+                    .fileReadNoPermission,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Scribe no longer has access to the selected session folder. Choose it again in Settings."
+                    ]
+                )
+            }
+            libraryAccessURL = library
+        }
+        return try sessionFolderManager.createLiveSession(
+            in: library
+        ).directory
+    }
+
+    private func prepareSessionStorage() async {
+        let availability = sessionLocationStore.resolve()
+        guard case let .available(library) = availability else {
+            await reconcileSessionLibrary()
+            return
+        }
+        if libraryAccessURL == nil,
+            sessionLocationStore.beginAccessing(library)
+        {
+            libraryAccessURL = library
+        }
+
+        if let applicationSupport = try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
-        )
-        return applicationSupport
-            .appendingPathComponent("Scribe", isDirectory: true)
-            .appendingPathComponent("Sessions", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        ) {
+            let legacyRoot = applicationSupport
+                .appendingPathComponent("Scribe/Sessions", isDirectory: true)
+            let report = legacySessionMigrator.migrate(
+                from: legacyRoot,
+                to: library
+            )
+            if !report.failures.isEmpty {
+                errorMessage =
+                    "Some earlier sessions could not be moved: "
+                    + report.failures.joined(separator: " ")
+            }
+        }
+        await reconcileSessionLibrary()
+        do {
+            try sessionLibraryMonitor.start(root: library) {
+                [weak self] _ in
+                Task { @MainActor in
+                    await self?.reconcileSessionLibrary()
+                }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reconcileSessionLibrary() async {
+        guard let sessionReconciler else { return }
+        do {
+            _ = try await sessionReconciler.reconcile(
+                availability: sessionLocationStore.resolve()
+            )
+        } catch {
+            errorMessage =
+                "Scribe could not refresh its session index. Session folders are untouched: \(error.localizedDescription)"
+        }
     }
 
     private func recordingSessionDirectory() -> URL? {

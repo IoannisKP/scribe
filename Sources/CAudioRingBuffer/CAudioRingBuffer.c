@@ -13,6 +13,46 @@ struct ScribeFloatRingBuffer {
     _Alignas(64) _Atomic uint64_t dropped_sample_count;
 };
 
+struct ScribeAtomicHostTime {
+    _Atomic uint64_t value;
+};
+
+ScribeAtomicHostTime *scribe_atomic_host_time_create(void) {
+    ScribeAtomicHostTime *latch = calloc(1, sizeof(ScribeAtomicHostTime));
+    if (latch != NULL) {
+        atomic_init(&latch->value, 0);
+    }
+    return latch;
+}
+
+void scribe_atomic_host_time_destroy(ScribeAtomicHostTime *latch) {
+    free(latch);
+}
+
+bool scribe_atomic_host_time_capture_first(
+    ScribeAtomicHostTime *latch,
+    uint64_t host_time
+) {
+    if (latch == NULL || host_time == 0) {
+        return false;
+    }
+    uint64_t expected = 0;
+    return atomic_compare_exchange_strong_explicit(
+        &latch->value,
+        &expected,
+        host_time,
+        memory_order_release,
+        memory_order_relaxed
+    );
+}
+
+uint64_t scribe_atomic_host_time_load(const ScribeAtomicHostTime *latch) {
+    if (latch == NULL) {
+        return 0;
+    }
+    return atomic_load_explicit(&latch->value, memory_order_acquire);
+}
+
 ScribeFloatRingBuffer *scribe_float_ring_buffer_create(size_t capacity) {
     if (capacity == 0) {
         return NULL;

@@ -31,6 +31,7 @@ public actor MicrophoneCaptureService {
 
     private var ringBuffer: FloatRingBuffer?
     private var realtimeSink: MicrophoneRealtimeSink?
+    private var firstSampleTime: FirstSampleHostTime?
     private var consumer: CanonicalAudioFileConsumer?
     private var drainTask: Task<Void, Never>?
     private var outputURL: URL?
@@ -94,11 +95,16 @@ public actor MicrophoneCaptureService {
                 outputURL: outputURL,
                 liveSink: liveSink
             )
-            let realtimeSink = MicrophoneRealtimeSink(ringBuffer: ringBuffer)
+            let firstSampleTime = try FirstSampleHostTime()
+            let realtimeSink = MicrophoneRealtimeSink(
+                ringBuffer: ringBuffer,
+                firstSampleTime: firstSampleTime
+            )
 
             self.ringBuffer = ringBuffer
             self.consumer = consumer
             self.realtimeSink = realtimeSink
+            self.firstSampleTime = firstSampleTime
             self.outputURL = outputURL
             startDrainTask(consumer: consumer)
             try installTap(format: captureFormat, sink: realtimeSink)
@@ -197,8 +203,8 @@ public actor MicrophoneCaptureService {
             onBus: 0,
             bufferSize: 1_024,
             format: format
-        ) { buffer, _ in
-            sink.receive(buffer)
+        ) { buffer, time in
+            sink.receive(buffer, time: time)
         }
         isTapInstalled = true
     }
@@ -441,6 +447,7 @@ public actor MicrophoneCaptureService {
     private func clearPipelineReferences() {
         ringBuffer = nil
         realtimeSink = nil
+        firstSampleTime = nil
         consumer = nil
         drainTask = nil
         outputURL = nil
@@ -451,12 +458,17 @@ public actor MicrophoneCaptureService {
 
 private final class MicrophoneRealtimeSink: @unchecked Sendable {
     private let ringBuffer: FloatRingBuffer
+    private let firstSampleTime: FirstSampleHostTime
 
-    init(ringBuffer: FloatRingBuffer) {
+    init(
+        ringBuffer: FloatRingBuffer,
+        firstSampleTime: FirstSampleHostTime
+    ) {
         self.ringBuffer = ringBuffer
+        self.firstSampleTime = firstSampleTime
     }
 
-    func receive(_ buffer: AVAudioPCMBuffer) {
+    func receive(_ buffer: AVAudioPCMBuffer, time: AVAudioTime) {
         guard
             let channels = buffer.floatChannelData,
             buffer.frameLength > 0,
@@ -465,11 +477,14 @@ private final class MicrophoneRealtimeSink: @unchecked Sendable {
             return
         }
 
-        ringBuffer.writePlanarMix(
+        let written = ringBuffer.writePlanarMix(
             channels: channels,
             channelCount: Int(buffer.format.channelCount),
             frameCount: Int(buffer.frameLength)
         )
+        if written > 0, time.isHostTimeValid {
+            firstSampleTime.capture(time.hostTime)
+        }
     }
 }
 
@@ -479,7 +494,12 @@ private struct ObserverRegistration: @unchecked Sendable {
 }
 
 extension MicrophoneCaptureService: AudioTrackCapturing {
+    public func firstSampleHostTime() async -> UInt64? {
+        firstSampleTime?.value
+    }
+
     public func stopCapture() async throws -> AudioTrackCaptureResult {
+        let capturedFirstSampleHostTime = firstSampleTime?.value
         let outputURL = try await stopRecording()
         let droppedSampleCount: UInt64
         if case let .stopped(_, capturedDroppedSampleCount) = state {
@@ -490,7 +510,8 @@ extension MicrophoneCaptureService: AudioTrackCapturing {
         return AudioTrackCaptureResult(
             source: .microphone,
             outputURL: outputURL,
-            droppedSampleCount: droppedSampleCount
+            droppedSampleCount: droppedSampleCount,
+            firstSampleHostTime: capturedFirstSampleHostTime
         )
     }
 }

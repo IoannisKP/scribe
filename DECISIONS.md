@@ -906,3 +906,65 @@ Scribe's global mix excluding its own stable process. ScreenCaptureKit can also
 deliver system audio, but it adds screen-capture authorization, shareable-content
 discovery, and content-filter lifecycle to an audio-only feature. Neither
 alternative is a reason to disturb the working capture path in this phase.
+
+## 2026-08-11 — Make session folders authoritative and the database rebuildable
+
+**Decision:** Store sessions as ordinary human-readable folders in Documents or
+a security-scoped user-selected location. Put stable UUID identity and artifact
+inventory in `session.json`; treat path as incidental. Use exactly GRDB 7.11.1
+and FTS5 only as a rebuildable metadata and text-search index. Reconcile at
+launch, activation, before recording, and after debounced FSEvents. When the
+selected root is unavailable, retain indexed rows and mark them unavailable.
+
+**Alternatives:** Keep UUID folders under Application Support; make SQLite the
+source of truth; interpret a missing mount as deleted sessions.
+
+**Reasoning:** Ordinary folders preserve local ownership and Finder workflows.
+A stable embedded UUID survives rename and move. Keeping the index derivative
+allows complete recovery from its deletion or corruption, while an unavailable
+drive cannot accidentally trigger a mass purge.
+
+## 2026-08-11 — Treat Finder copies as independent sessions
+
+**Decision:** When multiple reachable folders contain the same UUID, retain the
+UUID in the folder with the older creation date and atomically assign the newer
+folder a fresh UUID. Index both and report the change as informational.
+
+**Alternatives:** Report a blocking conflict; ignore the copy; merge artifacts.
+
+**Reasoning:** Duplicating a folder is an ordinary, reasonable Finder action.
+The copied audio and documents form a complete independent session. Automatic
+re-identification preserves both without asking the user to understand internal
+UUID conflicts or risking an incorrect merge.
+
+## 2026-08-11 — Surface intentional additional artifacts, not filesystem noise
+
+**Decision:** Include non-hidden regular files with common document, image,
+audio, and video extensions as additional session artifacts. Ignore metadata,
+hidden files, aliases, symbolic links, packages, unknown binary types,
+temporary/editor/download fragments, and live transient spool directories.
+
+**Alternatives:** Show every directory entry; show only Scribe-owned artifacts;
+maintain a user-editable extension list.
+
+**Reasoning:** A related PDF or slide deck belongs in the reading view, while
+`.DS_Store`, aliases, and transient files do not represent durable session data.
+An allowlist makes the behavior deterministic and avoids following links or
+surfacing arbitrary executable data.
+
+## 2026-08-11 — Derive track alignment from first captured samples
+
+**Decision:** Replace asynchronous-start-return timing with the microphone
+tap's first valid `AVAudioTime.hostTime` and the system IOProc's first valid
+`inInputTime.mHostTime`. Latch each without allocation or locking, convert the
+delta using `mach_timebase_info`, and store relative integer 16 kHz sample
+offsets. Continue reading version-1 seconds fields as `legacyEstimated`.
+
+**Alternatives:** Keep the startup proxy; use IOProc `inNow`; infer alignment
+from final WAV lengths.
+
+**Reasoning:** API-return time measures scheduling and setup, not when the first
+stored frame was acquired. `inInputTime` is explicitly tied to the first input
+frame, whereas `inNow` includes IO-thread scheduling latency. Old sessions lack
+the source timestamps and therefore cannot honestly be upgraded to precise
+timing.
