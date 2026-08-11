@@ -201,6 +201,56 @@ names the file they can go find.
 - Reveal: **Reveal in Finder**
 - Drag hint: **Drag any row to Finder or another app**
 
+## Import audio or video
+
+- Menu item: **Import audio or video…**
+- File picker action: **Import**
+- Copying: **Copying interview.mov**
+- Converting: **Converting interview.mov to 16 kHz mono audio**
+- Transcribing: **Transcribing interview.mov with Parakeet v3 Multilingual**
+- Complete: **Imported and transcribed interview.mov**
+
+### Selected model isn't installed
+
+**Install Parakeet v3 Multilingual before importing. No session was created.**
+
+### Unsupported format
+
+**Scribe can't read “interview.xyz”. Choose an audio or video format supported
+by macOS.**
+
+### Video has no audio track
+
+**“interview.mov” doesn't contain an audio track. Choose a file with audio.**
+
+### File contains no playable samples
+
+**Scribe found no audio samples in “interview.m4a”. Choose a file that contains
+playable audio.**
+
+### Copy failed
+
+**Scribe couldn't copy “interview.mov”. The original file is untouched.**
+
+### Decode failed
+
+**Scribe couldn't decode audio from “interview.mov”. The original file is
+untouched.**
+
+### Transcription failed after import
+
+**Couldn't transcribe “interview.mov”. The imported original and audio.wav are
+unaffected.**
+
+### Transcript files couldn't be saved
+
+**Couldn't save transcript files for “interview.mov”. The imported original and
+audio.wav are unaffected.**
+
+The designed sessions-library drop target and its drag hint belong to the views
+order. Phase 2 may accept a file dropped anywhere on the placeholder window,
+but that temporary target must not determine the later library layout.
+
 ### Empty notes
 
 - Placeholder: **Type while you listen**

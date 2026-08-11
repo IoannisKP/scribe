@@ -4,6 +4,7 @@ import Foundation
 import ModelManager
 import SpeechPipeline
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SelectedModelAvailability: Equatable {
     case checking
@@ -42,6 +43,15 @@ private enum ModelManagementUIError: Error, LocalizedError {
     private static func bytes(_ count: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
     }
+}
+
+enum MediaImportState: Equatable {
+    case idle
+    case copying(filename: String)
+    case converting(filename: String)
+    case transcribing(filename: String)
+    case finished(filename: String, sessionDirectory: URL)
+    case failed(filename: String, message: String)
 }
 
 @MainActor
@@ -92,6 +102,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         LiveTranscriptionPipelineState = .idle
     @Published private(set) var liveTranscriptRows:
         [LiveTranscriptRow] = []
+    @Published private(set) var mediaImportState: MediaImportState = .idle
     @Published var selectedTranscriptionModel:
         TranscriptionModelSelection = MeetingRecorderViewModel
             .savedModelSelection()
@@ -134,6 +145,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let sessionLocationStore: SessionLibraryLocationStore
     private let sessionFolderManager = SessionFolderManager()
     private let transcriptArtifactWriter = TranscriptArtifactWriter()
+    private let sessionMediaImporter = SessionMediaImporter()
     private let legacySessionMigrator = LegacySessionMigrator()
     private let sessionLibraryMonitor = SessionLibraryMonitor()
     private let sessionIndex: SessionIndex?
@@ -262,6 +274,41 @@ final class MeetingRecorderViewModel: ObservableObject {
 
     var isTranscribing: Bool {
         transcriptionState.isActive
+    }
+
+    var isImportingMedia: Bool {
+        switch mediaImportState {
+        case .copying, .converting, .transcribing:
+            true
+        case .idle, .finished, .failed:
+            false
+        }
+    }
+
+    var canImportMedia: Bool {
+        !isBusy
+            && !isRecording
+            && !isTranscribing
+            && !isImportingMedia
+            && !isDownloadingModel
+            && !isDownloadingSileroVAD
+    }
+
+    var mediaImportStatusText: String? {
+        switch mediaImportState {
+        case .idle:
+            nil
+        case let .copying(filename):
+            "Copying \(filename)"
+        case let .converting(filename):
+            "Converting \(filename) to 16 kHz mono audio"
+        case let .transcribing(filename):
+            "Transcribing \(filename) with \(selectedModelDescriptor.displayName)"
+        case let .finished(filename, _):
+            "Imported and transcribed \(filename)"
+        case let .failed(filename, _):
+            "Import failed for \(filename)"
+        }
     }
 
     var transcriptionStatusText: String {
@@ -748,6 +795,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingModel,
             !isDownloadingSileroVAD,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording
         else {
             return
@@ -775,6 +823,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingModel,
             !isDownloadingSileroVAD,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording
         else {
             return
@@ -802,6 +851,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingModel,
             !isDownloadingSileroVAD,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording
         else {
             return
@@ -827,6 +877,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingModel,
             !isDownloadingSileroVAD,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording
         else {
             return
@@ -856,6 +907,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingSileroVAD,
             !isDownloadingModel,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording
         else {
             return
@@ -893,6 +945,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             !isDownloadingSileroVAD,
             !isDownloadingModel,
             !isTranscribing,
+            !isImportingMedia,
             !isRecording,
             let fluidAudioModelManager
         else {
@@ -940,45 +993,17 @@ final class MeetingRecorderViewModel: ObservableObject {
         errorMessage = nil
         Task {
             do {
-                let engine = try await makeTranscriptionEngine(
-                    for: selection
+                let completedSegments = try await performBatchTranscription(
+                    sessionDirectory: sessionDirectory,
+                    selection: selection
                 )
-                let pipeline = try BatchTranscriptionPipeline(engine: engine)
-                let monitor = Task { [weak self] in
-                    do {
-                        while !Task.isCancelled {
-                            let state = await pipeline.state
-                            await MainActor.run {
-                                self?.transcriptionState = state
-                            }
-                            try await Task.sleep(for: .milliseconds(200))
-                        }
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        await MainActor.run {
-                            self?.errorMessage = error.localizedDescription
-                        }
-                    }
-                }
-
-                do {
-                    let completedSegments = try await pipeline.transcribeSession(
-                        at: sessionDirectory
-                    )
-                    _ = try transcriptArtifactWriter.write(
-                        segments: completedSegments,
-                        modelIdentifier: selection.id.rawValue,
-                        to: sessionDirectory
-                    )
-                    transcriptSegments = completedSegments
-                    transcriptionState = await pipeline.state
-                    await reconcileSessionLibrary()
-                    monitor.cancel()
-                } catch {
-                    monitor.cancel()
-                    throw error
-                }
+                _ = try transcriptArtifactWriter.write(
+                    segments: completedSegments,
+                    modelIdentifier: selection.id.rawValue,
+                    to: sessionDirectory
+                )
+                transcriptSegments = completedSegments
+                await reconcileSessionLibrary()
             } catch is CancellationError {
                 transcriptionState = .failed(message: "Cancelled")
                 errorMessage = "Transcription was cancelled."
@@ -988,6 +1013,126 @@ final class MeetingRecorderViewModel: ObservableObject {
                 )
                 await refreshSuggestedAvailableModel(for: selection)
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func chooseMediaForImport() {
+        guard canImportMedia else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Import audio or video"
+        panel.prompt = "Import"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio, .movie]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importMediaFiles([url])
+    }
+
+    func importMediaFiles(_ urls: [URL]) {
+        guard canImportMedia, let sourceURL = urls.first else { return }
+        guard modelAvailability == .available else {
+            errorMessage =
+                "Install \(selectedModelDescriptor.displayName) before importing. No session was created."
+            return
+        }
+
+        let selection = selectedTranscriptionModel
+        let filename = sourceURL.lastPathComponent
+        isBusy = true
+        transcriptSegments = []
+        liveTranscriptRows = []
+        transcriptionState = .idle
+        errorMessage = nil
+        mediaImportState = .copying(filename: filename)
+        Task {
+            var importedSession: ImportedSessionResult?
+            let accessed = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if accessed {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+                isBusy = false
+            }
+            do {
+                let library = try availableSessionLibrary()
+                let result = try await sessionMediaImporter.importFile(
+                    at: sourceURL,
+                    into: library
+                ) { [weak self] progress in
+                    Task { @MainActor in
+                        switch progress {
+                        case let .copying(filename):
+                            self?.mediaImportState = .copying(
+                                filename: filename
+                            )
+                        case let .converting(filename):
+                            self?.mediaImportState = .converting(
+                                filename: filename
+                            )
+                        }
+                    }
+                }
+                importedSession = result
+                mediaImportState = .transcribing(filename: filename)
+                transcriptionState = .preparing
+                let completedSegments = try await performBatchTranscription(
+                    sessionDirectory: result.directory,
+                    selection: selection
+                )
+                do {
+                    _ = try transcriptArtifactWriter.write(
+                        segments: completedSegments,
+                        modelIdentifier: selection.id.rawValue,
+                        to: result.directory
+                    )
+                } catch {
+                    let message =
+                        "Couldn't save transcript files for “\(filename)”. The imported original and audio.wav are unaffected."
+                    mediaImportState = .failed(
+                        filename: filename,
+                        message: message
+                    )
+                    errorMessage = message
+                    await reconcileSessionLibrary()
+                    return
+                }
+                transcriptSegments = completedSegments
+                mediaImportState = .finished(
+                    filename: filename,
+                    sessionDirectory: result.directory
+                )
+                await reconcileSessionLibrary()
+            } catch is CancellationError {
+                transcriptionState = .failed(message: "Cancelled")
+                let message = importedSession == nil
+                    ? "Import cancelled. The original file is untouched."
+                    : "Transcription was cancelled. The imported original and audio.wav are unaffected."
+                mediaImportState = .failed(
+                    filename: filename,
+                    message: message
+                )
+                errorMessage = message
+                await reconcileSessionLibrary()
+            } catch {
+                let message: String
+                if importedSession == nil {
+                    message = error.localizedDescription
+                } else {
+                    transcriptionState = .failed(
+                        message: error.localizedDescription
+                    )
+                    await refreshSuggestedAvailableModel(for: selection)
+                    message =
+                        "Couldn't transcribe “\(filename)”. The imported original and audio.wav are unaffected."
+                }
+                mediaImportState = .failed(
+                    filename: filename,
+                    message: message
+                )
+                errorMessage = message
+                await reconcileSessionLibrary()
             }
         }
     }
@@ -1600,6 +1745,13 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     private func makeSessionDirectory() throws -> URL {
+        let library = try availableSessionLibrary()
+        return try sessionFolderManager.createLiveSession(
+            in: library
+        ).directory
+    }
+
+    private func availableSessionLibrary() throws -> URL {
         guard case let .available(library) = sessionLocationStore.resolve()
         else {
             throw CocoaError(
@@ -1616,15 +1768,44 @@ final class MeetingRecorderViewModel: ObservableObject {
                     .fileReadNoPermission,
                     userInfo: [
                         NSLocalizedDescriptionKey:
-                            "Scribe no longer has access to the selected session folder. Choose it again in Settings."
+                            "Scribe no longer has access to the selected session folder. Choose it again in Settings. Your recordings and transcripts are untouched."
                     ]
                 )
             }
             libraryAccessURL = library
         }
-        return try sessionFolderManager.createLiveSession(
-            in: library
-        ).directory
+        return library
+    }
+
+    private func performBatchTranscription(
+        sessionDirectory: URL,
+        selection: TranscriptionModelSelection
+    ) async throws -> [TranscriptSegment] {
+        let engine = try await makeTranscriptionEngine(for: selection)
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
+        let monitor = Task { [weak self] in
+            do {
+                while !Task.isCancelled {
+                    let state = await pipeline.state
+                    await MainActor.run {
+                        self?.transcriptionState = state
+                    }
+                    try await Task.sleep(for: .milliseconds(200))
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                await MainActor.run {
+                    self?.errorMessage = error.localizedDescription
+                }
+            }
+        }
+        defer { monitor.cancel() }
+        let completedSegments = try await pipeline.transcribeSession(
+            at: sessionDirectory
+        )
+        transcriptionState = await pipeline.state
+        return completedSegments
     }
 
     private func prepareSessionStorage() async {

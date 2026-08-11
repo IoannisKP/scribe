@@ -293,7 +293,7 @@ public actor LiveSpeechPipeline {
                 at: spoolDirectory,
                 withIntermediateDirectories: true
             )
-            for source in AudioSource.allCases {
+            for source in AudioSource.liveCaptureSources {
                 guard let track = manifest.track(for: source) else {
                     throw LiveSpeechPipelineError.missingTrack(source)
                 }
@@ -310,7 +310,7 @@ public actor LiveSpeechPipeline {
             }
             pendingWindowsBySource = Dictionary(
                 uniqueKeysWithValues:
-                    AudioSource.allCases.map { ($0, 0) }
+                    AudioSource.liveCaptureSources.map { ($0, 0) }
             )
         } catch {
             let originalMessage = error.localizedDescription
@@ -433,7 +433,7 @@ public actor LiveSpeechPipeline {
         do {
             while !Task.isCancelled {
                 var processedBlock = false
-                for source in AudioSource.allCases {
+                for source in AudioSource.liveCaptureSources {
                     guard
                         let block = try await audioTransport.nextBlock(
                             for: source
@@ -504,7 +504,7 @@ public actor LiveSpeechPipeline {
         state = .finishing(
             pendingWindowCount: metrics.pendingWindowCount
         )
-        for source in AudioSource.allCases {
+        for source in AudioSource.liveCaptureSources {
             guard var processor = processors[source] else {
                 throw LiveSpeechPipelineError.missingTrack(source)
             }

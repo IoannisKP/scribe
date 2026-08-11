@@ -242,6 +242,41 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         )
     }
 
+    public static func importedFile(
+        sessionID: UUID = UUID(),
+        title: String,
+        createdAt: Date,
+        originalFilename: String,
+        originalFormat: String,
+        originalRelativePath: String
+    ) -> CaptureSessionManifest {
+        CaptureSessionManifest(
+            sessionID: sessionID,
+            title: title,
+            createdAt: Date(
+                timeIntervalSince1970: floor(createdAt.timeIntervalSince1970)
+            ),
+            source: .importedFile,
+            tracks: [
+                Track(
+                    source: .imported,
+                    relativePath: "audio.wav",
+                    startSampleOffset: 0,
+                    timingPrecision: .sampleAccurate
+                )
+            ],
+            artifacts: [
+                Artifact(
+                    relativePath: originalRelativePath,
+                    kind: .originalImport
+                ),
+                Artifact(relativePath: "audio.wav", kind: .audio)
+            ],
+            originalFilename: originalFilename,
+            originalFormat: originalFormat
+        )
+    }
+
     public func track(for source: AudioSource) -> Track? {
         tracks.first { $0.source == source }
     }
@@ -256,6 +291,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         ]
         return replacing(
             tracks: tracks.map { track in
+                guard track.source != .imported else { return track }
                 let offset = replacements[track.source] ?? nil
                 return Track(
                     source: track.source,
@@ -311,10 +347,15 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         }
 
         let sources = Set(tracks.map(\.source))
-        guard
-            tracks.count == AudioSource.allCases.count,
-            sources.count == AudioSource.allCases.count,
-            AudioSource.allCases.allSatisfy(sources.contains)
+        let expectedSources: Set<AudioSource>
+        switch source {
+        case .liveCapture:
+            expectedSources = Set(AudioSource.liveCaptureSources)
+        case .importedFile:
+            expectedSources = [.imported]
+        }
+        guard tracks.count == expectedSources.count,
+            sources == expectedSources
         else {
             throw CaptureSessionManifestError.invalidTrackSet
         }
@@ -456,7 +497,7 @@ public enum CaptureSessionManifestError:
         case let .unsupportedFormat(sampleRate, channelCount):
             "Session metadata describes unsupported audio: \(sampleRate) Hz, \(channelCount) channels."
         case .invalidTrackSet:
-            "Live-session metadata must contain one microphone track and one system track."
+            "Live sessions need microphone and system tracks; imported sessions need one imported-audio track."
         case .invalidTitle:
             "Session metadata must contain a title."
         case let .invalidStartTime(source, startTime):

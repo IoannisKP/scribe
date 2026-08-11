@@ -102,7 +102,7 @@ actor FluidAudioSileroVAD: LiveVoiceActivityDetecting {
             )
             streamStates = Dictionary(
                 uniqueKeysWithValues:
-                    AudioCapture.AudioSource.allCases.map {
+                    AudioCapture.AudioSource.liveCaptureSources.map {
                     ($0, VadStreamState.initial())
                 }
             )

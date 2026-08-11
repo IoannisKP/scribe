@@ -210,7 +210,7 @@ public actor LiveAudioTransport: CanonicalAudioBlockSink {
                 withIntermediateDirectories: true
             )
             var created: [AudioSource: any LiveAudioSpoolStorage] = [:]
-            for source in AudioSource.allCases {
+            for source in AudioSource.liveCaptureSources {
                 created[source] = try storageFactory(
                     spoolDirectory,
                     source
@@ -234,7 +234,7 @@ public actor LiveAudioTransport: CanonicalAudioBlockSink {
         }
 
         expectedSampleIndices = Dictionary(
-            uniqueKeysWithValues: AudioSource.allCases.map { ($0, 0) }
+            uniqueKeysWithValues: AudioSource.liveCaptureSources.map { ($0, 0) }
         )
         pendingSamplesBySource = expectedSampleIndices
         metrics = .zero
@@ -302,7 +302,7 @@ public actor LiveAudioTransport: CanonicalAudioBlockSink {
             priorFailureMessage = nil
         }
         var failures: [String] = []
-        for source in AudioSource.allCases {
+        for source in AudioSource.liveCaptureSources {
             guard let storage = storages[source] else {
                 failures.append("The \(source.rawValue) spool is missing.")
                 continue
@@ -343,7 +343,7 @@ public actor LiveAudioTransport: CanonicalAudioBlockSink {
         }
         var failures: [String] = []
         var parentDirectory: URL?
-        for source in AudioSource.allCases {
+        for source in AudioSource.liveCaptureSources {
             guard let storage = storages[source] else {
                 continue
             }

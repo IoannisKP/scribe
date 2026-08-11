@@ -968,3 +968,53 @@ stored frame was acquired. `inInputTime` is explicitly tied to the first input
 frame, whereas `inNow` includes IO-thread scheduling latency. Old sessions lack
 the source timestamps and therefore cannot honestly be upgraded to precise
 timing.
+
+## 2026-08-11 — Model imported media as one source with two artifacts
+
+**Decision:** Add `.imported` as a third `AudioSource`, but restrict live
+capture explicitly to microphone and system. An imported session contains one
+track, preserves the original file byte-for-byte, creates canonical `audio.wav`,
+and sends that one track through the existing batch pipeline. Omit participant
+labels from imported transcript rows and Markdown. Decode only the first audio
+track when a container carries more than one.
+
+**Alternatives:** Pretend the file is microphone or system audio; duplicate it
+into “You” and “Others”; create a separate transcript type; mix every audio
+track in a multi-track video.
+
+**Reasoning:** Source attribution describes how audio was acquired, not which
+UI happens to display it. A dropped file has no defensible participant side.
+Keeping the shared segment and batch types preserves all existing stitching and
+export behavior without inventing identity. Choosing the first media audio track
+matches ordinary AV playback and avoids silently combining language, commentary,
+or alternate-program tracks.
+
+## 2026-08-11 — Preserve a canonical-named original without collision
+
+**Decision:** Reserve root `audio.wav` for the canonical derivative. If the
+source filename itself is `audio.wav`, keep the unchanged source at
+`Original/audio.wav`; retain `originalFilename=audio.wav` and list both paths as
+separate artifacts.
+
+**Alternatives:** Reuse one file as both artifacts; rename the original; rename
+the canonical derivative; skip conversion when the source appears canonical.
+
+**Reasoning:** File extensions and headers do not prove every canonical
+invariant, and the work order requires both an unchanged original and a known
+derivative. Two files cannot share one path. A containing directory is the only
+collision resolution that preserves both required filenames and their roles.
+
+## 2026-08-11 — Keep Phase 2 import UI disposable
+
+**Decision:** Add the required File menu command and Command-O. Accept a file on
+the placeholder window through one root `dropDestination` modifier because it
+does not shape layout or session presentation. Defer the designed library drop
+target and reading view to the views order; expose their required data now as
+one manifest track plus original and canonical artifacts.
+
+**Alternatives:** Build the session library and reading view in Phase 2; omit
+all dropping until the views order.
+
+**Reasoning:** The current window is scheduled for replacement. A single root
+handler is trivial and reusable behavior, while designing its visible target or
+artifact presentation now would create throwaway view work.

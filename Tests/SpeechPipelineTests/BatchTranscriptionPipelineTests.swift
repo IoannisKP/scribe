@@ -213,6 +213,35 @@ final class BatchTranscriptionPipelineTests: XCTestCase {
         XCTAssertEqual(finalState, .finished(segmentCount: 1))
     }
 
+    func testImportedSessionTranscribesAsOneImportedSource() async throws {
+        let directory = try makeTestDirectory()
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        try await writeDurableSessionWAV(
+            samples: [0.1, 0.2, 0.3, 0.4],
+            to: directory.appendingPathComponent("audio.wav")
+        )
+        try CaptureSessionManifest.importedFile(
+            title: "Imported",
+            createdAt: Date(timeIntervalSince1970: 10),
+            originalFilename: "Imported.m4a",
+            originalFormat: "m4a",
+            originalRelativePath: "Imported.m4a"
+        ).write(to: directory)
+        let engine = LifecycleMockEngine(
+            preferredWindowDuration: 1,
+            preferredOverlap: 0
+        )
+        let pipeline = try BatchTranscriptionPipeline(engine: engine)
+
+        let segments = try await pipeline.transcribeSession(at: directory)
+
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.source, .imported)
+        XCTAssertEqual(segments.first?.text, "imported-1")
+    }
+
     private func writeDualTrackSession(
         directory: URL,
         microphoneSamples: [Float],

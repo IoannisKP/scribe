@@ -47,23 +47,21 @@ public actor BatchTranscriptionPipeline {
             let manifest = try CaptureSessionManifest.load(
                 from: sessionDirectory
             )
-            let readers = try makeReaders(
+            var readers = try makeReaders(
                 manifest: manifest,
                 sessionDirectory: sessionDirectory
             )
 
             try await engine.prepare()
-            var microphoneChunk = try await readers.microphone.nextChunk()
-            var systemChunk = try await readers.system.nextChunk()
+            for index in readers.indices {
+                readers[index].nextChunk = try await readers[index].reader
+                    .nextChunk()
+            }
             var segments: [TranscriptSegment] = []
             var processedChunkCount = 0
 
-            while microphoneChunk != nil || systemChunk != nil {
-                let selection = Self.selectNext(
-                    microphone: microphoneChunk,
-                    system: systemChunk
-                )
-                guard let selection else {
+            while let selectedIndex = Self.selectNextReader(in: readers) {
+                guard let selection = readers[selectedIndex].nextChunk else {
                     break
                 }
 
@@ -78,13 +76,9 @@ public actor BatchTranscriptionPipeline {
                     processedChunkCount: processedChunkCount
                 )
 
-                switch selection.source {
-                case .microphone:
-                    microphoneChunk =
-                        try await readers.microphone.nextChunk()
-                case .system:
-                    systemChunk = try await readers.system.nextChunk()
-                }
+                readers[selectedIndex].nextChunk = try await readers[
+                    selectedIndex
+                ].reader.nextChunk()
             }
 
             let finalSegments = try await engine.finish()
@@ -109,57 +103,45 @@ public actor BatchTranscriptionPipeline {
     private func makeReaders(
         manifest: CaptureSessionManifest,
         sessionDirectory: URL
-    ) throws -> (
-        microphone: CanonicalWAVChunkReader,
-        system: CanonicalWAVChunkReader
-    ) {
-        guard
-            let microphoneTrack = manifest.track(for: .microphone),
-            let systemTrack = manifest.track(for: .system)
-        else {
+    ) throws -> [BatchTrackReader] {
+        guard !manifest.tracks.isEmpty else {
             throw CaptureSessionManifestError.invalidTrackSet
         }
-
-        let microphoneReader = try CanonicalWAVChunkReader(
-            url: sessionDirectory.appendingPathComponent(
-                microphoneTrack.relativePath,
-                isDirectory: false
-            ),
-            source: .microphone,
-            trackStartTime: microphoneTrack.startTime,
-            chunkDuration: chunkDuration,
-            overlapDuration: engine.preferredOverlap
-        )
-        let systemReader = try CanonicalWAVChunkReader(
-            url: sessionDirectory.appendingPathComponent(
-                systemTrack.relativePath,
-                isDirectory: false
-            ),
-            source: .system,
-            trackStartTime: systemTrack.startTime,
-            chunkDuration: chunkDuration,
-            overlapDuration: engine.preferredOverlap
-        )
-        return (microphoneReader, systemReader)
+        return try manifest.tracks.map { track in
+            BatchTrackReader(
+                source: track.source,
+                reader: try CanonicalWAVChunkReader(
+                    url: sessionDirectory.appendingPathComponent(
+                        track.relativePath,
+                        isDirectory: false
+                    ),
+                    source: track.source,
+                    trackStartTime: track.startTime,
+                    chunkDuration: chunkDuration,
+                    overlapDuration: engine.preferredOverlap
+                )
+            )
+        }
     }
 
-    private static func selectNext(
-        microphone: AudioChunk?,
-        system: AudioChunk?
-    ) -> AudioChunk? {
-        switch (microphone, system) {
-        case let (.some(microphone), .some(system)):
-            if microphone.startTime <= system.startTime {
-                return microphone
+    private static func selectNextReader(
+        in readers: [BatchTrackReader]
+    ) -> Int? {
+        readers.indices
+            .filter { readers[$0].nextChunk != nil }
+            .min { lhs, rhs in
+                guard
+                    let left = readers[lhs].nextChunk,
+                    let right = readers[rhs].nextChunk
+                else {
+                    return lhs < rhs
+                }
+                if left.startTime != right.startTime {
+                    return left.startTime < right.startTime
+                }
+                return TranscriptTimeline.sourceOrder(left.source)
+                    < TranscriptTimeline.sourceOrder(right.source)
             }
-            return system
-        case let (.some(microphone), .none):
-            return microphone
-        case let (.none, .some(system)):
-            return system
-        case (.none, .none):
-            return nil
-        }
     }
 
     private static func validate(
@@ -237,6 +219,20 @@ public enum TranscriptTimeline {
             0
         case .system:
             1
+        case .imported:
+            2
         }
+    }
+}
+
+private struct BatchTrackReader {
+    let source: AudioSource
+    let reader: CanonicalWAVChunkReader
+    var nextChunk: AudioChunk?
+
+    init(source: AudioSource, reader: CanonicalWAVChunkReader) {
+        self.source = source
+        self.reader = reader
+        self.nextChunk = nil
     }
 }

@@ -472,6 +472,31 @@ silently inferred. Every exposed entry has a committed WER limit and measured
 installed-byte/first-load peak-RSS profile. The committed clean synthetic fixture
 is a regression guard, not evidence of noisy-meeting accuracy.
 
+## Imported-media pipeline
+
+An import is a single-source session. `SessionMediaImporter` reserves a normal
+human-readable session folder, copies the source without modification, and asks
+`ImportedMediaConverter` to stream the first AVFoundation audio track into
+canonical `audio.wav`. The decoder requests 16 kHz mono Float32 sample buffers;
+the existing `Int16WAVWriter` performs the sole durable quantization and keeps
+the RIFF header synchronized. Neither conversion nor batch ASR retains the full
+asset in memory.
+
+The manifest uses `source=importedFile`, one `.imported` track at sample offset
+zero, and distinct `.originalImport` and `.audio` artifacts. Validation remains
+source-specific: live sessions require microphone plus system, while imports
+require exactly one imported track. Live transport, VAD, and live-ASR loops use
+`AudioSource.liveCaptureSources`, so adding `.imported` cannot accidentally
+create a third live spool or detector state.
+
+`BatchTranscriptionPipeline` constructs readers from the validated manifest's
+actual tracks instead of assuming a microphone/system tuple. Imported segments
+remain `.imported` through overlap reconciliation, timeline merge, JSON, and
+SRT. Markdown and UI renderers deliberately omit a participant label for that
+source. The copied original is retained even after a later transcription
+failure; conversion failures remove the incomplete session folder and never
+modify the external source.
+
 ## Single-resident transcription engine
 
 `ResidentTranscriptionEngineCoordinator` owns the only prepared ASR engine in

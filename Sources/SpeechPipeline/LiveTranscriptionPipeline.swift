@@ -306,7 +306,7 @@ public actor LiveTranscriptionPipeline {
                 )
 
                 var processedWindow = false
-                for source in AudioSource.allCases {
+                for source in AudioSource.liveCaptureSources {
                     guard
                         let window = try await windowProvider
                             .nextWindow(for: source)

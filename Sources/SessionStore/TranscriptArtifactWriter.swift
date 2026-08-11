@@ -97,8 +97,15 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
     ) throws -> [Data] {
         let ordered = TranscriptTimeline.merge(segments)
         let markdown = ordered.map { segment in
-            let label = segment.source == .microphone ? "You" : "Others"
-            return "**\(label) · \(Self.markdownTime(segment.startTime))**\n\n\(segment.text)"
+            let timestamp = Self.markdownTime(segment.startTime)
+            switch segment.source {
+            case .microphone:
+                return "**You · \(timestamp)**\n\n\(segment.text)"
+            case .system:
+                return "**Others · \(timestamp)**\n\n\(segment.text)"
+            case .imported:
+                return "**\(timestamp)**\n\n\(segment.text)"
+            }
         }.joined(separator: "\n\n") + (ordered.isEmpty ? "" : "\n")
 
         let jsonRows = ordered.map(TranscriptJSONSegment.init)

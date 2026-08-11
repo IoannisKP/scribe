@@ -175,6 +175,10 @@ public actor SessionReconciler {
         manifest: CaptureSessionManifest
     ) throws -> Inventory {
         let trackPaths = Set(manifest.tracks.map(\.relativePath))
+        var declaredKinds: [String: CaptureSessionManifest.ArtifactKind] = [:]
+        for artifact in manifest.artifacts {
+            declaredKinds[artifact.relativePath] = artifact.kind
+        }
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isSymbolicLinkKey, .isAliasFileKey,
             .isHiddenKey, .fileSizeKey, .contentModificationDateKey
@@ -200,6 +204,7 @@ public actor SessionReconciler {
                 url: url,
                 relativePath: relativePath,
                 trackPaths: trackPaths,
+                declaredKinds: declaredKinds,
                 values: values
             ) else { continue }
             manifestArtifacts.append(.init(
@@ -225,11 +230,13 @@ public actor SessionReconciler {
         url: URL,
         relativePath: String,
         trackPaths: Set<String>,
+        declaredKinds: [String: CaptureSessionManifest.ArtifactKind],
         values: URLResourceValues
     ) -> CaptureSessionManifest.ArtifactKind? {
         if relativePath == CaptureSessionManifest.fileName
             || relativePath == CaptureSessionManifest.legacyFileName
         { return nil }
+        if let declared = declaredKinds[relativePath] { return declared }
         if trackPaths.contains(relativePath) { return .audio }
         let name = url.lastPathComponent.lowercased()
         if name == "transcript.md" { return .transcriptMarkdown }
