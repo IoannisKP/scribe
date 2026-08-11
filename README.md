@@ -1,7 +1,7 @@
 # Scribe
 
 Scribe is a local-first macOS meeting transcription application. It is being
-built as a native SwiftUI app for Apple Silicon and macOS 14.4 or newer.
+built as a native SwiftUI app for Apple Silicon and macOS 26 or newer.
 
 ## Current status
 
@@ -184,7 +184,10 @@ Missing local models are named and skipped; tests never download implicitly.
 ## Requirements
 
 - Apple Silicon Mac
-- macOS 14.4 or newer
+- macOS 26 or newer. macOS 25 and earlier are no longer supported: Milestone 5A
+  establishes macOS 26 as the sole compatibility baseline before the session
+  store and interface are built, while Scribe is still pre-release and can
+  avoid carrying legacy branches into its foundational data model.
 - Xcode 26.6 or another Xcode release that supports Swift 6 strict concurrency
 
 ## Build and test
