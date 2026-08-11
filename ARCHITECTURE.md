@@ -231,7 +231,7 @@ that live transcription is unavailable.
 ## Realtime ring buffer
 
 Swift does not yet provide a deployment-compatible standard atomic primitive
-for the macOS 14.4 target. The ring's indices therefore live in a small C17
+for the macOS 26 target. The ring's indices therefore live in a small C17
 implementation using C atomics. The data storage and metadata are allocated
 once during initialization. Release/acquire ordering publishes written samples
 to the consumer and reclaimed capacity to the producer.

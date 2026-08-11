@@ -883,3 +883,26 @@ at every consumption boundary makes the invariant explicit and protects mock,
 provider, and future-engine output alike. Existing Scribe sessions contain WAVs
 and capture manifests, not persisted transcript rows, so no stored transcript
 migration or re-derivation is required.
+
+## 2026-08-11 — Make macOS 26 the deployment baseline
+
+**Decision:** Raise both Swift Package Manager and Xcode deployment targets from
+macOS 14.4 to macOS 26.0 before beginning the session-store work. Keep the
+existing capture architecture unchanged: `AVAudioEngine` for microphone input
+and a private Core Audio process tap, aggregate device, and direct IOProc for
+system audio.
+
+**Alternatives:** Continue supporting macOS 14.4; conditionally adopt macOS
+26-only Core Audio tap properties; replace the audio-only process tap with a
+ScreenCaptureKit stream.
+
+**Reasoning:** Scribe is still pre-release, so Milestone 5A can establish one
+tested OS baseline before user-visible session folders and their interface make
+compatibility promises harder to change. The macOS 26 SDK leaves every API in
+the verified capture chain available without deprecation or signature changes.
+It adds `CATapDescription.bundleIDs` and process restoration, which help taps
+that follow selected third-party processes across relaunches but do not simplify
+Scribe's global mix excluding its own stable process. ScreenCaptureKit can also
+deliver system audio, but it adds screen-capture authorization, shareable-content
+discovery, and content-filter lifecycle to an audio-only feature. Neither
+alternative is a reason to disturb the working capture path in this phase.
