@@ -166,4 +166,74 @@ public enum ScribeCopy {
             "Scribe couldn't search sessions. Session folders are untouched: \(detail)"
         }
     }
+
+    public enum Reading {
+        public static let backToSessions = "Back to sessions"
+        public static let revealInFinder = "Reveal in Finder"
+        public static let dragHint = "Drag any row to Finder or another app"
+        public static let copyNotes = "Copy notes"
+        public static let copyTranscript = "Copy transcript"
+        public static let copySummary = "Copy summary"
+        public static let copied = "Copied"
+        public static let noNotes = "No notes yet"
+        public static let createNotes = "Create notes"
+        public static let noTranscript = "No transcript yet"
+        public static let noTranscriptDetail =
+            "This session was recorded without a model installed."
+        public static let transcribeNow = "Transcribe now"
+        public static let transcribeAgain = "Transcribe again"
+        public static let transcribeWith = "Transcribe with"
+        public static let transcriptions = "Transcriptions"
+        public static let noSummary = "No summary yet"
+        public static let generateSummary = "Generate summary"
+        public static let summaryMilestone =
+            "Summary generation arrives in Milestone 6."
+        public static let noAudio = "No playable audio is available"
+        public static let play = "Play"
+        public static let pause = "Pause"
+        public static let timeline = "Timeline"
+        public static let talkTime = "Talk time"
+        public static let renameSpeaker = "Rename speaker"
+        public static let speakerName = "Speaker name"
+        public static let speakerRenameFailed =
+            "Couldn't rename the speaker. The transcript and recording are unaffected."
+        public static let notesCreateFailed =
+            "Couldn't create notes. The recording and transcript are unaffected."
+        public static let transcriptionFailed =
+            "Transcription failed. The recording and earlier transcripts are unaffected."
+        public static let sessionReadFailed =
+            "Scribe couldn't read this session. Its files are untouched."
+
+        public static func installModelBeforeTranscribing(
+            _ displayName: String
+        ) -> String {
+            "Install \(displayName) before transcribing. The recording and earlier transcripts are unaffected."
+        }
+
+        public static func transcribing(
+            modelName: String,
+            estimate: String
+        ) -> String {
+            let sentenceEstimate = estimate.prefix(1).uppercased()
+                + estimate.dropFirst()
+            return "Transcribing with \(modelName). \(sentenceEstimate)."
+        }
+
+        public static func transcriptionComplete(
+            preservedPath: String
+        ) -> String {
+            "Done. Your earlier transcript is kept as \(preservedPath)."
+        }
+
+        public static let firstTranscriptionComplete =
+            "Done. Transcript files were created."
+
+        public static func segmentCount(_ count: Int) -> String {
+            count == 1 ? "1 segment" : "\(count) segments"
+        }
+
+        public static func fileCount(_ count: Int) -> String {
+            count == 1 ? "1 file" : "\(count) files"
+        }
+    }
 }

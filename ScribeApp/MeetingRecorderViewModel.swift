@@ -55,6 +55,27 @@ enum MediaImportState: Equatable {
     case failed(filename: String, message: String)
 }
 
+enum SessionRetranscriptionState: Equatable {
+    case idle
+    case running(
+        sessionID: UUID,
+        modelName: String,
+        estimate: String
+    )
+    case completed(sessionID: UUID, message: String)
+    case failed(sessionID: UUID, message: String)
+
+    func belongs(to sessionID: UUID) -> Bool {
+        switch self {
+        case .idle:
+            false
+        case let .running(id, _, _), let .completed(id, _),
+            let .failed(id, _):
+            id == sessionID
+        }
+    }
+}
+
 enum SystemTapDiagnosticUIState {
     case idle
     case preparing
@@ -137,6 +158,9 @@ final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var recordingPinStatus:
         RecordingPinFeedback?
     @Published private(set) var mediaImportState: MediaImportState = .idle
+    @Published private(set) var sessionRetranscriptionState:
+        SessionRetranscriptionState = .idle
+    @Published private(set) var sessionContentRevision: UInt64 = 0
     @Published private(set) var systemTapDiagnosticState:
         SystemTapDiagnosticUIState = .idle
     @Published private(set) var systemTapDiagnosticLogURL: URL?
@@ -1376,6 +1400,128 @@ final class MeetingRecorderViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func retranscribeSession(_ session: SessionLibraryItem) {
+        guard
+            session.isAvailable,
+            !isDownloadingModel,
+            !isDownloadingSileroVAD,
+            !isTranscribing,
+            !isImportingMedia,
+            !isRecording
+        else { return }
+        guard modelAvailability == .available else {
+            let message = ScribeCopy.Reading.installModelBeforeTranscribing(
+                selectedModelDescriptor.displayName
+            )
+            sessionRetranscriptionState = .failed(
+                sessionID: session.id,
+                message: message
+            )
+            return
+        }
+
+        let selection = selectedTranscriptionModel
+        let previousRevision = try? CaptureSessionManifest.load(
+            from: session.directory
+        ).transcriptionHistory.last
+        transcriptionState = .preparing
+        sessionRetranscriptionState = .running(
+            sessionID: session.id,
+            modelName: selection.descriptor.displayName,
+            estimate: transcriptionEstimate(
+                duration: session.duration,
+                model: selection.descriptor
+            )
+        )
+        errorMessage = nil
+        Task {
+            do {
+                let segments = try await performBatchTranscription(
+                    sessionDirectory: session.directory,
+                    selection: selection
+                )
+                _ = try await transcriptArtifactWriter.write(
+                    segments: segments,
+                    modelIdentifier: selection.id.rawValue,
+                    to: session.directory
+                )
+                let preservedPath = previousRevision?.artifacts.first(where: {
+                    $0.hasSuffix("transcript.md")
+                })
+                sessionRetranscriptionState = .completed(
+                    sessionID: session.id,
+                    message: preservedPath.map {
+                        ScribeCopy.Reading.transcriptionComplete(
+                            preservedPath: $0
+                        )
+                    } ?? ScribeCopy.Reading.firstTranscriptionComplete
+                )
+                sessionContentRevision &+= 1
+                await reconcileSessionLibrary()
+            } catch {
+                transcriptionState = .failed(
+                    message: error.localizedDescription
+                )
+                sessionRetranscriptionState = .failed(
+                    sessionID: session.id,
+                    message: ScribeCopy.Reading.transcriptionFailed
+                )
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    @discardableResult
+    func renameSpeaker(
+        in session: SessionLibraryItem,
+        speakerID: String,
+        to displayName: String
+    ) async -> Bool {
+        do {
+            _ = try await SpeakerIdentityStore().renameSpeaker(
+                identifiedBy: speakerID,
+                to: displayName,
+                in: session.directory
+            )
+            sessionContentRevision &+= 1
+            await reconcileSessionLibrary()
+            return true
+        } catch {
+            errorMessage = ScribeCopy.Reading.speakerRenameFailed
+            return false
+        }
+    }
+
+    func createNotes(in session: SessionLibraryItem) async {
+        let url = session.directory.appendingPathComponent("notes.md")
+        do {
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try Data().write(to: url, options: .atomic)
+            }
+            await reconcileSessionLibrary()
+            sessionContentRevision &+= 1
+        } catch {
+            errorMessage = ScribeCopy.Reading.notesCreateFailed
+        }
+    }
+
+    private func transcriptionEstimate(
+        duration: TimeInterval,
+        model: ModelDescriptor
+    ) -> String {
+        let factor: Double = switch model.speedRating {
+        case .fastest: 0.08
+        case .fast: 0.12
+        case .balanced: 0.20
+        case .quality: 0.35
+        case nil: 0.25
+        }
+        let seconds = max(10, Int((duration * factor).rounded(.up)))
+        if seconds < 60 { return "about \(seconds) seconds" }
+        let minutes = max(1, Int((Double(seconds) / 60).rounded(.up)))
+        return minutes == 1 ? "about 1 minute" : "about \(minutes) minutes"
     }
 
     func chooseMediaForImport() {

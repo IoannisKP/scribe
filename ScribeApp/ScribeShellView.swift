@@ -158,8 +158,8 @@ struct ScribeShellView: View {
         .overlay {
             if isDropTargeted {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.tint.opacity(0.12))
-                    .stroke(.tint, style: StrokeStyle(
+                    .fill(ScribePalette.accent.opacity(0.12))
+                    .stroke(ScribePalette.accent, style: StrokeStyle(
                         lineWidth: 2,
                         dash: [6, 4]
                     ))
@@ -169,7 +169,7 @@ struct ScribeShellView: View {
                             systemImage: "square.and.arrow.down"
                         )
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(ScribePalette.accent)
                     }
                     .padding(8)
                     .allowsHitTesting(false)
@@ -256,7 +256,7 @@ struct ScribeShellView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(ScribeCopy.Shell.folders)
-                    .font(.caption.weight(.medium))
+                    .font(ScribeTypography.sidebarSection)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
@@ -298,7 +298,7 @@ struct ScribeShellView: View {
                 Rectangle()
                     .fill(
                         selection == rowSelection
-                            ? Color.accentColor
+                            ? ScribePalette.accent
                             : Color.clear
                     )
                     .frame(width: 3, height: 20)
@@ -306,10 +306,11 @@ struct ScribeShellView: View {
                     .frame(width: 16)
                     .foregroundStyle(
                         selection == rowSelection
-                            ? Color.accentColor
+                            ? ScribePalette.accent
                             : Color.secondary
                     )
                 Text(title)
+                    .font(ScribeTypography.sidebarItem)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let count {
@@ -362,19 +363,33 @@ struct ScribeShellView: View {
                     .padding(40)
             case .allSessions, .needsSummary, .imported, .manualFolder,
                 .recording:
-                SessionLibraryView(
-                    sessions: visibleLibrarySessions,
-                    searchQuery: searchQuery,
-                    searchGroups: recorder.sessionSearchGroups,
-                    navigationTarget: $libraryNavigationTarget,
-                    emptyDetail: libraryEmptyDetail,
-                    onStartRecording: {
-                        select(.recording)
-                        recorder.startRecording()
-                    },
-                    onRename: recorder.renameSession,
-                    onMoveToTrash: recorder.moveSessionToTrash
-                )
+                if let target = libraryNavigationTarget,
+                    let session = recorder.sessionLibraryItems.first(where: {
+                        $0.id == target.sessionID
+                    })
+                {
+                    SessionReadingView(
+                        recorder: recorder,
+                        session: session,
+                        initialStartTime: target.startTime,
+                        onClose: { libraryNavigationTarget = nil }
+                    )
+                    .id(target.sessionID)
+                } else {
+                    SessionLibraryView(
+                        sessions: visibleLibrarySessions,
+                        searchQuery: searchQuery,
+                        searchGroups: recorder.sessionSearchGroups,
+                        navigationTarget: $libraryNavigationTarget,
+                        emptyDetail: libraryEmptyDetail,
+                        onStartRecording: {
+                            select(.recording)
+                            recorder.startRecording()
+                        },
+                        onRename: recorder.renameSession,
+                        onMoveToTrash: recorder.moveSessionToTrash
+                    )
+                }
             }
         }
     }
@@ -424,6 +439,7 @@ struct ScribeShellView: View {
 
     private func select(_ newSelection: ScribeShellSelection) {
         selection = newSelection
+        libraryNavigationTarget = nil
         persistedSelection = newSelection.persistenceID
     }
 
@@ -553,7 +569,7 @@ private struct SessionLibraryView: View {
                         }
                     } header: {
                         Text(dateHeading(group.date))
-                            .font(.headline.weight(.semibold))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
@@ -585,12 +601,12 @@ private struct SessionLibraryView: View {
                                     Rectangle()
                                         .fill(
                                             navigationTarget?.sessionID == group.id
-                                                ? Color.accentColor
+                                                ? ScribePalette.accent
                                                 : Color.clear
                                         )
                                         .frame(width: 3, height: 28)
                                     Text(group.session.title)
-                                        .font(.headline)
+                                        .font(ScribeTypography.sessionTitle)
                                     Spacer()
                                     Text(ScribeCopy.Library.resultCount(
                                         group.hits.count
@@ -609,7 +625,7 @@ private struct SessionLibraryView: View {
                                         HStack(alignment: .firstTextBaseline) {
                                             Text(hitLabel(hit))
                                                 .font(.caption.monospacedDigit())
-                                                .foregroundStyle(.tint)
+                                                .foregroundStyle(.secondary)
                                                 .frame(width: 58, alignment: .leading)
                                             Text(hit.text)
                                                 .lineLimit(2)
@@ -632,18 +648,18 @@ private struct SessionLibraryView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(.secondary)
+        VStack(spacing: 12) {
+            EmptyLibraryWaveformView(sessionCount: sessions.count)
+                .padding(.horizontal, 46)
             Text(ScribeCopy.Library.noRecordings)
-                .font(.title2.weight(.medium))
+                .font(.system(size: 17, weight: .medium))
             Text(emptyDetail.isEmpty
                 ? ScribeCopy.Library.noRecordingsDetail
                 : emptyDetail)
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(.secondary)
             Button(ScribeCopy.Library.startRecording, action: onStartRecording)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -659,16 +675,16 @@ private struct SessionLibraryView: View {
                 Rectangle()
                     .fill(
                         navigationTarget?.sessionID == session.id
-                            ? Color.accentColor
+                            ? ScribePalette.accent
                             : Color.clear
                     )
                     .frame(width: 3, height: 42)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.title)
-                        .font(.body.weight(.medium))
+                        .font(ScribeTypography.sessionTitle)
                         .lineLimit(1)
                     Text(metadata(for: session))
-                        .font(.caption)
+                        .font(ScribeTypography.sessionMetadata)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -797,7 +813,7 @@ private struct SidebarRecordingControl: View {
                         Circle()
                             .fill(
                                 recorder.isRecording
-                                    ? Color.red
+                                    ? Color.primary
                                     : Color.secondary
                             )
                             .frame(width: 9, height: 9)
@@ -824,21 +840,19 @@ private struct SidebarRecordingControl: View {
                     label: ScribeCopy.Recording.you,
                     accessibilityLabel: ScribeCopy.Recording.microphoneLevel,
                     value: recorder.recordingLevels.microphone,
-                    color: .accentColor
+                    color: ScribePalette.accent
                 )
                 SidebarSpeechLevelMeter(
                     label: ScribeCopy.Recording.others,
                     accessibilityLabel: ScribeCopy.Recording.systemAudioLevel,
                     value: recorder.recordingLevels.system,
-                    color: .purple
+                    color: ScribePalette.others
                 )
 
                 if let status = recorder.recordingPinStatus {
                     Text(status.message)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(
-                        status.isFailure ? Color.red : Color.accentColor
-                    )
+                    .foregroundStyle(status.isFailure ? .primary : .secondary)
                     .transition(.opacity)
                 } else if let notice = recorder.sidebarRecordingNotice {
                     Text(notice.message)
@@ -873,8 +887,7 @@ private struct SidebarRecordingControl: View {
                     )
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(.bordered)
                 .disabled(!recorder.isRecording || recorder.isBusy)
             }
             .padding(11)

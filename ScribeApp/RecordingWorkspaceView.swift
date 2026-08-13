@@ -199,25 +199,21 @@ private struct RecordingNoticeView: View {
 private struct RecordingTranscriptRowView: View {
     let row: RecordingTranscriptPresentationRow
 
-    private static let palette: [Color] = [
-        .blue, .purple, .orange, .teal, .pink, .indigo, .green, .brown
-    ]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Text(speakerLabel)
-                    .font(.caption.weight(.medium))
+                    .font(ScribeTypography.transcriptSpeaker)
                     .foregroundStyle(speakerColor)
 
                 Text(timestamp(row.paragraph.startTime))
-                    .font(.caption.monospacedDigit())
+                    .font(ScribeTypography.timestamp)
                     .foregroundStyle(.secondary)
 
                 if row.isPartial {
                     Text(ScribeCopy.Recording.partial)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -225,6 +221,7 @@ private struct RecordingTranscriptRowView: View {
                 text: row.paragraph.text,
                 isPartial: row.isPartial
             )
+                .font(ScribeTypography.transcriptBody)
                 .foregroundStyle(row.isPartial ? .secondary : .primary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -246,11 +243,10 @@ private struct RecordingTranscriptRowView: View {
     private var speakerColor: Color {
         let stableID = row.paragraph.speakerID
             ?? "source.\(row.paragraph.source.rawValue)"
-        let index = RecordingViewPresentation.paletteIndex(
-            for: stableID,
-            paletteCount: Self.palette.count
+        return ScribePalette.speaker(
+            id: stableID,
+            source: row.paragraph.source
         )
-        return Self.palette[index]
     }
 
     private func timestamp(_ interval: TimeInterval) -> String {
@@ -343,7 +339,7 @@ private struct MarkdownNotesEditor: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.textContainerInset = NSSize(width: 18, height: 14)
         textView.drawsBackground = false
-        textView.font = .systemFont(ofSize: 16, weight: .regular)
+        textView.font = .systemFont(ofSize: 15, weight: .regular)
         textView.textColor = .labelColor
         textView.setAccessibilityLabel(ScribeCopy.Recording.notes)
         textView.string = text
@@ -410,7 +406,7 @@ private struct MarkdownNotesEditor: NSViewRepresentable {
             defer { isApplyingAttributes = false }
 
             let fullRange = NSRange(location: 0, length: storage.length)
-            let regularFont = NSFont.systemFont(ofSize: 16, weight: .regular)
+            let regularFont = NSFont.systemFont(ofSize: 15, weight: .regular)
             storage.beginEditing()
             storage.setAttributes(
                 [
@@ -422,8 +418,8 @@ private struct MarkdownNotesEditor: NSViewRepresentable {
             highlight(
                 pattern: #"(?m)^#{1,6}(?=\s).*$"#,
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-                    .foregroundColor: NSColor.controlAccentColor
+                    .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+                    .foregroundColor: NSColor.labelColor
                 ],
                 in: storage
             )
@@ -431,16 +427,16 @@ private struct MarkdownNotesEditor: NSViewRepresentable {
                 pattern: #"`[^`\n]+`"#,
                 attributes: [
                     .font: NSFont.monospacedSystemFont(
-                        ofSize: 15,
+                        ofSize: 14,
                         weight: .regular
                     ),
-                    .foregroundColor: NSColor.systemOrange
+                    .foregroundColor: NSColor.secondaryLabelColor
                 ],
                 in: storage
             )
             highlight(
                 pattern: #"(?m)^\s*(?:[-*+] |\d+\. )"#,
-                attributes: [.foregroundColor: NSColor.controlAccentColor],
+                attributes: [.foregroundColor: NSColor.secondaryLabelColor],
                 in: storage
             )
             highlight(

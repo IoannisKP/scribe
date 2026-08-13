@@ -741,6 +741,27 @@ Selecting a search hit already carries its session UUID and seek time. Phase D
 will consume that navigation target when the reading view and audio timeline
 are added; Phase C does not fabricate a temporary reader.
 
+## Milestone 5B Phase D acceptance check
+
+1. Select a live, batch, and imported session. Confirm the reader opens the
+   most substantive available artifact and the rail lists only real files,
+   including immutable transcription revisions.
+2. Drag an artifact row to Finder, copy notes/transcript/summary independently,
+   and use Reveal in Finder. Each action must address that artifact or the
+   complete session folder without combining content.
+3. Play a two-track session from the timeline. Confirm the playhead, highlighted
+   paragraph, pins, and transcript scrolling follow playback; imported sessions
+   render a single unlabeled audio lane.
+4. Rename a speaker inline, then re-transcribe. Confirm the stable speaker name
+   survives and the earlier transcript remains openable under Transcriptions.
+5. Compare a 26–30-second live transcript with a 12–13-second batch transcript.
+   Both must remain readable without assuming a fixed block height or duration.
+6. Inspect the empty reader with no selection. The two-wave ASCII field animates
+   only while the window is key, becomes a still frame under Reduce Motion, and
+   is never drawn behind selected content.
+7. Inspect light and dark appearances. Violet identifies selection and You;
+   teal identifies Others. Buttons and cards remain neutral.
+
 ## Privacy
 
 The project contains no telemetry, analytics, crash reporter, or cloud

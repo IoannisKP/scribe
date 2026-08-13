@@ -279,6 +279,7 @@ correction than the correction deserves.
 - In progress: **Transcribing with Whisper Large v3. About 3 minutes.**
 - Complete: **Done. Your earlier transcript is kept as
   transcript-parakeet-v3.md.**
+- First transcription complete: **Done. Transcript files were created.**
 
 That sentence is the whole feature. It tells the user nothing was lost and
 names the file they can go find.
@@ -290,6 +291,33 @@ names the file they can go find.
 - Copy actions: **Copy notes** · **Copy transcript** · **Copy summary**
 - Reveal: **Reveal in Finder**
 - Drag hint: **Drag any row to Finder or another app**
+
+### Reading view
+
+- Navigation: **Back to sessions**
+- Playback: **Play** · **Pause**
+- Timeline labels: **Timeline** · **Talk time**
+- Speaker action: **Rename speaker**
+- Empty notes: **No notes yet** · **Create notes**
+- Empty audio: **No playable audio is available**
+- Revision section: **Transcriptions**
+
+### Summary before Milestone 6
+
+- Title: **No summary yet**
+- Inert action: **Generate summary**
+- Explanation: **Summary generation arrives in Milestone 6.**
+
+### Reading-view secondary failures
+
+- Session unavailable: **Scribe couldn't read this session. Its files are
+  untouched.**
+- Speaker rename: **Couldn't rename the speaker. The transcript and recording
+  are unaffected.**
+- Notes creation: **Couldn't create notes. The recording and transcript are
+  unaffected.**
+- Re-transcription: **Transcription failed. The recording and earlier
+  transcripts are unaffected.**
 
 ## Import audio or video
 

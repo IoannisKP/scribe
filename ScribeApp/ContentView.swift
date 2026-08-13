@@ -43,7 +43,7 @@ private struct SystemTapDiagnosticView: View {
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("System Tap Diagnostic")
-                        .font(.title2.bold())
+                        .font(.title2.weight(.medium))
                     Text("The aggregate device is never started")
                         .foregroundStyle(.secondary)
                 }
@@ -61,7 +61,7 @@ private struct SystemTapDiagnosticView: View {
                     Text(
                         "A passing result requires no purple dot, no Scribe recording entry, and a callback count of zero."
                     )
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(6)
@@ -114,9 +114,9 @@ private struct SystemTapDiagnosticView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("HELD — DO NOT CLOSE")
                     .font(.headline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.primary)
                 Text("\(secondsRemaining) seconds remaining")
-                    .font(.system(.title, design: .monospaced).bold())
+                    .font(.system(.title, design: .monospaced).weight(.medium))
                 ProgressView(
                     value: Double(90 - secondsRemaining),
                     total: 90
@@ -126,7 +126,7 @@ private struct SystemTapDiagnosticView: View {
                     .foregroundStyle(
                         callbackCount == 0
                             ? Color.primary
-                            : Color.red
+                            : Color.secondary
                     )
             }
         case .registeringComparison:
@@ -139,7 +139,7 @@ private struct SystemTapDiagnosticView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Timing sample appended", systemImage: "checkmark.circle.fill")
                     .font(.headline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.primary)
                 Text(
                     "IOProc registration: \(milliseconds(ioProcTiming(in: sample.timings))) ms"
                 )
@@ -156,7 +156,7 @@ private struct SystemTapDiagnosticView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Diagnostic failed", systemImage: "xmark.octagon.fill")
                     .font(.headline)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.primary)
                 Text(message)
                     .textSelection(.enabled)
             }
@@ -169,7 +169,7 @@ private struct SystemTapDiagnosticView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Diagnostic completed and cleaned up", systemImage: "checkmark.circle.fill")
                 .font(.headline)
-                .foregroundStyle(.green)
+                .foregroundStyle(.primary)
             Text(
                 "First IOProc registration: \(milliseconds(ioProcTiming(in: report.preparationTimings))) ms"
             )
@@ -264,7 +264,7 @@ private struct AppHeader: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Scribe")
-                    .font(.largeTitle.bold())
+                    .font(.largeTitle.weight(.medium))
                 Text("Local-first meeting transcription")
                     .foregroundStyle(.secondary)
             }
@@ -281,7 +281,7 @@ struct PermissionSetupView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Set up recording")
-                    .font(.title2.bold())
+                    .font(.title2.weight(.medium))
                 Text(
                     "Scribe needs two separate permissions to keep your voice and everyone else on isolated local tracks."
                 )
@@ -306,7 +306,7 @@ struct PermissionSetupView: View {
                 Button("Continue to Recording") {
                     recorder.finishPermissionSetup()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .disabled(
                     !recorder.permissionsReady
                         || recorder.isCheckingPermissions
@@ -346,11 +346,11 @@ struct PermissionSetupView: View {
                     Button("Allow Microphone") {
                         recorder.requestMicrophonePermission()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .disabled(recorder.isCheckingPermissions)
                 case .authorized:
                     Label("Ready", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.primary)
                 case .denied, .restricted:
                     Button("Open Microphone Settings") {
                         recorder.openMicrophoneSettings()
@@ -395,7 +395,7 @@ struct PermissionSetupView: View {
                         Button("Check System Audio Access") {
                             recorder.requestSystemAudioPermission()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         .disabled(recorder.isCheckingPermissions)
                     } else {
                         Button("Check Again") {
@@ -512,10 +512,7 @@ struct RecordingView: View {
                                             : "record.circle"
                                 )
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(
-                                recorder.isRecording ? .red : .accentColor
-                            )
+                            .buttonStyle(.bordered)
                             .disabled(
                                 recorder.isBusy
                                     || recorder.isDownloadingModel
@@ -734,7 +731,7 @@ struct RecordingView: View {
                             systemImage: "clock.badge.exclamationmark"
                         )
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                     }
                 }
 
@@ -748,7 +745,7 @@ struct RecordingView: View {
                     )
                     .foregroundStyle(
                         recorder.isSelectedModelAvailable
-                            ? .green : .secondary
+                            ? .primary : .secondary
                     )
 
                     if recorder.isDownloadingModel,
@@ -781,7 +778,7 @@ struct RecordingView: View {
                 )
                 .font(.caption)
                 .foregroundStyle(
-                    recorder.modelSafetyAllowsUse ? .green : .orange
+                    recorder.modelSafetyAllowsUse ? .primary : .secondary
                 )
 
                 Text(recorder.totalModelDiskText)
@@ -795,7 +792,7 @@ struct RecordingView: View {
                             systemImage: "externaldrive.badge.questionmark"
                         )
                         .font(.headline)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.primary)
 
                         Text(
                             "These folders are not managed by the model catalogue. Review them before removing anything."
@@ -904,7 +901,7 @@ struct RecordingView: View {
                     Button("Transcribe Recording") {
                         recorder.transcribeLatestRecording()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .disabled(
                         !recorder.hasRecording
                             || !recorder.isSelectedModelAvailable
@@ -930,7 +927,7 @@ struct RecordingView: View {
                     Label(importStatus, systemImage: "square.and.arrow.down")
                         .font(.callout)
                         .foregroundStyle(
-                            recorder.isImportingMedia ? .orange : .secondary
+                            .secondary
                         )
                 }
 
@@ -1043,7 +1040,7 @@ struct RecordingView: View {
                 Button("Resume") {
                     recorder.resumeSelectedModelDownload()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
             } else if recorder.selectedModelCanDelete {
                 Button("Move to Trash…", role: .destructive) {
                     showsDeleteModelConfirmation = true
@@ -1058,7 +1055,7 @@ struct RecordingView: View {
                 Button("Install") {
                     recorder.downloadSelectedModel()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .disabled(
                     recorder.isDownloadingModel
                         || recorder.isDownloadingSileroVAD
@@ -1097,9 +1094,10 @@ private struct TranscriptSegmentRow: View {
 
             if segment.source != .imported {
                 Text(segment.source == .microphone ? "You" : "Others")
-                    .font(.caption.bold())
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(
-                        segment.source == .microphone ? .blue : .purple
+                        segment.source == .microphone
+                            ? ScribePalette.accent : ScribePalette.others
                     )
                     .frame(width: 50, alignment: .leading)
             }
@@ -1189,7 +1187,7 @@ private struct ErrorMessageView: View {
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.red)
+            .foregroundStyle(.primary)
             .textSelection(.enabled)
             .accessibilityLabel("Error: \(message)")
     }
