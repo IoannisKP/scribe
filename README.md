@@ -645,6 +645,31 @@ This check uses the already-downloaded VAD and Parakeet models:
    full transport/VAD/spool/ASR integration, and the virtual one-hour
    two-source bounded-window soak.
 
+## Milestone 5B Phase 2 acceptance check
+
+1. Start a recording and confirm the notes surface and transcript rail replace
+   the setup view without adding a header above the notes.
+2. Type Markdown syntax continuously. Confirm the syntax is highlighted while
+   the plain text appears immediately in the session's `notes.md`.
+3. Resize and collapse the transcript rail, reopen it, and confirm its width is
+   retained. The floating recording control must not cover editable notes.
+4. Confirm **You** and **Others** meters react to Silero speech probability even
+   before a transcript row exists or when live transcription is unavailable.
+5. With Parakeet selected, confirm the first-result estimate is derived from its
+   14-second window plus overlap. With Whisper selected, confirm the estimate
+   reflects its 30-second window plus overlap.
+6. Watch a partial row become final. Its position must remain stable, and only
+   the rewritten tail receives the brief completion highlight.
+7. Exercise missing-model, model-load failure, missing-Silero, buffering,
+   catching-up, silent-system-track, and system-audio-preparing states. Every
+   transcription failure must say that recording is unaffected.
+8. Verify VoiceOver labels and dark appearance for the panes, rail controls,
+   elapsed time, level meters, status, and stop control.
+
+The recording rail is content-driven. It does not use an engine block as a
+layout unit: live rows around 26–30 seconds and batch-shaped rows around 12–13
+seconds wrap naturally and pass through the same paragraphing rules.
+
 ## Privacy
 
 The project contains no telemetry, analytics, crash reporter, or cloud

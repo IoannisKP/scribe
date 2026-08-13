@@ -583,6 +583,32 @@ Small, and Medium and transcribing the same committed audio after every switch.
 The final unload returns the coordinator to idle; missing models cause an
 explicit skip rather than acquisition or substitution.
 
+## Recording workspace presentation
+
+`RecordingWorkspaceView` replaces the setup surface while capture is starting,
+running, or stopping. Its notes editor writes plain UTF-8 Markdown to the active
+session's existing `notes.md`; AppKit attributes highlight syntax without
+changing the stored string. Revision-stamped atomic writes serialize rapid
+edits, and stop—including an automatic low-disk stop—flushes the latest text.
+The bottom recording control has reserved layout space, so it never obscures
+editable notes.
+
+The transcript rail projects `LiveTranscriptRow` values through the shared
+`TranscriptParagrapher`. Paragraphs may span engine windows and are therefore
+independent of whether a source produced 12-second or 30-second blocks. Stable
+live-row-derived identities keep partial rows in place while final tail text is
+rewritten. Speaker colors use a stable identifier hash over an eight-color
+palette rather than assuming exactly two future speakers.
+
+`LiveSpeechPipelineMetrics` retains only the latest Silero speech probability
+for each live source. The workspace polls those small values with the existing
+pipeline state, so the You/Others meters remain independent of ASR availability
+or backpressure. The first-text estimate comes from the selected engine's
+window duration plus overlap; no Parakeet-specific delay is embedded in the
+view. Preparing, buffering, catch-up, missing-model, missing-Silero, load
+failure, and quiet-system states are pure presentation projections whose copy
+lives in `ScribeCopy` and `scribe-copy.md`.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.

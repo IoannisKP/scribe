@@ -11,8 +11,12 @@ struct ContentView: View {
         Group {
             if recorder.showsPermissionSetup {
                 PermissionSetupView(recorder: recorder)
+                    .padding(40)
+            } else if recorder.showsRecordingWorkspace {
+                RecordingWorkspaceView(recorder: recorder)
             } else {
                 RecordingView(recorder: recorder)
+                    .padding(40)
             }
         }
         .frame(
@@ -20,7 +24,6 @@ struct ContentView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .padding(40)
         .dropDestination(for: URL.self) { urls, _ in
             guard recorder.canImportMedia, !urls.isEmpty else { return false }
             recorder.importMediaFiles(urls)

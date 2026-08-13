@@ -120,6 +120,18 @@ header-only system track is a valid recording. Never style this as an error.
 
 State the actual delay. Users forgive a wait they were told about.
 
+### Recording workspace
+
+- Surfaces: **Notes** · **Transcript**
+- Notes placeholder: **Type while you listen**
+- Rail actions: **Show transcript** · **Hide transcript**
+- Accessibility: **Transcript width** · **Recording controls** · **You speech
+  level** · **Others speech level** · **Elapsed recording time**
+
+### Notes couldn't be saved
+
+**Couldn't save notes. The recording is unaffected.**
+
 ### Transcription running behind
 
 **Catching up on transcription. Recording is unaffected.**
