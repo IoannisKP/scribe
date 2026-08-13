@@ -1086,3 +1086,42 @@ Milestone 3 pipeline, because that pipeline predated session-folder storage.
 One writer prevents the durable batch and live formats from drifting. Rejecting
 partial rows avoids presenting an interrupted transcript as complete, while the
 unchanged WAV tracks preserve a safe re-transcription path.
+
+## 2026-08-13 — Keep speaker identity in session metadata
+
+**Decision:** Store a versioned speaker registry in `session.json`, keyed by
+stable string IDs and carrying source, optional display name, and whether that
+name was machine- or user-assigned. Give existing one-speaker-per-source
+sessions deterministic `source.<source>` identities during decode. Permit
+multiple identities for one source. Rename the registry entry without modifying
+audio or any transcription revision.
+
+**Alternatives:** Put names directly in each transcript revision; infer identity
+from the source label every time; restrict every source to one permanent
+speaker.
+
+**Reasoning:** A person's name should survive re-transcription and should be
+editable without rewriting history. Source is an acquisition channel, not a
+lasting speaker model, so an arbitrary per-source registry supports future
+diarization without another manifest migration. Name provenance prevents a
+later machine suggestion from silently replacing an explicit user choice.
+
+## 2026-08-13 — Derive transcript paragraphs once from word timings
+
+**Decision:** Use one `TranscriptParagrapher` for durable Markdown and both
+Milestone 5B transcript views. Break after a sentence-ending word only when the
+next word begins more than 400 ms later. Once a paragraph would exceed 45
+seconds, prefer the latest sentence ending within that span; if none exists,
+break at its largest word gap. Never merge across source or speaker changes. If
+timings are missing or their tokens cannot reconstruct the engine text, retain
+the original segment unchanged.
+
+**Alternatives:** Paragraph each renderer independently; use VAD frame history;
+show every ASR segment as a paragraph; split solely by character or time count.
+
+**Reasoning:** The measured live transcript had sparse but meaningful word gaps,
+including sentence-aligned pauses, while VAD probabilities are not retained.
+One pure boundary function keeps live, reading, and exported Markdown identical.
+The 45-second ceiling prevents continuous speech from becoming a wall of text,
+and the passthrough rule makes formatting subordinate to exact transcript
+preservation.

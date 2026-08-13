@@ -177,6 +177,133 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testSpeakerRenamePersistsAcrossRetranscriptionAndLabelsExports()
+        throws
+    {
+        try withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root
+            )
+            let segment = TranscriptSegment(
+                text: "Remote words.",
+                startTime: 1,
+                endTime: 2,
+                source: .system,
+                words: [
+                    WordTiming(
+                        text: "Remote",
+                        startTime: 1,
+                        endTime: 1.4
+                    ),
+                    WordTiming(
+                        text: "words.",
+                        startTime: 1.5,
+                        endTime: 2
+                    )
+                ]
+            )
+            let writer = TranscriptArtifactWriter()
+            _ = try writer.write(
+                segments: [segment],
+                modelIdentifier: "first-model",
+                to: created.directory
+            )
+            _ = try SpeakerIdentityStore().renameSpeaker(
+                identifiedBy: "source.system",
+                to: "Maria",
+                in: created.directory
+            )
+
+            _ = try writer.write(
+                segments: [segment],
+                modelIdentifier: "second-model",
+                to: created.directory
+            )
+
+            let manifest = try CaptureSessionManifest.load(
+                from: created.directory
+            )
+            let speaker = try XCTUnwrap(
+                manifest.speakerIdentity(identifiedBy: "source.system")
+            )
+            XCTAssertEqual(speaker.displayName, "Maria")
+            XCTAssertEqual(speaker.nameAssignment, .userAssigned)
+            XCTAssertEqual(manifest.transcriptionHistory.count, 2)
+            let markdown = try String(
+                contentsOf: created.directory.appendingPathComponent(
+                    "transcript.md"
+                ),
+                encoding: .utf8
+            )
+            XCTAssertTrue(markdown.contains("**Maria · 00:01**"))
+            XCTAssertFalse(markdown.contains("**Others ·"))
+            let json = try String(
+                contentsOf: created.directory.appendingPathComponent(
+                    "transcript.json"
+                ),
+                encoding: .utf8
+            )
+            XCTAssertTrue(json.contains(
+                "\"speakerID\" : \"source.system\""
+            ))
+        }
+    }
+
+    func testTranscriptMarkdownUsesSharedParagraphBoundaries() throws {
+        try withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root
+            )
+            let segment = TranscriptSegment(
+                text: "First sentence. Second sentence.",
+                startTime: 0,
+                endTime: 2,
+                source: .microphone,
+                words: [
+                    WordTiming(
+                        text: "First",
+                        startTime: 0,
+                        endTime: 0.2
+                    ),
+                    WordTiming(
+                        text: "sentence.",
+                        startTime: 0.2,
+                        endTime: 0.5
+                    ),
+                    WordTiming(
+                        text: "Second",
+                        startTime: 1.1,
+                        endTime: 1.4
+                    ),
+                    WordTiming(
+                        text: "sentence.",
+                        startTime: 1.4,
+                        endTime: 2
+                    )
+                ]
+            )
+
+            _ = try TranscriptArtifactWriter().write(
+                segments: [segment],
+                modelIdentifier: "test",
+                to: created.directory
+            )
+
+            let markdown = try String(
+                contentsOf: created.directory.appendingPathComponent(
+                    "transcript.md"
+                ),
+                encoding: .utf8
+            )
+            XCTAssertEqual(
+                markdown.components(separatedBy: "**You ·").count - 1,
+                2
+            )
+            XCTAssertTrue(markdown.contains("**You · 00:00**"))
+            XCTAssertTrue(markdown.contains("**You · 00:01**"))
+        }
+    }
+
     func testLiveTranscriptionWritesSameArtifactSetAsBatch() throws {
         try withTemporaryDirectory { root in
             let folderManager = SessionFolderManager()

@@ -67,8 +67,15 @@ public struct LegacySessionMigrator: @unchecked Sendable {
                     createdAt: date,
                     source: manifest.source,
                     tracks: manifest.tracks,
+                    speakerIdentities: manifest.speakerIdentities,
                     artifacts: manifest.artifacts,
-                    transcriptionHistory: manifest.transcriptionHistory
+                    transcriptionHistory: manifest.transcriptionHistory,
+                    originalFilename: manifest.originalFilename,
+                    originalFormat: manifest.originalFormat,
+                    systemAudioStartupStageTimings:
+                        manifest.systemAudioStartupStageTimings,
+                    systemAudioGraphPreparation:
+                        manifest.systemAudioGraphPreparation
                 )
                 try manifest.write(to: directory)
 

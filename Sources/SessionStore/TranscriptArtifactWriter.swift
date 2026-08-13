@@ -77,7 +77,13 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
             withIntermediateDirectories: true
         )
 
-        let payloads = try makePayloads(segments: segments)
+        let attributedSegments = segments.map {
+            Self.attributingSpeaker(to: $0, from: manifest)
+        }
+        let payloads = try makePayloads(
+            segments: attributedSegments,
+            manifest: manifest
+        )
         let names = ["transcript.md", "transcript.json", "transcript.srt"]
         var revisionFiles: [URL] = []
         var currentFiles: [URL] = []
@@ -152,19 +158,20 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
     }
 
     private func makePayloads(
-        segments: [TranscriptSegment]
+        segments: [TranscriptSegment],
+        manifest: CaptureSessionManifest
     ) throws -> [Data] {
         let ordered = TranscriptTimeline.merge(segments)
-        let markdown = ordered.map { segment in
-            let timestamp = Self.markdownTime(segment.startTime)
-            switch segment.source {
-            case .microphone:
-                return "**You · \(timestamp)**\n\n\(segment.text)"
-            case .system:
-                return "**Others · \(timestamp)**\n\n\(segment.text)"
-            case .imported:
-                return "**\(timestamp)**\n\n\(segment.text)"
-            }
+        let paragraphs = TranscriptParagrapher.paragraphs(from: ordered)
+        let markdown = paragraphs.map { paragraph in
+            let timestamp = Self.markdownTime(paragraph.startTime)
+            let label = Self.speakerLabel(
+                for: paragraph,
+                manifest: manifest
+            )
+            let heading = label.map { "\($0) · \(timestamp)" }
+                ?? timestamp
+            return "**\(heading)**\n\n\(paragraph.text)"
         }.joined(separator: "\n\n") + (ordered.isEmpty ? "" : "\n")
 
         let jsonRows = ordered.map(TranscriptJSONSegment.init)
@@ -181,6 +188,44 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
         }.joined(separator: "\n\n") + (ordered.isEmpty ? "" : "\n")
 
         return [Data(markdown.utf8), json, Data(srt.utf8)]
+    }
+
+    private static func attributingSpeaker(
+        to segment: TranscriptSegment,
+        from manifest: CaptureSessionManifest
+    ) -> TranscriptSegment {
+        let speakerID = segment.speakerID
+            ?? manifest.soleSpeakerIdentity(for: segment.source)?.id
+        return TranscriptSegment(
+            text: segment.text,
+            startTime: segment.startTime,
+            endTime: segment.endTime,
+            source: segment.source,
+            speakerID: speakerID,
+            confidence: segment.confidence,
+            words: segment.words
+        )
+    }
+
+    private static func speakerLabel(
+        for paragraph: TranscriptParagraph,
+        manifest: CaptureSessionManifest
+    ) -> String? {
+        if let speakerID = paragraph.speakerID,
+            let displayName = manifest.speakerIdentity(
+                identifiedBy: speakerID
+            )?.displayName
+        {
+            return displayName
+        }
+        switch paragraph.source {
+        case .microphone:
+            return "You"
+        case .system:
+            return "Others"
+        case .imported:
+            return nil
+        }
     }
 
     private static func markdownTime(_ interval: TimeInterval) -> String {
