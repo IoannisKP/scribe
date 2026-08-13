@@ -1125,3 +1125,22 @@ One pure boundary function keeps live, reading, and exported Markdown identical.
 The 45-second ceiling prevents continuous speech from becoming a wall of text,
 and the passthrough rule makes formatting subordinate to exact transcript
 preservation.
+
+## 2026-08-13 — Treat ASR windows as data, not recording-view layout
+
+**Decision:** Build the recording transcript rail from shared paragraph output,
+allowing a paragraph to span consecutive live rows from the same source and
+speaker. Keep row identity anchored to the first contributing live row and use
+content-driven height. Derive the first-partial estimate from the selected
+engine's window plus overlap. Drive recording meters from Silero probability,
+not from transcript arrival.
+
+**Alternatives:** Render one fixed-height card per ASR window; tune the view for
+Parakeet's 12.5-second stride or live VAD's 26–30-second ceiling rows; animate
+new final rows into replacement positions; infer speech activity from ASR text.
+
+**Reasoning:** Engine geometry and VAD segmentation legitimately change the
+transcript's shape, and re-transcription can change it again without changing
+the meeting. Window-sized layout would make correct output look inconsistent.
+Paragraph identity and content-driven height preserve visual continuity, while
+VAD-derived meters remain responsive when ASR is loading, absent, or behind.

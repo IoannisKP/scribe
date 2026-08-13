@@ -315,6 +315,14 @@ final class LiveSpeechPipelineTests: XCTestCase {
         XCTAssertEqual(pipelineMetrics.processedBlockCount, 2)
         XCTAssertEqual(pipelineMetrics.emittedSpeechSegmentCount, 2)
         XCTAssertEqual(pipelineMetrics.emittedWindowCount, 2)
+        XCTAssertEqual(
+            pipelineMetrics.speechProbabilities[.microphone],
+            0.05
+        )
+        XCTAssertEqual(
+            pipelineMetrics.speechProbabilities[.system],
+            0.05
+        )
 
         let microphoneWindow = try await pipeline.nextWindow(
             for: .microphone

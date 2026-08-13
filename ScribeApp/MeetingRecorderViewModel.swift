@@ -116,6 +116,12 @@ final class MeetingRecorderViewModel: ObservableObject {
         LiveTranscriptionPipelineState = .idle
     @Published private(set) var liveTranscriptRows:
         [LiveTranscriptRow] = []
+    @Published private(set) var liveSpeechMetrics:
+        LiveSpeechPipelineMetrics = .zero
+    @Published private(set) var recordingStartedAt: Date?
+    @Published private(set) var activeNotesURL: URL?
+    @Published private(set) var notesText = ""
+    @Published private(set) var systemTrackHasBeenSilent = false
     @Published private(set) var mediaImportState: MediaImportState = .idle
     @Published private(set) var systemTapDiagnosticState:
         SystemTapDiagnosticUIState = .idle
@@ -167,6 +173,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let legacySessionMigrator = LegacySessionMigrator()
     private let sessionLibraryMonitor = SessionLibraryMonitor()
     private let systemTapDiagnostic = SystemTapPrewarmDiagnostic()
+    private let notesWriter = NotesDocumentWriter()
     private let sessionIndex: SessionIndex?
     private let sessionReconciler: SessionReconciler?
     private let liveTransport: LiveAudioTransport?
@@ -178,6 +185,8 @@ final class MeetingRecorderViewModel: ObservableObject {
     private var handledAutomaticStopSessionDirectory: URL?
     private var libraryAccessURL: URL?
     private var systemTapDiagnosticTask: Task<Void, Never>?
+    private var notesRevision: UInt64 = 0
+    private var lastSystemSpeechAt: Date?
 
     init() {
         let microphonePermissionAuthorizer =
@@ -291,6 +300,71 @@ final class MeetingRecorderViewModel: ObservableObject {
         isBusy
             && !isRecording
             && systemAudioPrewarmState == .preparing
+    }
+
+    var showsRecordingWorkspace: Bool {
+        switch captureState {
+        case .starting, .recording, .stopping:
+            true
+        case .idle, .stopped, .failed:
+            isWaitingToStartRecording
+        }
+    }
+
+    var recordingTranscriptRows: [RecordingTranscriptPresentationRow] {
+        RecordingViewPresentation.transcriptRows(from: liveTranscriptRows)
+    }
+
+    var recordingLevels: RecordingLevelSnapshot {
+        RecordingViewPresentation.levels(from: liveSpeechMetrics)
+    }
+
+    var expectedFirstTextDelay: Int {
+        guard let geometry = selectedModelDescriptor.windowGeometry else {
+            return 0
+        }
+        return RecordingViewPresentation.firstTextDelay(
+            windowDuration: geometry.duration,
+            overlap: geometry.overlap
+        )
+    }
+
+    var recordingNotice: RecordingStatusNotice? {
+        RecordingViewPresentation.notice(
+            isPreparingSystemAudio: isWaitingToStartRecording,
+            isRecording: isRecording,
+            selectedModelDisplayName: selectedModelDescriptor.displayName,
+            firstTextDelay: expectedFirstTextDelay,
+            rowsAreEmpty: recordingTranscriptRows.isEmpty,
+            systemTrackHasBeenSilent: systemTrackHasBeenSilent,
+            speechState: liveSpeechPipelineState,
+            transcriptionState: liveTranscriptionPipelineState,
+            transportState: liveTransportState
+        )
+    }
+
+    func elapsedRecordingTime(at date: Date = Date()) -> TimeInterval {
+        guard let recordingStartedAt else { return 0 }
+        return max(0, date.timeIntervalSince(recordingStartedAt))
+    }
+
+    func updateNotes(_ text: String) {
+        guard text != notesText else { return }
+        notesText = text
+        guard let activeNotesURL else { return }
+        notesRevision &+= 1
+        let revision = notesRevision
+        Task {
+            do {
+                try await notesWriter.write(
+                    text,
+                    to: activeNotesURL,
+                    revision: revision
+                )
+            } catch {
+                errorMessage = ScribeCopy.Recording.notesSaveFailed
+            }
+        }
     }
 
     var systemTapDiagnosticIsActive: Bool {
@@ -864,10 +938,25 @@ final class MeetingRecorderViewModel: ObservableObject {
         liveTranscriptionPipeline = nil
         liveTranscriptionPipelineState = .idle
         liveTranscriptRows = []
+        liveSpeechMetrics = .zero
+        recordingStartedAt = nil
+        activeNotesURL = nil
+        notesText = ""
+        systemTrackHasBeenSilent = false
+        lastSystemSpeechAt = nil
         handledAutomaticStopSessionDirectory = nil
         Task {
             do {
                 let sessionDirectory = try makeSessionDirectory()
+                let notesURL = sessionDirectory.appendingPathComponent(
+                    "notes.md",
+                    isDirectory: false
+                )
+                activeNotesURL = notesURL
+                notesText = (try? String(
+                    contentsOf: notesURL,
+                    encoding: .utf8
+                )) ?? ""
                 guard let liveTransport else {
                     throw LiveAudioTransportError.operationFailed(
                         "Scribe could not initialize its bounded live-audio buffer."
@@ -879,6 +968,8 @@ final class MeetingRecorderViewModel: ObservableObject {
                 )
                 microphoneURL = paths.microphoneURL
                 systemURL = paths.systemURL
+                recordingStartedAt = Date()
+                lastSystemSpeechAt = recordingStartedAt
                 await startLiveSpeechPipelineIfAvailable(
                     sessionDirectory: sessionDirectory,
                     transport: liveTransport
@@ -903,6 +994,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                     message += " \(cleanupMessage)"
                 }
                 errorMessage = message
+                recordingStartedAt = nil
             }
             await refreshPermissionStatus()
             captureState = await coordinator.state
@@ -923,6 +1015,19 @@ final class MeetingRecorderViewModel: ObservableObject {
         isBusy = true
         errorMessage = nil
         Task {
+            var messages: [String] = []
+            if let activeNotesURL {
+                notesRevision &+= 1
+                do {
+                    try await notesWriter.write(
+                        notesText,
+                        to: activeNotesURL,
+                        revision: notesRevision
+                    )
+                } catch {
+                    messages.append(ScribeCopy.Recording.notesSaveFailed)
+                }
+            }
             do {
                 let result = try await coordinator.stopRecording()
                 microphoneURL = result.microphone.outputURL
@@ -930,13 +1035,13 @@ final class MeetingRecorderViewModel: ObservableObject {
                 transcriptSegments = []
                 transcriptionState = .idle
             } catch {
-                var message = error.localizedDescription
+                messages.append(error.localizedDescription)
                 if let liveProcessingMessage =
                     await finishAndDiscardLiveProcessing()
                 {
-                    message += " \(liveProcessingMessage)"
+                    messages.append(liveProcessingMessage)
                 }
-                errorMessage = message
+                errorMessage = messages.joined(separator: " ")
                 captureState = await coordinator.state
                 isBusy = false
                 return
@@ -944,9 +1049,13 @@ final class MeetingRecorderViewModel: ObservableObject {
             if let liveProcessingMessage =
                 await finishAndDiscardLiveProcessing()
             {
-                errorMessage = liveProcessingMessage
+                messages.append(liveProcessingMessage)
             }
+            errorMessage = messages.isEmpty
+                ? nil
+                : messages.joined(separator: " ")
             captureState = await coordinator.state
+            recordingStartedAt = nil
             isBusy = false
         }
     }
@@ -1837,6 +1946,11 @@ final class MeetingRecorderViewModel: ObservableObject {
                     if let liveSpeechPipeline {
                         liveSpeechPipelineState =
                             await liveSpeechPipeline.state
+                        liveSpeechMetrics = await liveSpeechPipeline.metrics
+                        updateSystemSilenceState()
+                    } else {
+                        liveSpeechMetrics = .zero
+                        systemTrackHasBeenSilent = false
                     }
                     if let liveTranscriptionPipeline {
                         liveTranscriptionPipelineState =
@@ -1873,11 +1987,23 @@ final class MeetingRecorderViewModel: ObservableObject {
 
         handledAutomaticStopSessionDirectory = sessionDirectory
         isBusy = true
+        var messages: [String] = []
+        if let activeNotesURL {
+            notesRevision &+= 1
+            do {
+                try await notesWriter.write(
+                    notesText,
+                    to: activeNotesURL,
+                    revision: notesRevision
+                )
+            } catch {
+                messages.append(ScribeCopy.Recording.notesSaveFailed)
+            }
+        }
         microphoneURL = result.microphone.outputURL
         systemURL = result.system.outputURL
         transcriptSegments = []
         transcriptionState = .idle
-        var messages: [String] = []
         switch result.stopReason {
         case let .lowDiskSpace(availableBytes, reserveBytes):
             let available = ByteCountFormatter.string(
@@ -1904,6 +2030,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         errorMessage = messages.isEmpty
             ? nil
             : messages.joined(separator: " ")
+        recordingStartedAt = nil
         isBusy = false
     }
 
@@ -2278,4 +2405,33 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
+    private func updateSystemSilenceState(now: Date = Date()) {
+        guard isRecording, let recordingStartedAt else {
+            systemTrackHasBeenSilent = false
+            return
+        }
+        if (liveSpeechMetrics.speechProbabilities[.system] ?? 0) >= 0.10 {
+            lastSystemSpeechAt = now
+            systemTrackHasBeenSilent = false
+            return
+        }
+        let lastActivity = lastSystemSpeechAt ?? recordingStartedAt
+        systemTrackHasBeenSilent = now.timeIntervalSince(lastActivity) >= 30
+    }
+
+}
+
+private actor NotesDocumentWriter {
+    private var latestRevisionByURL: [URL: UInt64] = [:]
+
+    func write(
+        _ text: String,
+        to url: URL,
+        revision: UInt64
+    ) throws {
+        let latest = latestRevisionByURL[url] ?? 0
+        guard revision >= latest else { return }
+        try Data(text.utf8).write(to: url, options: .atomic)
+        latestRevisionByURL[url] = revision
+    }
 }

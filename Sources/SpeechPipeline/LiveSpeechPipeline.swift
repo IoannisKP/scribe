@@ -114,6 +114,28 @@ public struct LiveSpeechPipelineMetrics: Equatable, Sendable {
     public let deliveredWindowCount: UInt64
     public let pendingWindowCount: UInt64
     public let peakBufferedSampleCountPerSource: Int
+    public let speechProbabilities: [AudioSource: Float]
+
+    public init(
+        processedBlockCount: UInt64,
+        processedSampleCount: UInt64,
+        emittedSpeechSegmentCount: UInt64,
+        emittedWindowCount: UInt64,
+        deliveredWindowCount: UInt64,
+        pendingWindowCount: UInt64,
+        peakBufferedSampleCountPerSource: Int,
+        speechProbabilities: [AudioSource: Float]
+    ) {
+        self.processedBlockCount = processedBlockCount
+        self.processedSampleCount = processedSampleCount
+        self.emittedSpeechSegmentCount = emittedSpeechSegmentCount
+        self.emittedWindowCount = emittedWindowCount
+        self.deliveredWindowCount = deliveredWindowCount
+        self.pendingWindowCount = pendingWindowCount
+        self.peakBufferedSampleCountPerSource =
+            peakBufferedSampleCountPerSource
+        self.speechProbabilities = speechProbabilities
+    }
 
     public static let zero = LiveSpeechPipelineMetrics(
         processedBlockCount: 0,
@@ -122,7 +144,8 @@ public struct LiveSpeechPipelineMetrics: Equatable, Sendable {
         emittedWindowCount: 0,
         deliveredWindowCount: 0,
         pendingWindowCount: 0,
-        peakBufferedSampleCountPerSource: 0
+        peakBufferedSampleCountPerSource: 0,
+        speechProbabilities: [:]
     )
 }
 
@@ -370,7 +393,8 @@ public actor LiveSpeechPipeline {
             deliveredWindowCount: metrics.deliveredWindowCount + 1,
             pendingWindowCount: metrics.pendingWindowCount - 1,
             peakBufferedSampleCountPerSource:
-                metrics.peakBufferedSampleCountPerSource
+                metrics.peakBufferedSampleCountPerSource,
+            speechProbabilities: metrics.speechProbabilities
         )
         updateStateForPendingWindows()
         return window
@@ -480,6 +504,10 @@ public actor LiveSpeechPipeline {
         )
         processors[block.source] = processor
         try append(result.windows)
+        var probabilities = metrics.speechProbabilities
+        if let probability = processor.latestSpeechProbability {
+            probabilities[block.source] = probability
+        }
 
         metrics = LiveSpeechPipelineMetrics(
             processedBlockCount: metrics.processedBlockCount + 1,
@@ -495,7 +523,8 @@ public actor LiveSpeechPipeline {
             peakBufferedSampleCountPerSource: max(
                 metrics.peakBufferedSampleCountPerSource,
                 processor.peakBufferedSampleCount
-            )
+            ),
+            speechProbabilities: probabilities
         )
         updateStateForPendingWindows()
     }
@@ -511,6 +540,10 @@ public actor LiveSpeechPipeline {
             let result = try await processor.finish(detector: detector)
             processors[source] = processor
             try append(result.windows)
+            var probabilities = metrics.speechProbabilities
+            if let probability = processor.latestSpeechProbability {
+                probabilities[source] = probability
+            }
             metrics = LiveSpeechPipelineMetrics(
                 processedBlockCount: metrics.processedBlockCount,
                 processedSampleCount: metrics.processedSampleCount,
@@ -523,7 +556,8 @@ public actor LiveSpeechPipeline {
                 peakBufferedSampleCountPerSource: max(
                     metrics.peakBufferedSampleCountPerSource,
                     processor.peakBufferedSampleCount
-                )
+                ),
+                speechProbabilities: probabilities
             )
         }
     }
@@ -547,7 +581,8 @@ public actor LiveSpeechPipeline {
                 deliveredWindowCount: metrics.deliveredWindowCount,
                 pendingWindowCount: metrics.pendingWindowCount + 1,
                 peakBufferedSampleCountPerSource:
-                    metrics.peakBufferedSampleCountPerSource
+                    metrics.peakBufferedSampleCountPerSource,
+                speechProbabilities: metrics.speechProbabilities
             )
         }
     }
@@ -664,6 +699,7 @@ struct LiveSpeechSourceProcessor {
     let configuration: LiveSpeechSegmentationConfiguration
 
     private(set) var peakBufferedSampleCount = 0
+    private(set) var latestSpeechProbability: Float?
     private var buffer = TimelineSampleBuffer()
     private var expectedSampleIndex: UInt64 = 0
     private var nextFrameStart: UInt64 = 0
@@ -728,6 +764,7 @@ struct LiveSpeechSourceProcessor {
                 for: frame,
                 source: source
             )
+            latestSpeechProbability = probability
             let result = try processObservation(
                 probability: probability,
                 frameStart: nextFrameStart,
@@ -771,6 +808,7 @@ struct LiveSpeechSourceProcessor {
                 for: frame,
                 source: source
             )
+            latestSpeechProbability = probability
             let result = try processObservation(
                 probability: probability,
                 frameStart: nextFrameStart,
