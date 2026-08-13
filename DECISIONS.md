@@ -1257,3 +1257,25 @@ artifact meanings for low-vision users where dots do not. Grouped timed hits
 keep repeated matches in one meeting intelligible. Folder and manifest names
 must agree in Finder and Scribe, while Trash preserves the same recovery
 guarantee already used for models.
+
+## 2026-08-13 — Make reading independent of transcription block geometry
+
+**Decision:** Project transcript paragraphs, playback, and artifact metadata
+from timed session data rather than a presumed segment length. Use violet only
+for selection and the You source, teal only for Others, and an eight-entry
+appearance-adaptive speaker palette for future multi-party attribution. Put
+timestamps, durations, elapsed time, and byte counts in system monospace; use
+only regular and medium system weights elsewhere. Keep the animated two-source
+ASCII waveform exclusive to the no-selection reader state and pause it when the
+window is not key or Reduce Motion is active.
+
+**Alternatives:** Size transcript rows around the live 30-second ceiling; merge
+short batch blocks into synthetic display rows; reuse identical color literals
+in dark mode; animate the empty state continuously in background windows.
+
+**Reasoning:** The same recording legitimately changes shape when reprocessed,
+so block geometry cannot be a layout contract. Timed paragraphs and a shared
+session timeline preserve reading and seeking across either pipeline. Restrained
+semantic color keeps source attribution legible without turning the interface
+decorative, while appearance-specific colors retain contrast. Suspending the
+only animation prevents an idle meeting window from consuming work.

@@ -689,6 +689,28 @@ updates the title through the manifest actor, rolling the move back if metadata
 cannot be committed. Deletion uses the system Trash and confirms the measured
 size of the complete folder; it never unlinks session data directly.
 
+## Session reading projection and playback
+
+`SessionReadingPresentation` derives the detail view entirely from a session
+folder and its manifest. It orders the artifact rail by notes, current
+transcript, summary, audio, additional files, and immutable transcription
+revisions, then chooses the most substantive present artifact without creating
+placeholder files. Transcript paragraphs are projected from timed words and
+remain independent of whether their source blocks came from 26–30-second live
+VAD segments or 12–13-second batch strides.
+
+The playback controller maps every track through its signed canonical sample
+offset. Timeline regions, pins, paragraph highlighting, seeking, and talk-time
+totals share the session timeline; no source is assumed to begin first.
+Imported audio therefore appears as one lane, while live sessions retain You
+and Others. Speaker renames update stable identities through the manifest actor
+and remain valid when a later transcription replaces the current artifacts.
+
+The empty reader is the only decorative color surface. A 104-by-17 monospace
+character field draws separate violet and teal waveforms; its timeline pauses
+whenever the window is not key and is fixed under Reduce Motion. All other
+reader surfaces and actions use system-neutral materials and controls.
+
 ## Concurrency
 
 All targets use Swift 6 language mode and complete strict concurrency checking.

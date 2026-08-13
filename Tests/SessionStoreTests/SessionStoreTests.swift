@@ -1179,6 +1179,232 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testReadingPresentationBuildsIsolatedArtifactsAndRevisionRail()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Reader"
+            )
+            try Data("private notes".utf8).write(
+                to: created.directory.appendingPathComponent("notes.md")
+            )
+            _ = try await TranscriptArtifactWriter().write(
+                segments: [
+                    TranscriptSegment(
+                        text: "A transcript sentence.",
+                        startTime: 0,
+                        endTime: 12.5,
+                        source: .microphone,
+                        words: [
+                            WordTiming(
+                                text: "A transcript sentence.",
+                                startTime: 0,
+                                endTime: 12.5
+                            )
+                        ]
+                    )
+                ],
+                modelIdentifier: "parakeet-v3",
+                to: created.directory,
+                date: Date(timeIntervalSince1970: 10)
+            )
+
+            let document = try SessionReadingPresentation().load(
+                from: created.directory
+            )
+            let notes = try XCTUnwrap(
+                document.artifacts.first { $0.kind == .notes }
+            )
+            let transcript = try XCTUnwrap(
+                document.artifacts.first { $0.kind == .transcript }
+            )
+            let revision = try XCTUnwrap(
+                document.artifacts.first {
+                    $0.kind == .transcriptionRevision
+                }
+            )
+
+            XCTAssertEqual(notes.copyText, "private notes")
+            XCTAssertTrue(transcript.copyText?.contains(
+                "A transcript sentence."
+            ) == true)
+            XCTAssertFalse(transcript.copyText?.contains("private notes") == true)
+            XCTAssertEqual(transcript.urls.count, 3)
+            XCTAssertEqual(revision.urls.count, 3)
+            XCTAssertEqual(document.preferredArtifactID, "transcript")
+        }
+    }
+
+    func testReadingPresentationHandlesLiveAndBatchTranscriptShapes()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Shapes"
+            )
+            let segments = [
+                TranscriptSegment(
+                    text: "Live-sized row.",
+                    startTime: 0,
+                    endTime: 29.6,
+                    source: .microphone
+                ),
+                TranscriptSegment(
+                    text: "Batch-sized row.",
+                    startTime: 30,
+                    endTime: 42.5,
+                    source: .system
+                )
+            ]
+            _ = try await TranscriptArtifactWriter().write(
+                segments: segments,
+                modelIdentifier: "shape-test",
+                to: created.directory
+            )
+
+            let document = try SessionReadingPresentation().load(
+                from: created.directory
+            )
+
+            XCTAssertEqual(document.currentSegments.count, 2)
+            XCTAssertEqual(
+                document.currentSegments[0].endTime
+                    - document.currentSegments[0].startTime,
+                29.6,
+                accuracy: 0.000_001
+            )
+            XCTAssertEqual(
+                document.currentSegments[1].endTime
+                    - document.currentSegments[1].startTime,
+                12.5,
+                accuracy: 0.000_001
+            )
+            XCTAssertEqual(document.currentParagraphs.count, 2)
+        }
+    }
+
+    func testReadingTimelineIncludesPinsTalkTimeAndDirectionIndependentSeek()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Timeline"
+            )
+            try await CaptureSessionManifestStore.shared.appendPin(
+                CaptureSessionManifest.Pin(sampleOffset: 80_000),
+                in: created.directory
+            )
+            _ = try await TranscriptArtifactWriter().write(
+                segments: [
+                    TranscriptSegment(
+                        text: "You",
+                        startTime: 2,
+                        endTime: 7,
+                        source: .microphone
+                    ),
+                    TranscriptSegment(
+                        text: "Others",
+                        startTime: 4,
+                        endTime: 7.5,
+                        source: .system
+                    )
+                ],
+                modelIdentifier: "timeline-test",
+                to: created.directory
+            )
+
+            let document = try SessionReadingPresentation().load(
+                from: created.directory
+            )
+            XCTAssertEqual(document.manifest.pins.first?.sampleOffset, 80_000)
+            XCTAssertEqual(document.timelineLanes.count, 2)
+            XCTAssertEqual(
+                document.timelineLanes.first(where: {
+                    $0.source == .microphone
+                })?.talkTime,
+                5
+            )
+            XCTAssertEqual(
+                SessionReadingPresentation.playbackTime(
+                    timelineTime: 4,
+                    trackStartTime: 2,
+                    trackDuration: 8
+                ),
+                2
+            )
+            XCTAssertNil(SessionReadingPresentation.playbackTime(
+                timelineTime: 1,
+                trackStartTime: 2,
+                trackDuration: 8
+            ))
+        }
+    }
+
+    func testReadingPresentationKeepsSpeakerRenameAcrossRetranscription()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Rename"
+            )
+            _ = try await SpeakerIdentityStore().renameSpeaker(
+                identifiedBy: "source.system",
+                to: "Alex",
+                in: created.directory
+            )
+            _ = try await TranscriptArtifactWriter().write(
+                segments: [
+                    TranscriptSegment(
+                        text: "Still Alex",
+                        startTime: 0,
+                        endTime: 3,
+                        source: .system
+                    )
+                ],
+                modelIdentifier: "new-model",
+                to: created.directory
+            )
+
+            let document = try SessionReadingPresentation().load(
+                from: created.directory
+            )
+            XCTAssertEqual(
+                document.manifest.speakerIdentity(
+                    identifiedBy: "source.system"
+                )?.displayName,
+                "Alex"
+            )
+            XCTAssertEqual(
+                document.currentSegments.first?.speakerID,
+                "source.system"
+            )
+        }
+    }
+
+    func testReadingPresentationRepresentsMissingArtifactsHonestly() throws {
+        try withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Empty"
+            )
+            let document = try SessionReadingPresentation().load(
+                from: created.directory
+            )
+
+            XCTAssertTrue(document.currentParagraphs.isEmpty)
+            XCTAssertEqual(document.preferredArtifactID, "notes")
+            XCTAssertTrue(document.artifacts[0].isPresent)
+            XCTAssertTrue(document.artifacts[1...3].allSatisfy {
+                !$0.isPresent
+            })
+        }
+    }
+
     private func libraryItem(title: String, date: Date) -> SessionLibraryItem {
         SessionLibraryItem(
             id: UUID(),
