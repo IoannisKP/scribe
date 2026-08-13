@@ -140,6 +140,31 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(preferences.selectionID, "smart.imported")
     }
 
+    func testNeedsSummarySelectionIsGatedUntilSummaryFeatureExists() {
+        XCTAssertFalse(ScribeFeatureAvailability.summaryGeneration)
+        XCTAssertEqual(
+            ScribeShellPresentation.resolvedSelectionID(
+                "smart.needsSummary",
+                summaryFeatureAvailable: false
+            ),
+            "smart.all"
+        )
+        XCTAssertEqual(
+            ScribeShellPresentation.resolvedSelectionID(
+                "smart.needsSummary",
+                summaryFeatureAvailable: true
+            ),
+            "smart.needsSummary"
+        )
+        XCTAssertEqual(
+            ScribeShellPresentation.resolvedSelectionID(
+                "smart.imported",
+                summaryFeatureAvailable: false
+            ),
+            "smart.imported"
+        )
+    }
+
     func testPopulatedLibraryPlaceholderNamesDeferredListHonestly() {
         XCTAssertEqual(
             ScribeCopy.Shell.sessionListComing(18),
