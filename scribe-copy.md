@@ -299,6 +299,7 @@ names the file they can go find.
 - Timeline labels: **Timeline** · **Talk time**
 - Speaker action: **Rename speaker**
 - Empty notes: **No notes yet** · **Create notes**
+- Notes editor placeholder: **Type notes for this session**
 - Empty audio: **No playable audio is available**
 - Revision section: **Transcriptions**
 
@@ -315,6 +316,8 @@ names the file they can go find.
 - Speaker rename: **Couldn't rename the speaker. The transcript and recording
   are unaffected.**
 - Notes creation: **Couldn't create notes. The recording and transcript are
+  unaffected.**
+- Notes save: **Couldn't save notes. The recording and transcript are
   unaffected.**
 - Re-transcription: **Transcription failed. The recording and earlier
   transcripts are unaffected.**
