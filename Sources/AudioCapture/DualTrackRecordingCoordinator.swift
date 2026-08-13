@@ -301,13 +301,12 @@ public actor DualTrackRecordingCoordinator {
                 microphoneHostTime: microphoneResult.firstSampleHostTime,
                 systemHostTime: systemResult.firstSampleHostTime
             )
-            let manifest = try CaptureSessionManifest.load(
-                from: paths.sessionDirectory
-            ).replacingTrackOffsets(
-                microphone: offsets.microphone,
-                system: offsets.system
-            )
-            try manifest.write(to: paths.sessionDirectory)
+            try await CaptureSessionManifestStore.shared
+                .replaceTrackOffsets(
+                    microphone: offsets.microphone,
+                    system: offsets.system,
+                    in: paths.sessionDirectory
+                )
         } catch {
             let message =
                 "The audio files were finalized, but sample-accurate track timing could not be saved: \(error.localizedDescription)"

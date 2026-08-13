@@ -1,3 +1,4 @@
+import AudioCapture
 import SwiftUI
 
 extension Notification.Name {
@@ -358,15 +359,35 @@ struct ScribeShellView: View {
 
     private var libraryPlaceholder: some View {
         VStack(spacing: 10) {
-            Image(systemName: "tray")
-                .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(.secondary)
-            Text(libraryTitle)
-                .font(.title2.weight(.medium))
-            Text(libraryEmptyDetail)
-                .foregroundStyle(.secondary)
+            if libraryCount == 0 {
+                Image(systemName: "tray")
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(.secondary)
+                Text(libraryTitle)
+                    .font(.title2.weight(.medium))
+                Text(libraryEmptyDetail)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(libraryTitle)
+                    .font(.title2.weight(.medium))
+                Text(ScribeCopy.Shell.sessionListComing(libraryCount))
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var libraryCount: Int {
+        switch selection {
+        case .needsSummary:
+            recorder.sessionSmartFolderCounts.needsSummary
+        case .imported:
+            recorder.sessionSmartFolderCounts.imported
+        case let .manualFolder(path):
+            sessionCount(in: URL(fileURLWithPath: path))
+        case .allSessions, .recording, .settings:
+            recorder.sessionSmartFolderCounts.allSessions
+        }
     }
 
     private var libraryTitle: String {
@@ -485,6 +506,39 @@ private struct SidebarRecordingControl: View {
                     color: .purple
                 )
 
+                if let pin = recorder.recentRecordingPin {
+                    Text(
+                        ScribeCopy.Recording.pinAdded(
+                            timecode: pinTimecode(pin.sampleOffset)
+                        )
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+                    .transition(.opacity)
+                } else if let notice = recorder.sidebarRecordingNotice {
+                    Text(notice.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
+                    recorder.addRecordingPin()
+                } label: {
+                    HStack {
+                        Label(
+                            ScribeCopy.Recording.addPin,
+                            systemImage: "pin.fill"
+                        )
+                        Spacer()
+                        Text(ScribeCopy.Recording.pinShortcut)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!recorder.canAddRecordingPin)
+
                 Button {
                     recorder.stopRecording()
                 } label: {
@@ -508,6 +562,17 @@ private struct SidebarRecordingControl: View {
     private func elapsedText(at date: Date) -> String {
         let elapsed = Int(recorder.elapsedRecordingTime(at: date))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
+    }
+
+    private func pinTimecode(_ sampleOffset: Int64) -> String {
+        let seconds = max(
+            0,
+            Int(
+                Double(sampleOffset)
+                    / CanonicalAudioFormat.sampleRate
+            )
+        )
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 }
 

@@ -645,7 +645,7 @@ This check uses the already-downloaded VAD and Parakeet models:
    full transport/VAD/spool/ASR integration, and the virtual one-hour
    two-source bounded-window soak.
 
-## Milestone 5B Phase 2 acceptance check
+## Milestone 5B Phase B acceptance check
 
 1. Start a recording and confirm the notes surface and transcript rail replace
    the setup view without adding a header above the notes.
@@ -663,9 +663,22 @@ This check uses the already-downloaded VAD and Parakeet models:
    the rewritten tail receives the brief completion highlight.
 7. Exercise missing-model, model-load failure, missing-Silero, buffering,
    catching-up, silent-system-track, and system-audio-preparing states. Every
-   transcription failure must say that recording is unaffected.
+   transcription failure must say that recording is unaffected. Preparing,
+   buffering, catching up, and silence belong in the sidebar; missing or failed
+   transcription dependencies belong in the transcript rail.
 8. Verify VoiceOver labels and dark appearance for the panes, rail controls,
    elapsed time, level meters, status, and stop control.
+9. While recording, press Command-Shift-K with Scribe focused and again while
+   another app is focused. Each press must briefly show **Pin added at 00:00**
+   with the real time. Stop, open `session.json`, and confirm both pins have
+   nonnegative canonical `sampleOffset` values; `label` may be absent until a
+   label is added later.
+10. Stop recording and confirm Command-Shift-K is released for other apps. If
+    another app already owns it, Scribe must report that the shortcut could not
+    register while recording continues normally.
+11. Type continuously while transcript rows are arriving. Notes must remain
+    immediate because paragraph presentation is recomputed only when live rows
+    change, not when the notes editor redraws.
 
 The recording rail is content-driven. It does not use an engine block as a
 layout unit: live rows around 26–30 seconds and batch-shaped rows around 12–13

@@ -39,7 +39,11 @@ public enum ScribeCopy {
             "The destination is outside the Scribe save location."
 
         public static func sessionCount(_ count: Int) -> String {
-            "\(count) sessions"
+            count == 1 ? "1 session" : "\(count) sessions"
+        }
+
+        public static func sessionListComing(_ count: Int) -> String {
+            "\(sessionCount(count)) saved. The session list arrives in the next phase."
         }
     }
 
@@ -78,6 +82,14 @@ public enum ScribeCopy {
         public static let systemAudioLevel = "Others speech level"
         public static let notesSaveFailed =
             "Couldn't save notes. The recording is unaffected."
+        public static let pinShortcut = "⌘⇧K"
+        public static let addPin = "Add pin"
+        public static let pinSaveFailed =
+            "Couldn't save the pin. The recording and notes are unaffected."
+        public static let pinUnavailable =
+            "Pins become available when captured audio starts."
+        public static let pinShortcutUnavailable =
+            "The pin shortcut couldn't be registered. Recording still works."
 
         public static func waiting(firstTextSeconds: Int) -> String {
             "Listening. First text in about \(firstTextSeconds) seconds."
@@ -101,6 +113,10 @@ public enum ScribeCopy {
 
         public static func speechLevel(percent: Int) -> String {
             "\(percent) percent"
+        }
+
+        public static func pinAdded(timecode: String) -> String {
+            "Pin added at \(timecode)"
         }
 
         public static let keepRecordingWithoutTranscription =

@@ -140,6 +140,14 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(preferences.selectionID, "smart.imported")
     }
 
+    func testPopulatedLibraryPlaceholderNamesDeferredListHonestly() {
+        XCTAssertEqual(
+            ScribeCopy.Shell.sessionListComing(18),
+            "18 sessions saved. The session list arrives in the next phase."
+        )
+        XCTAssertEqual(ScribeCopy.Shell.sessionCount(1), "1 session")
+    }
+
     func testCreatesHumanReadableSessionFolderAndManifest() throws {
         try withTemporaryDirectory { root in
             let date = Date(timeIntervalSince1970: 1_735_732_800)

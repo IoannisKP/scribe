@@ -1178,3 +1178,23 @@ database label would disappear when the index is rebuilt and would make an
 ordinary Finder move look like data loss. Manifest-aware recursive discovery
 preserves local ownership without confusing organizational folders with broken
 sessions.
+
+## 2026-08-13 — Store pins on the sample timeline, not UI time
+
+**Decision:** Register Command-Shift-K as an application-global shortcut only
+while capture is active. Latch the key event in mach host time and convert it to
+the session timeline from the earliest real first-sample timestamp. Persist a
+pin UUID, canonical sample offset, optional label, and creation date in
+`session.json`. Serialize pin writes with final track-offset writes.
+
+**Alternatives:** Derive pins from the elapsed UI clock; store seconds as a
+floating-point value; leave the shortcut registered whenever Scribe runs; add a
+dialog before saving; write pins to a separate sidecar.
+
+**Reasoning:** The UI clock begins after asynchronous capture setup and is not a
+sample-accurate origin. The first-sample host timestamps already define the
+direction-independent two-track timeline. A recording-only Carbon hot key works
+without a focused window or Accessibility permission but does not steal the
+shortcut outside capture. Keeping pins in the manifest makes them durable user
+data beside track timing, while serialization prevents stop and pin actions
+from losing one another's metadata.

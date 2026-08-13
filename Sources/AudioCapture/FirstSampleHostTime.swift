@@ -105,6 +105,25 @@ public enum AudioHostTime {
             0
         )
     }
+
+    /// Converts a user action latched in mach host time into the shared
+    /// session timeline whose zero is the first captured sample on either
+    /// live track.
+    public static func recordingSampleOffset(
+        atHostTime hostTime: UInt64,
+        microphoneFirstSampleHostTime: UInt64?,
+        systemFirstSampleHostTime: UInt64?
+    ) -> Int64? {
+        let firstCapturedHostTime = [
+            microphoneFirstSampleHostTime,
+            systemFirstSampleHostTime
+        ].compactMap { $0 }.min()
+        guard let firstCapturedHostTime else { return nil }
+        return canonicalSampleOffset(
+            from: firstCapturedHostTime,
+            to: hostTime
+        )
+    }
 }
 
 struct SystemAudioStartupProfiler {

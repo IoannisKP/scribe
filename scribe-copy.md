@@ -104,6 +104,8 @@ voice per screen.
 - Active capture: **Recording** · **Current recording**
 - Empty library: **No sessions yet** · **Start a recording or import audio or
   video.**
+- Temporary populated-library placeholder: **18 sessions saved. The session
+  list arrives in the next phase.**
 - Empty smart folders: **Every session has a summary** · **No imported
   sessions**
 - Folder errors: **Enter a folder name.** · **A folder named “Client Calls”
@@ -111,6 +113,7 @@ voice per screen.
   destination is outside the Scribe save location.**
 
 Session counts are rendered as **3 sessions**, using the actual count.
+One session is rendered as **1 session**.
 
 ## Recording
 
@@ -119,6 +122,20 @@ Session counts are rendered as **3 sessions**, using the actual count.
 - Menu bar idle: **Start recording**
 - Menu bar active: **Recording · 12:04**
 - Both tracks live: **You · Others** (level meters, no text needed)
+
+### Recording pins
+
+- Action: **Add pin** · **⌘⇧K**
+- Confirmation: **Pin added at 12:04**
+- Before captured audio starts: **Pins become available when captured audio
+  starts.**
+- Save failure: **Couldn't save the pin. The recording and notes are
+  unaffected.**
+- Shortcut conflict: **The pin shortcut couldn't be registered. Recording
+  still works.**
+
+The pin action has no prompt and no generated label. A label remains optional
+data that can be added later without changing the captured sample offset.
 
 ### Preparing system audio
 

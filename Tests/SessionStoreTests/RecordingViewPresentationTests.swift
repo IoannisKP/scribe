@@ -1,4 +1,5 @@
 import AudioCapture
+import Foundation
 import SessionStore
 import SpeechPipeline
 import XCTest
@@ -139,48 +140,62 @@ final class RecordingViewPresentationTests: XCTestCase {
         let base = NoticeInput()
 
         XCTAssertEqual(
-            base.notice(
+            base.notices(
                 transcription: .bufferingToDisk(pendingWindowCount: 4)
-            )?.message,
+            ).sidebar?.message,
             ScribeCopy.Recording.buffering
         )
         XCTAssertEqual(
-            base.notice(transcription: .catchingUp(pendingWindowCount: 1))?.message,
+            base.notices(
+                transcription: .catchingUp(pendingWindowCount: 1)
+            ).sidebar?.message,
             ScribeCopy.Recording.catchingUp
         )
         XCTAssertEqual(
-            base.notice(
+            base.notices(
                 transcription: .modelUnavailable(
                     reason: .transcriptionModel
                 )
-            )?.message,
+            ).transcriptRail?.message,
             ScribeCopy.Recording.modelMissing("Parakeet v3")
         )
         XCTAssertEqual(
-            base.notice(speech: .modelUnavailable)?.message,
+            base.notices(speech: .modelUnavailable)
+                .transcriptRail?.message,
             ScribeCopy.Recording.sileroMissing
         )
         XCTAssertEqual(
-            base.notice(
+            base.notices(
                 transcription: .failed(message: "backend detail")
-            ),
+            ).transcriptRail,
             .modelFailed(
                 displayName: "Parakeet v3",
                 details: "backend detail"
             )
         )
         XCTAssertEqual(
-            base.notice(systemSilent: true)?.message,
+            base.notices(systemSilent: true).sidebar?.message,
             ScribeCopy.Recording.systemTrackSilent
         )
         XCTAssertEqual(
-            base.notice()?.message,
+            base.notices().transcriptRail?.message,
             ScribeCopy.Recording.waiting(firstTextSeconds: 16)
         )
     }
 
+    func testCaptureAndTranscriptionNoticesCanCoexistOnTheirOwnSurfaces() {
+        let notices = NoticeInput().notices(
+            speech: .modelUnavailable,
+            transcription: .bufferingToDisk(pendingWindowCount: 4),
+            systemSilent: true
+        )
+
+        XCTAssertEqual(notices.sidebar, .buffering)
+        XCTAssertEqual(notices.transcriptRail, .sileroMissing)
+    }
+
     func testPreparingStateOutranksRecordingNotices() {
-        let notice = RecordingViewPresentation.notice(
+        let notices = RecordingViewPresentation.notices(
             isPreparingSystemAudio: true,
             isRecording: false,
             selectedModelDisplayName: "Whisper Large v3",
@@ -192,7 +207,8 @@ final class RecordingViewPresentationTests: XCTestCase {
             transportState: .ready
         )
 
-        XCTAssertEqual(notice, .preparingSystemAudio)
+        XCTAssertEqual(notices.sidebar, .preparingSystemAudio)
+        XCTAssertNil(notices.transcriptRail)
     }
 
     func testResizableRailConstantsPreserveSixtyFortyLayout() {
@@ -206,6 +222,73 @@ final class RecordingViewPresentationTests: XCTestCase {
             RecordingWorkspaceLayout.minimumTranscriptWidth,
             RecordingWorkspaceLayout.maximumTranscriptWidth
         )
+        XCTAssertEqual(
+            RecordingWorkspaceLayout.constrainedTranscriptWidth(
+                100,
+                totalWidth: 1_000
+            ),
+            RecordingWorkspaceLayout.minimumTranscriptWidth
+        )
+        XCTAssertEqual(
+            RecordingWorkspaceLayout.constrainedTranscriptWidth(
+                900,
+                totalWidth: 1_000
+            ),
+            RecordingWorkspaceLayout.maximumTranscriptWidth
+        )
+    }
+
+    func testRecordingLayoutPreferenceKeysPersistWidthAndCollapseState() {
+        let suiteName = "RecordingViewPresentationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(
+            412.0,
+            forKey: RecordingWorkspacePreferences.transcriptWidthKey
+        )
+        defaults.set(
+            true,
+            forKey: RecordingWorkspacePreferences.transcriptCollapsedKey
+        )
+
+        XCTAssertEqual(
+            defaults.double(
+                forKey: RecordingWorkspacePreferences.transcriptWidthKey
+            ),
+            412
+        )
+        XCTAssertTrue(
+            defaults.bool(
+                forKey: RecordingWorkspacePreferences
+                    .transcriptCollapsedKey
+            )
+        )
+    }
+
+    func testTranscriptPresentationCacheDoesNotRecomputeForNotesRedraws() {
+        let liveRows = (0..<120).map { index in
+            liveRow(
+                text: "Transcription row \(index).",
+                startTime: Double(index),
+                endTime: Double(index + 1),
+                isFinal: true,
+                index: UInt64(index)
+            )
+        }
+        var cache = RecordingTranscriptPresentationCache()
+
+        XCTAssertTrue(cache.update(with: liveRows))
+        let revisionAfterTranscription = cache.revision
+        var notes = ""
+        for index in 0..<1_000 {
+            notes.append(String(index % 10))
+            XCTAssertFalse(cache.update(with: liveRows))
+        }
+
+        XCTAssertEqual(notes.count, 1_000)
+        XCTAssertEqual(cache.revision, revisionAfterTranscription)
+        XCTAssertFalse(cache.presentationRows.isEmpty)
     }
 
     func testSpeakerPaletteExtendsPastTwoAndIsStable() {
@@ -253,14 +336,14 @@ final class RecordingViewPresentationTests: XCTestCase {
 }
 
 private struct NoticeInput {
-    func notice(
+    func notices(
         speech: LiveSpeechPipelineState = .running(pendingWindowCount: 0),
         transcription: LiveTranscriptionPipelineState = .running(
             pendingWindowCount: 0
         ),
         systemSilent: Bool = false
-    ) -> RecordingStatusNotice? {
-        RecordingViewPresentation.notice(
+    ) -> RecordingStatusNotices {
+        RecordingViewPresentation.notices(
             isPreparingSystemAudio: false,
             isRecording: true,
             selectedModelDisplayName: "Parakeet v3",
