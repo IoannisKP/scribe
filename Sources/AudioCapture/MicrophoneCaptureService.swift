@@ -38,6 +38,7 @@ public actor MicrophoneCaptureService {
     private var isTapInstalled = false
     private var isRecovering = false
     private var isSleeping = false
+    private var selectedInputDevice: MicrophoneInputDeviceIdentity?
     private var observerRegistrations: [ObserverRegistration] = []
 
     public init(
@@ -84,6 +85,7 @@ public actor MicrophoneCaptureService {
         }
 
         state = .starting
+        selectedInputDevice = nil
         do {
             let captureFormat = try currentCaptureFormat()
             let capacity = try ringCapacity(sampleRate: captureFormat.sampleRate)
@@ -164,7 +166,19 @@ public actor MicrophoneCaptureService {
     }
 
     private func currentCaptureFormat() throws -> AVAudioFormat {
-        let hardwareFormat = engine.inputNode.outputFormat(forBus: 0)
+        let inputNode = engine.inputNode
+        let deviceID = try CoreAudioProperties.defaultInputDevice()
+        let identity = try CoreAudioProperties.inputDeviceIdentity(deviceID)
+        guard !identity.uid.hasPrefix("com.localfirst.Scribe.SystemTap.") else {
+            throw AudioCaptureError.microphoneInputResolvedToSystemTap
+        }
+        guard let audioUnit = inputNode.audioUnit else {
+            throw AudioCaptureError.microphoneInputUnavailable
+        }
+        try CoreAudioProperties.bindInputDevice(deviceID, to: audioUnit)
+        selectedInputDevice = identity
+
+        let hardwareFormat = inputNode.outputFormat(forBus: 0)
         guard
             hardwareFormat.sampleRate.isFinite,
             hardwareFormat.sampleRate > 0,
@@ -494,6 +508,12 @@ private struct ObserverRegistration: @unchecked Sendable {
 }
 
 extension MicrophoneCaptureService: AudioTrackCapturing {
+    public func microphoneInputDeviceIdentity() async
+        -> MicrophoneInputDeviceIdentity?
+    {
+        selectedInputDevice
+    }
+
     public func firstSampleHostTime() async -> UInt64? {
         firstSampleTime?.value
     }

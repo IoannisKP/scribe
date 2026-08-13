@@ -12,6 +12,22 @@ public enum AudioSource: String, Codable, CaseIterable, Hashable, Sendable {
     ]
 }
 
+public struct MicrophoneInputDeviceIdentity:
+    Codable,
+    Equatable,
+    Sendable
+{
+    public let audioDeviceID: UInt32
+    public let uid: String
+    public let name: String
+
+    public init(audioDeviceID: UInt32, uid: String, name: String) {
+        self.audioDeviceID = audioDeviceID
+        self.uid = uid
+        self.name = name
+    }
+}
+
 public struct AudioTrackCaptureResult: Equatable, Sendable {
     public let source: AudioSource
     public let outputURL: URL
@@ -156,6 +172,8 @@ public protocol AudioTrackCapturing: Sendable {
     func firstSampleHostTime() async -> UInt64?
     func systemStartupStageTimings() async -> [SystemAudioStartupStageTiming]
     func systemAudioGraphPreparation() async -> SystemAudioGraphPreparation?
+    func microphoneInputDeviceIdentity() async
+        -> MicrophoneInputDeviceIdentity?
 }
 
 public extension AudioTrackCapturing {
@@ -164,6 +182,11 @@ public extension AudioTrackCapturing {
         []
     }
     func systemAudioGraphPreparation() async -> SystemAudioGraphPreparation? {
+        nil
+    }
+    func microphoneInputDeviceIdentity() async
+        -> MicrophoneInputDeviceIdentity?
+    {
         nil
     }
 }
@@ -191,6 +214,9 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
     case microphonePermissionDenied
     case microphonePermissionRestricted
     case microphoneInputUnavailable
+    case audioDeviceIdentityUnavailable
+    case microphoneInputDeviceBindingMismatch(requested: UInt32, bound: UInt32)
+    case microphoneInputResolvedToSystemTap
     case microphoneFormatUnsupported
     case microphoneCaptureAlreadyRunning
     case microphoneCaptureNotRunning
@@ -256,6 +282,12 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
             "Microphone access is restricted by this Mac's policy. Ask the device administrator to allow microphone recording."
         case .microphoneInputUnavailable:
             "No usable microphone input is available. Connect or select an input device, then try again."
+        case .audioDeviceIdentityUnavailable:
+            "Core Audio could not identify the selected audio device. Select the input and output devices again, then retry."
+        case .microphoneInputDeviceBindingMismatch:
+            "The microphone route didn't match the selected input, so recording didn't start. Select a physical microphone and try again."
+        case .microphoneInputResolvedToSystemTap:
+            "The selected microphone resolved to Scribe's system-audio tap, so recording didn't start. Select a physical microphone and try again."
         case .microphoneFormatUnsupported:
             "The selected microphone does not provide a usable noninterleaved Float32 format."
         case .microphoneCaptureAlreadyRunning:

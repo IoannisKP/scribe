@@ -167,6 +167,8 @@ public actor DualTrackRecordingCoordinator {
             await systemCapture.systemStartupStageTimings()
         let systemAudioGraphPreparation =
             await systemCapture.systemAudioGraphPreparation()
+        let microphoneInputDevice =
+            await microphoneCapture.microphoneInputDeviceIdentity()
         do {
             let manifest: CaptureSessionManifest
             if !FileManager.default.fileExists(
@@ -192,6 +194,10 @@ public actor DualTrackRecordingCoordinator {
                     .replacingSystemAudioGraphPreparation(
                         systemAudioGraphPreparation
                     )
+            }
+            if let microphoneInputDevice {
+                manifestWithCaptureDiagnostics = manifestWithCaptureDiagnostics
+                    .replacingMicrophoneInputDevice(microphoneInputDevice)
             }
             try manifestWithCaptureDiagnostics.write(
                 to: paths.sessionDirectory

@@ -75,7 +75,9 @@ public struct LegacySessionMigrator: @unchecked Sendable {
                     systemAudioStartupStageTimings:
                         manifest.systemAudioStartupStageTimings,
                     systemAudioGraphPreparation:
-                        manifest.systemAudioGraphPreparation
+                        manifest.systemAudioGraphPreparation,
+                    microphoneInputDevice:
+                        manifest.microphoneInputDevice
                 )
                 try manifest.write(to: directory)
 

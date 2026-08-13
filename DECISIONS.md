@@ -1070,6 +1070,29 @@ IOProc registration instead of waiting. Single-flight preparation removes that
 race without making the interface unresponsive, and explicit manifest data is
 stable enough for users, diagnostics, and future regression tests.
 
+## 2026-08-13 — Bind and record the concrete microphone input route
+
+**Decision:** Resolve the default input `AudioDeviceID` at each microphone
+start or recovery, explicitly bind the AVAudioEngine input AUHAL to that device,
+verify the binding by reading it back, and fail closed if it does not match or
+resolves to Scribe's private system-tap aggregate. Persist the bound device ID,
+UID, and name in `session.json`.
+
+**Alternatives:** Continue relying on AVAudioEngine's implicit default-device
+aggregate; force the built-in Mac microphone; treat highly correlated tracks as
+proof of contamination after recording.
+
+**Reasoning:** An affected hardware recording contained the same program in
+both WAVs, but the samples were not copies and Core Audio logs showed two
+independent clients and converters. No capture implementation changed across
+the clean-to-affected commit bracket, and the same synthetic file-isolation
+regression passed at its start, midpoint, and end. The unverified implicit
+input aggregate was therefore the remaining software ambiguity. Explicit
+binding preserves the user's selected input, blocks accidental reuse of
+Scribe's system graph, and leaves durable evidence of the route. Correlation is
+useful evidence but is not a safe automatic failure rule because acoustic echo
+can legitimately correlate two sources.
+
 ## 2026-08-13 — Persist completed live transcription through the batch writer
 
 **Decision:** On successful live-pipeline drain, require every row to be final
