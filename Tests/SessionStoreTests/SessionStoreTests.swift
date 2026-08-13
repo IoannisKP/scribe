@@ -228,8 +228,8 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(preferences.selectionID, "smart.imported")
     }
 
-    func testNeedsSummarySelectionIsGatedUntilSummaryFeatureExists() {
-        XCTAssertFalse(ScribeFeatureAvailability.summaryGeneration)
+    func testNeedsSummarySelectionIsAvailableWithSummaryGeneration() {
+        XCTAssertTrue(ScribeFeatureAvailability.summaryGeneration)
         XCTAssertEqual(
             ScribeShellPresentation.resolvedSelectionID(
                 "smart.needsSummary",
@@ -544,7 +544,6 @@ final class SessionStoreTests: XCTestCase {
                 modelIdentifier: "test",
                 to: created.directory
             )
-
             let markdown = try String(
                 contentsOf: created.directory.appendingPathComponent(
                     "transcript.md"
@@ -864,6 +863,15 @@ final class SessionStoreTests: XCTestCase {
                 modelIdentifier: "test",
                 to: created.directory
             )
+            _ = try await SummaryArtifactWriter().write(
+                summary: "A durable summary.",
+                providerIdentifier: "mock",
+                providerDisplayName: "Mock",
+                modelIdentifier: "mock-model",
+                templateIdentifier: "mock-template",
+                templateName: "Mock template",
+                to: created.directory
+            )
 
             let reconciledArtifacts = staleArtifacts + [
                 .init(relativePath: "notes.md", kind: .notes),
@@ -872,7 +880,8 @@ final class SessionStoreTests: XCTestCase {
                     kind: .transcriptMarkdown
                 ),
                 .init(relativePath: "transcript.json", kind: .transcriptJSON),
-                .init(relativePath: "transcript.srt", kind: .subtitles)
+                .init(relativePath: "transcript.srt", kind: .subtitles),
+                .init(relativePath: "summary.md", kind: .summary)
             ]
             _ = try await CaptureSessionManifestStore.shared.replaceArtifacts(
                 reconciledArtifacts,
@@ -889,9 +898,50 @@ final class SessionStoreTests: XCTestCase {
                 "Maria"
             )
             XCTAssertEqual(manifest.transcriptionHistory.count, 1)
+            XCTAssertEqual(manifest.summaryHistory.count, 1)
             XCTAssertTrue(manifest.artifacts.contains {
                 $0.relativePath == "transcript.json"
             })
+        }
+    }
+
+    func testReconciliationKeepsSummaryRevisionAsSummaryArtifact()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Summary revision"
+            )
+            let result = try await SummaryArtifactWriter().write(
+                summary: "Durable output.",
+                providerIdentifier: "mock",
+                providerDisplayName: "Mock",
+                modelIdentifier: "mock-model",
+                templateIdentifier: "mock-template",
+                templateName: "Mock template",
+                to: created.directory
+            )
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            _ = try await SessionReconciler(index: index).reconcile(
+                availability: .available(root)
+            )
+
+            let manifest = try CaptureSessionManifest.load(
+                from: created.directory
+            )
+            let relativeRevision = try XCTUnwrap(
+                result.revision.artifacts.first
+            )
+            XCTAssertEqual(manifest.summaryHistory, [result.revision])
+            XCTAssertEqual(
+                manifest.artifacts.first(where: {
+                    $0.relativePath == relativeRevision
+                })?.kind,
+                .summary
+            )
         }
     }
 

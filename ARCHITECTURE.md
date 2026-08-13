@@ -58,8 +58,8 @@ below Hugging Face's 10 MiB large-file boundary to calculate their SHA-256. A
 source change between manifest resolution and transfer fails verification
 rather than promoting mismatched files.
 
-`Intelligence` owns the provider boundary for summary generation. Phase 1
-contains no session, transcript, or summary-writing behavior. Its public
+`Intelligence` owns the network provider boundary for summary generation. Its
+public
 `IntelligenceProvider` contract exposes model discovery and streamed text
 completion. `OpenAICompatibleProvider` implements the configurable
 `/models` plus `/chat/completions` convention used by OpenAI, DeepSeek, Groq,
@@ -90,9 +90,24 @@ existing rows. This lets releases add defaults while preserving any edit to a
 shipped template. Custom templates are independently creatable, duplicable,
 editable, and removable; built-ins are editable and duplicable but protected
 from deletion. `SummaryTemplateRenderer` substitutes only the six declared
-context variables and rejects unknown or malformed placeholders. Phase 3 does
-not build template context from a session or call an intelligence provider;
-those remain Phase 2 responsibilities.
+context variables and rejects unknown or malformed placeholders.
+
+`SessionStore` owns single-pass orchestration. It derives template context from
+authoritative session artifacts, including a short transcript neighborhood
+around each pin; estimates prompt size; enforces a model-policy context
+allowance before sending; consumes the provider stream; and commits output only
+after successful completion. The UI owns cloud consent: loopback destinations
+need no dialog, while every non-loopback destination is named in a confirmation
+before transcript or notes leave the Mac.
+
+`SummaryArtifactWriter` writes a provenance header plus result to both current
+`summary.md` and a unique `Summaries/` revision. It then asks the shared
+`CaptureSessionManifestStore` actor to reload and append structured provenance,
+so summary writes cannot restore stale pins, track timing, speaker names, or
+transcription history. Streaming state is memory-only; provider failure cannot
+expose a partial summary as a durable artifact. Part 1 rejects inputs beyond one
+context before the completion call. Time-based map-reduce is the remaining
+Phase 2 Part 2 boundary.
 
 `ModelDiskAccounting` recursively measures actual installed logical and
 allocated bytes while refusing to follow symbolic links.

@@ -1335,3 +1335,30 @@ edits and still let an update add a newly shipped template. Strict substitution
 makes prompt mistakes visible before any paid provider call. Implementing the
 smaller durable layer first means Phase 2 has one real prompt source and avoids
 a temporary generation path that would immediately be discarded.
+
+## 2026-08-13 — Commit summaries only after a complete provider stream
+
+**Decision:** Build Phase 2 in independently usable parts. For Part 1, render a
+durable template from authoritative session files, reserve output capacity in a
+provider/model context policy, and reject oversized prompts before sending.
+Require confirmation for every non-loopback destination, naming the provider
+and estimated input tokens; show a conservative maximum cost only for explicitly
+known pricing. Stream text to memory and the reading view, then atomically write
+the current summary and an immutable `Summaries/` revision only after the stream
+finishes. Store provider ID/name, model, template ID/name, date, and revision
+path in `session.json` through the reload-before-mutate actor. Leave map-reduce
+for a separate committed Part 2.
+
+**Alternatives:** Write each chunk directly to `summary.md`; replace an earlier
+summary before the provider succeeds; infer provenance by parsing one of three
+fixed badges; send without confirmation to keyless remote endpoints; guess
+prices for custom or unknown models; begin chunking in the same change.
+
+**Reasoning:** Streaming is presentation state, not proof of a completed
+artifact. Deferring the durable swap makes a mid-stream network or provider
+failure harmless to the previous summary and ensures notes are never used as an
+output file. Host locality, not key requirement, determines whether meeting text
+leaves the Mac. Structured, append-only provenance keeps a six-month-old result
+auditable and supports any provider name. A separate Part 1 commit remains a
+complete short-transcript feature if implementation or API usage limits stop
+work before map-reduce.

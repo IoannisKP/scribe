@@ -1507,6 +1507,11 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
+    func summaryDidChange() async {
+        sessionContentRevision &+= 1
+        await reconcileSessionLibrary()
+    }
+
     private func transcriptionEstimate(
         duration: TimeInterval,
         model: ModelDescriptor

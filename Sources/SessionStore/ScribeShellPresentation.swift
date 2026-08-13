@@ -31,9 +31,7 @@ public struct ScribeShellPreferences: @unchecked Sendable {
 }
 
 public enum ScribeFeatureAvailability {
-    /// Milestone 6 will switch this on when summary generation has a real
-    /// action and artifact lifecycle.
-    public static let summaryGeneration = false
+    public static let summaryGeneration = true
 }
 
 public enum ScribeShellPresentation {

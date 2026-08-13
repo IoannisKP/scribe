@@ -136,11 +136,13 @@ struct SessionReadingView: View {
     let onClose: () -> Void
 
     @StateObject private var playback = SessionPlaybackController()
+    @StateObject private var summaryGeneration = SummaryGenerationController()
     @State private var document: SessionReadingDocument?
     @State private var selectedArtifactID = ""
     @State private var revisionParagraphs: [TranscriptParagraph] = []
     @State private var loadError: String?
     @State private var copiedArtifactID: String?
+    @State private var showsSummaryGeneration = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -179,6 +181,14 @@ struct SessionReadingView: View {
             loadRevisionParagraphs()
         }
         .onDisappear { playback.pause() }
+        .sheet(isPresented: $showsSummaryGeneration) {
+            SummaryGenerationConfigurationView(
+                model: summaryGeneration,
+                session: session,
+                onDismiss: { showsSummaryGeneration = false },
+                onCompleted: { await recorder.summaryDidChange() }
+            )
+        }
     }
 
     private var readerHeader: some View {
@@ -241,6 +251,15 @@ struct SessionReadingView: View {
                             artifactRow(artifact)
                         }
                     }
+                    let summaryRevisions = document.artifacts.filter {
+                        $0.kind == .summaryRevision
+                    }
+                    if !summaryRevisions.isEmpty {
+                        sectionHeader(ScribeCopy.Reading.summaries)
+                        ForEach(summaryRevisions) { artifact in
+                            artifactRow(artifact)
+                        }
+                    }
                 }
                 .padding(8)
             }
@@ -283,7 +302,7 @@ struct SessionReadingView: View {
                 }
                 Spacer(minLength: 2)
                 if let provenance = artifact.summaryProvenance {
-                    Text(provenance.rawValue)
+                    Text(provenance.providerDisplayName)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -338,6 +357,8 @@ struct SessionReadingView: View {
                 transcriptView(revisionParagraphs, document: document)
             case .summary:
                 summaryView(artifact)
+            case .summaryRevision:
+                summaryRevisionView(artifact)
             case .audio:
                 audioView(artifact)
             case .additional:
@@ -467,8 +488,18 @@ struct SessionReadingView: View {
     }
 
     private func summaryView(_ artifact: SessionReadingArtifact) -> some View {
-        Group {
-            if let text = artifact.copyText {
+        VStack(spacing: 0) {
+            summaryBar(artifact)
+            Divider()
+            if summaryGeneration.isGenerating {
+                ScrollView {
+                    Text(summaryGeneration.streamedText)
+                        .font(ScribeTypography.notesBody)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(28)
+                }
+            } else if let text = artifact.copyText {
                 ScrollView {
                     Text(text)
                         .font(ScribeTypography.notesBody)
@@ -481,16 +512,61 @@ struct SessionReadingView: View {
                 VStack(spacing: 8) {
                     Text(ScribeCopy.Reading.noSummary)
                         .font(.system(size: 17, weight: .medium))
-                    Text(ScribeCopy.Reading.summaryMilestone)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.secondary)
-                    Button(ScribeCopy.Reading.generateSummary) {}
+                    Button(ScribeCopy.Reading.generateSummary) {
+                        showsSummaryGeneration = true
+                    }
                         .buttonStyle(.bordered)
-                        .disabled(true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    private func summaryBar(_ artifact: SessionReadingArtifact) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button(
+                    artifact.isPresent
+                        ? ScribeCopy.Reading.regenerateSummary
+                        : ScribeCopy.Reading.generateSummary
+                ) {
+                    showsSummaryGeneration = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(summaryGeneration.isGenerating)
+                Spacer()
+                if artifact.copyText != nil {
+                    copyButton(for: artifact).padding(0)
+                }
+            }
+            if let status = summaryGeneration.statusMessage {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(status)
+                }
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.secondary)
+            } else if let error = summaryGeneration.errorMessage {
+                Text(error)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+    }
+
+    private func summaryRevisionView(
+        _ artifact: SessionReadingArtifact
+    ) -> some View {
+        ScrollView {
+            Text(artifact.copyText ?? "")
+                .font(ScribeTypography.notesBody)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(28)
+        }
+        .overlay(alignment: .topTrailing) { copyButton(for: artifact) }
     }
 
     private func audioView(_ artifact: SessionReadingArtifact) -> some View {
@@ -619,7 +695,7 @@ struct SessionReadingView: View {
         case .notes: ScribeCopy.Reading.copyNotes
         case .transcript, .transcriptionRevision:
             ScribeCopy.Reading.copyTranscript
-        case .summary: ScribeCopy.Reading.copySummary
+        case .summary, .summaryRevision: ScribeCopy.Reading.copySummary
         case .audio, .additional: nil
         }
     }
@@ -643,7 +719,7 @@ struct SessionReadingView: View {
         switch kind {
         case .notes: "pencil"
         case .transcript, .transcriptionRevision: "doc.text"
-        case .summary: "sparkles"
+        case .summary, .summaryRevision: "sparkles"
         case .audio: "waveform"
         case .additional: "paperclip"
         }

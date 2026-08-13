@@ -186,8 +186,8 @@ public enum ScribeCopy {
         public static let transcriptions = "Transcriptions"
         public static let noSummary = "No summary yet"
         public static let generateSummary = "Generate summary"
-        public static let summaryMilestone =
-            "Summary generation arrives in Milestone 6."
+        public static let regenerateSummary = "Generate again"
+        public static let summaries = "Summaries"
         public static let noAudio = "No playable audio is available"
         public static let play = "Play"
         public static let pause = "Pause"
@@ -234,6 +234,77 @@ public enum ScribeCopy {
 
         public static func fileCount(_ count: Int) -> String {
             count == 1 ? "1 file" : "\(count) files"
+        }
+    }
+
+    public enum SummaryGeneration {
+        public static let using = "Using"
+        public static let provider = "Provider"
+        public static let model = "Model"
+        public static let template = "Template"
+        public static let loadModels = "Load models"
+        public static let loadingModels = "Loading models…"
+        public static let prepare = "Prepare summary"
+        public static let send = "Send"
+        public static let cancel = "Cancel"
+        public static let tryAgain = "Try again"
+        public static let localDisclosure =
+            "This provider runs on this Mac. Nothing leaves the machine."
+        public static let cloudDisclosure =
+            "The transcript and notes will leave this Mac when you confirm."
+        public static let missingTranscript =
+            "Transcribe this session before generating a summary. The recording and notes are unaffected."
+        public static let emptyResponse =
+            "The provider returned an empty summary. Your transcript, notes, recording, and earlier summary are untouched."
+        public static let noPins = "No moments were marked."
+        public static let noNearbyTranscript = "No nearby transcript text."
+        public static let you = "You"
+        public static let others = "Others"
+        public static let importedAudio = "Imported audio"
+        public static let systemInstruction =
+            "Follow the template precisely. Use only the supplied session material. Do not invent facts, names, decisions, owners, dates, or quotations. Return Markdown only."
+
+        public static func approximatelyTokens(_ count: Int) -> String {
+            "About \(count.formatted()) tokens"
+        }
+
+        public static func estimatedMaximumCost(_ cost: String) -> String {
+            "Estimated maximum cost: \(cost)"
+        }
+
+        public static func confirmTitle(provider: String) -> String {
+            "Send to \(provider)?"
+        }
+
+        public static func confirmBody(
+            provider: String,
+            tokens: Int,
+            cost: String?
+        ) -> String {
+            let estimate = approximatelyTokens(tokens)
+            let costSentence = cost.map {
+                " \(estimatedMaximumCost($0))."
+            } ?? ""
+            return "Your transcript and notes will be sent to \(provider). \(estimate).\(costSentence)"
+        }
+
+        public static func generatingLocally(provider: String) -> String {
+            "Generating summary on this Mac with \(provider)."
+        }
+
+        public static func sending(provider: String) -> String {
+            "Sending to \(provider)"
+        }
+
+        public static func failed(provider: String) -> String {
+            "\(provider) didn't respond. Your transcript, notes, recording, and earlier summary are untouched."
+        }
+
+        public static func requiresChunking(
+            estimatedTokens: Int,
+            contextLimit: Int
+        ) -> String {
+            "This transcript needs about \(estimatedTokens.formatted()) input tokens, beyond this model's single-pass allowance of \(contextLimit.formatted()) tokens. Long-transcript generation is not available yet. The session files are untouched."
         }
     }
 
