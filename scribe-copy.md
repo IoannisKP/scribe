@@ -177,6 +177,17 @@ acknowledge the keypress itself as a saved pin.
 Recording waits for the one launch-time preparation already in progress. Do not
 imply that recording has started until both capture tracks are running.
 
+### Microphone route couldn't be isolated
+
+- Message: **The microphone route didn't match the selected input, so recording
+  didn't start. Select a physical microphone and try again.**
+- System-tap route: **The selected microphone resolved to Scribe's system-audio
+  tap, so recording didn't start. Select a physical microphone and try again.**
+
+These are recording-start failures: neither track has begun and no captured
+audio is being discarded. Keep the Core Audio object IDs in technical details,
+never in the main message.
+
 ### System track silent for more than 30 seconds
 
 **Nothing plays through your Mac right now**

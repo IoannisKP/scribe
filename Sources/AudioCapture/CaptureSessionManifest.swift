@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 5
+    public static let currentVersion = 6
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -267,6 +267,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let systemAudioStartupStageTimings:
         [SystemAudioStartupStageTiming]?
     public let systemAudioGraphPreparation: SystemAudioGraphPreparation?
+    public let microphoneInputDevice: MicrophoneInputDeviceIdentity?
 
     public init(
         version: Int = Self.currentVersion,
@@ -286,7 +287,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         originalFormat: String? = nil,
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
-        systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil
+        systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil,
+        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil
     ) {
         self.version = version
         self.sessionID = sessionID
@@ -306,6 +308,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         self.originalFormat = originalFormat
         self.systemAudioStartupStageTimings = systemAudioStartupStageTimings
         self.systemAudioGraphPreparation = systemAudioGraphPreparation
+        self.microphoneInputDevice = microphoneInputDevice
     }
 
     public static func dualTrack(
@@ -478,6 +481,12 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         replacing(systemAudioGraphPreparation: preparation)
     }
 
+    public func replacingMicrophoneInputDevice(
+        _ identity: MicrophoneInputDeviceIdentity
+    ) -> CaptureSessionManifest {
+        replacing(microphoneInputDevice: identity)
+    }
+
     public func appendingPin(_ pin: Pin) throws -> CaptureSessionManifest {
         var updated = pins.filter { $0.id != pin.id }
         updated.append(pin)
@@ -517,7 +526,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         pins: [Pin]? = nil,
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
-        systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil
+        systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil,
+        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil
     ) -> CaptureSessionManifest {
         CaptureSessionManifest(
             version: Self.currentVersion,
@@ -542,7 +552,9 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
                 ?? self.systemAudioStartupStageTimings,
             systemAudioGraphPreparation:
                 systemAudioGraphPreparation
-                ?? self.systemAudioGraphPreparation
+                ?? self.systemAudioGraphPreparation,
+            microphoneInputDevice:
+                microphoneInputDevice ?? self.microphoneInputDevice
         )
     }
 
@@ -713,6 +725,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case originalFormat
         case systemAudioStartupStageTimings
         case systemAudioGraphPreparation
+        case microphoneInputDevice
     }
 
     public init(from decoder: any Decoder) throws {
@@ -764,6 +777,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         systemAudioGraphPreparation = try container.decodeIfPresent(
             SystemAudioGraphPreparation.self,
             forKey: .systemAudioGraphPreparation
+        )
+        microphoneInputDevice = try container.decodeIfPresent(
+            MicrophoneInputDeviceIdentity.self,
+            forKey: .microphoneInputDevice
         )
     }
 }

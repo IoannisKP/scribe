@@ -1,4 +1,5 @@
 @preconcurrency import CoreAudio
+@preconcurrency import AudioToolbox
 import Darwin
 import Foundation
 
@@ -48,6 +49,32 @@ struct CoreAudioCallError: Error, Equatable, LocalizedError, Sendable {
 }
 
 enum CoreAudioProperties {
+    static func defaultInputDevice() throws -> AudioDeviceID {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+        try CoreAudioCallError.check(
+            status,
+            operation: "Reading the default input device"
+        )
+        guard deviceID != kAudioObjectUnknown else {
+            throw AudioCaptureError.microphoneInputUnavailable
+        }
+        return deviceID
+    }
+
     static func defaultOutputDevice() throws -> AudioDeviceID {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -92,12 +119,86 @@ enum CoreAudioProperties {
         )
         try CoreAudioCallError.check(
             status,
-            operation: "Reading the default output device UID"
+            operation: "Reading the audio device UID"
         )
         guard let unmanagedUID else {
-            throw AudioCaptureError.systemOutputDeviceUnavailable
+            throw AudioCaptureError.audioDeviceIdentityUnavailable
         }
         return unmanagedUID.takeRetainedValue() as String
+    }
+
+    static func deviceName(_ deviceID: AudioDeviceID) throws -> String {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var unmanagedName: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &size,
+            &unmanagedName
+        )
+        try CoreAudioCallError.check(
+            status,
+            operation: "Reading the audio device name"
+        )
+        guard let unmanagedName else {
+            throw AudioCaptureError.audioDeviceIdentityUnavailable
+        }
+        return unmanagedName.takeRetainedValue() as String
+    }
+
+    static func inputDeviceIdentity(
+        _ deviceID: AudioDeviceID
+    ) throws -> MicrophoneInputDeviceIdentity {
+        MicrophoneInputDeviceIdentity(
+            audioDeviceID: deviceID,
+            uid: try deviceUID(deviceID),
+            name: try deviceName(deviceID)
+        )
+    }
+
+    static func bindInputDevice(
+        _ deviceID: AudioDeviceID,
+        to audioUnit: AudioUnit
+    ) throws {
+        var requestedDeviceID = deviceID
+        try CoreAudioCallError.check(
+            AudioUnitSetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &requestedDeviceID,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            ),
+            operation: "Binding the microphone engine to the selected input device"
+        )
+
+        var boundDeviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        try CoreAudioCallError.check(
+            AudioUnitGetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &boundDeviceID,
+                &size
+            ),
+            operation: "Verifying the microphone input-device binding"
+        )
+        guard boundDeviceID == deviceID else {
+            throw AudioCaptureError.microphoneInputDeviceBindingMismatch(
+                requested: deviceID,
+                bound: boundDeviceID
+            )
+        }
     }
 
     static func currentProcessObjectID() throws -> AudioObjectID {

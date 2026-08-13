@@ -334,6 +334,14 @@ surfaces an error rather than truncating or wrapping the header fields.
 state transitions. Permission checks happen before the output file or audio
 engine is created.
 
+Before reading the input format or installing the tap, the service resolves
+`kAudioHardwarePropertyDefaultInputDevice`, binds that concrete device to the
+input node's AUHAL with `kAudioOutputUnitProperty_CurrentDevice`, and reads the
+property back. A mismatched binding or a route resolving to Scribe's private
+system-tap aggregate fails closed instead of risking two copies of system audio.
+The bound device's Core Audio object ID, persistent UID, and name are stored in
+`session.json` as `microphoneInputDevice` for route-level diagnostics.
+
 The realtime tap retains only a small sink containing the ring buffer. A
 detached high-priority consumer drains that ring through actor-isolated
 processing, preserving one serial `AVAudioConverter` and WAV writer.
