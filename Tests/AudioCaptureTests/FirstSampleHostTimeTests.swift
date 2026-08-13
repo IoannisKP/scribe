@@ -2,6 +2,32 @@
 import XCTest
 
 final class FirstSampleHostTimeTests: XCTestCase {
+    func testConcurrentPreparationCallersShareOneOperation() async throws {
+        let gate = SingleFlightPreparation<Int>()
+        let probe = PreparationProbe()
+
+        async let launchPrewarm = gate.value {
+            try await probe.prepare()
+        }
+        try await Task.sleep(for: .milliseconds(10))
+        async let immediateRecord = gate.value {
+            try await probe.prepare()
+        }
+
+        let (prewarmResult, recordResult) = try await (
+            launchPrewarm,
+            immediateRecord
+        )
+
+        XCTAssertEqual(prewarmResult.value, 42)
+        XCTAssertEqual(recordResult.value, 42)
+        XCTAssertEqual(prewarmResult.operationID, recordResult.operationID)
+        XCTAssertTrue(prewarmResult.startedNewOperation)
+        XCTAssertFalse(recordResult.startedNewOperation)
+        let preparationCount = await probe.preparationCount
+        XCTAssertEqual(preparationCount, 1)
+    }
+
     func testRealtimeCallbackCounterStartsAtZeroAndCountsEveryIncrement() throws {
         let counter = try RealtimeCallbackCounter()
 
@@ -35,5 +61,15 @@ final class FirstSampleHostTimeTests: XCTestCase {
         XCTAssertTrue(router.isAttached)
         router.detach()
         XCTAssertFalse(router.isAttached)
+    }
+}
+
+private actor PreparationProbe {
+    private(set) var preparationCount = 0
+
+    func prepare() async throws -> Int {
+        preparationCount += 1
+        try await Task.sleep(for: .milliseconds(50))
+        return 42
     }
 }

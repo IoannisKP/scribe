@@ -77,6 +77,8 @@ final class MeetingRecorderViewModel: ObservableObject {
         MicrophoneCaptureState = .idle
     @Published private(set) var systemAudioCaptureState:
         SystemAudioCaptureState = .idle
+    @Published private(set) var systemAudioPrewarmState:
+        SystemAudioPrewarmState = .preparing
     @Published private(set) var microphoneURL: URL?
     @Published private(set) var systemURL: URL?
     @Published private(set) var isBusy = false
@@ -283,6 +285,12 @@ final class MeetingRecorderViewModel: ObservableObject {
             return true
         }
         return false
+    }
+
+    var isWaitingToStartRecording: Bool {
+        isBusy
+            && !isRecording
+            && systemAudioPrewarmState == .preparing
     }
 
     var systemTapDiagnosticIsActive: Bool {
@@ -575,6 +583,9 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
         if case let .recovering(reason, _) = systemAudioCaptureState {
             return "Recovering system audio: \(reason)"
+        }
+        if systemAudioPrewarmState == .preparing, !isRecording {
+            return "Preparing system audio before recording"
         }
 
         switch captureState {
@@ -1818,6 +1829,8 @@ final class MeetingRecorderViewModel: ObservableObject {
                     )
                     microphoneCaptureState = await microphoneCapture.state
                     systemAudioCaptureState = await systemAudioCapture.state
+                    systemAudioPrewarmState =
+                        await systemAudioCapture.prewarmState
                     if let liveTransport {
                         liveTransportState = await liveTransport.state
                     }

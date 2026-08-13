@@ -301,6 +301,14 @@ realtime sink into the slot, and then calls `AudioDeviceStart`. A clean stop
 calls `AudioDeviceStop`, clears and releases the sink, and retains the unstarted
 graph for the next recording.
 
+Launch prewarming and an immediate Record request enter one single-flight
+preparation gate. If preparation is still running, Record awaits that exact
+operation; it cannot construct a competing graph. The UI remains responsive
+and displays the preparing state because the cold Core Audio work runs outside
+the capture actor. Each live `session.json` stores
+`systemAudioGraphPreparation` as `prewarmed` or `builtAtRecordingStart` rather
+than asking diagnostics to infer provenance from timing.
+
 The IOProc passes its `AudioBufferList` to a C17 mixer that handles interleaved
 or noninterleaved Float32 buffers and writes mono samples directly into the
 system ring. It does not construct `AVAudioPCMBuffer`, allocate, resample, log,

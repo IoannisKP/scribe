@@ -1050,3 +1050,22 @@ all dropping until the views order.
 **Reasoning:** The current window is scheduled for replacement. A single root
 handler is trivial and reusable behavior, while designing its visible target or
 artifact presentation now would create throwaway view work.
+
+## 2026-08-13 — Make system-tap preparation single-flight and explicit
+
+**Decision:** Route launch prewarming and recording startup through one shared
+preparation task. An immediate Record request waits for an in-flight launch
+prewarm; only a request that arrives before launch preparation begins can start
+that same task itself. Surface the wait as a preparing UI state and persist
+`systemAudioGraphPreparation` in `session.json` with `prewarmed` or
+`builtAtRecordingStart`.
+
+**Alternatives:** Keep the independent recording fallback and infer reuse from
+IOProc timing; disable Record until launch prewarming finishes; build two graphs
+and discard whichever finishes second.
+
+**Reasoning:** The old fire-and-forget launch task and recording fallback raced
+to reach the capture actor. A cold recording could therefore repeat the costly
+IOProc registration instead of waiting. Single-flight preparation removes that
+race without making the interface unresponsive, and explicit manifest data is
+stable enough for users, diagnostics, and future regression tests.
