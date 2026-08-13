@@ -689,9 +689,9 @@ seconds wrap naturally and pass through the same paragraphing rules.
 1. Launch Scribe and confirm the sidebar remains present while the detail pane
    switches. Collapse and restore it with the standard sidebar toggle, relaunch,
    and confirm visibility and the selected destination persist.
-2. Confirm **All sessions**, **Needs summary**, and **Imported** counts match
-   the actual session manifests and artifacts. No speculative categories are
-   present.
+2. Confirm **All sessions** and **Imported** counts match the actual session
+   manifests. **Needs summary** remains hidden until summary generation is
+   available in Milestone 6; no unactionable smart category is present.
 3. Create a manual folder. Confirm the same directory appears at the root of
    the configured Scribe save location in Finder. A session folder moved into
    it must remain indexed by its embedded UUID.

@@ -1198,3 +1198,19 @@ without a focused window or Accessibility permission but does not steal the
 shortcut outside capture. Keeping pins in the manifest makes them durable user
 data beside track timing, while serialization prevents stop and pin actions
 from losing one another's metadata.
+
+## 2026-08-13 — Gate Needs summary on capability, not count
+
+**Decision:** Keep the Needs summary index count available, but do not render
+its smart folder until summary generation exists. Resolve an old persisted
+Needs summary selection to All sessions while the capability is unavailable.
+
+**Alternatives:** Show the folder with every session before Milestone 6; hide
+it only when its count equals All sessions; remove the index projection until
+summary work begins.
+
+**Reasoning:** A count comparison would make navigation appear and disappear as
+session state changes. A capability gate gives the destination a stable
+lifecycle and prevents an accurate but unactionable count from looking broken.
+Retaining the projection avoids coupling the filesystem index migration to the
+feature launch.

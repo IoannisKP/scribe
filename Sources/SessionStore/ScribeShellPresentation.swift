@@ -30,6 +30,12 @@ public struct ScribeShellPreferences: @unchecked Sendable {
     }
 }
 
+public enum ScribeFeatureAvailability {
+    /// Milestone 6 will switch this on when summary generation has a real
+    /// action and artifact lifecycle.
+    public static let summaryGeneration = false
+}
+
 public enum ScribeShellPresentation {
     public static func primaryControlShowsRecording(
         captureIsStarting: Bool,
@@ -44,5 +50,17 @@ public enum ScribeShellPresentation {
         captureIsActive: Bool
     ) -> Bool {
         selectedRecording && captureIsActive
+    }
+
+    public static func resolvedSelectionID(
+        _ selectionID: String,
+        summaryFeatureAvailable: Bool
+    ) -> String {
+        if selectionID == "smart.needsSummary",
+            !summaryFeatureAvailable
+        {
+            return "smart.all"
+        }
+        return selectionID
     }
 }

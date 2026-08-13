@@ -655,8 +655,11 @@ remains identity and the next reconciliation updates the incidental path.
 
 The SQLite derivative computes All sessions, Needs summary, and Imported counts
 from indexed sessions, artifact kinds, and manifest source. No UI category is
-inferred from titles or filenames. Sidebar visibility and selection use stable
-UserDefaults keys; session and folder data remain filesystem-owned.
+inferred from titles or filenames. The index keeps the Needs summary projection
+ready, but the shell capability-gates that destination until summary generation
+exists; a previously persisted selection resolves safely to All sessions while
+the capability is off. Sidebar visibility and selection use stable UserDefaults
+keys; session and folder data remain filesystem-owned.
 
 ## Concurrency
 

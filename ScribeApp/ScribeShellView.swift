@@ -90,7 +90,11 @@ struct ScribeShellView: View {
         .onAppear {
             columnVisibility = sidebarWasVisible ? .all : .detailOnly
             let restored = ScribeShellSelection(
-                persistenceID: persistedSelection
+                persistenceID: ScribeShellPresentation.resolvedSelectionID(
+                    persistedSelection,
+                    summaryFeatureAvailable:
+                        ScribeFeatureAvailability.summaryGeneration
+                )
             )
             selection = validSelection(restored)
         }
@@ -226,12 +230,14 @@ struct ScribeShellView: View {
                 count: recorder.sessionSmartFolderCounts.allSessions,
                 selection: .allSessions
             )
-            sidebarRow(
-                title: ScribeCopy.Shell.needsSummary,
-                systemImage: "sparkles",
-                count: recorder.sessionSmartFolderCounts.needsSummary,
-                selection: .needsSummary
-            )
+            if ScribeFeatureAvailability.summaryGeneration {
+                sidebarRow(
+                    title: ScribeCopy.Shell.needsSummary,
+                    systemImage: "sparkles",
+                    count: recorder.sessionSmartFolderCounts.needsSummary,
+                    selection: .needsSummary
+                )
+            }
             sidebarRow(
                 title: ScribeCopy.Shell.imported,
                 systemImage: "square.and.arrow.down",
@@ -437,6 +443,11 @@ struct ScribeShellView: View {
     private func validSelection(
         _ proposed: ScribeShellSelection
     ) -> ScribeShellSelection {
+        if proposed == .needsSummary,
+            !ScribeFeatureAvailability.summaryGeneration
+        {
+            return .allSessions
+        }
         if case let .manualFolder(path) = proposed,
             !recorder.manualSessionFolders.contains(where: {
                 $0.directory.path == path

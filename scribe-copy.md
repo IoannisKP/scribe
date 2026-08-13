@@ -95,7 +95,10 @@ voice per screen.
 
 - Primary action: **New recording**
 - Import action: **Import audio or video…**
-- Smart folders: **All sessions** · **Needs summary** · **Imported**
+- Smart folders available now: **All sessions** · **Imported**
+- Summary-capability smart folder: **Needs summary**. Keep it hidden until
+  summary generation is available; do not show a permanently full destination
+  before Milestone 6 gives it an action and artifact lifecycle.
 - Manual-folder section: **Folders** · **New folder** · **Folder name** ·
   **Create** · **Cancel**
 - Bottom item: **Settings**
