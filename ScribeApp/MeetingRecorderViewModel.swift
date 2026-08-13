@@ -1,5 +1,6 @@
 @preconcurrency import AppKit
 import AudioCapture
+import Darwin
 import Foundation
 import ModelManager
 import SpeechPipeline
@@ -116,6 +117,8 @@ final class MeetingRecorderViewModel: ObservableObject {
         LiveTranscriptionPipelineState = .idle
     @Published private(set) var liveTranscriptRows:
         [LiveTranscriptRow] = []
+    @Published private(set) var recordingTranscriptRows:
+        [RecordingTranscriptPresentationRow] = []
     @Published private(set) var liveSpeechMetrics:
         LiveSpeechPipelineMetrics = .zero
     @Published private(set) var recordingStartedAt: Date?
@@ -127,6 +130,8 @@ final class MeetingRecorderViewModel: ObservableObject {
         SessionSmartFolderCounts = .zero
     @Published private(set) var manualSessionFolders:
         [ManualSessionFolder] = []
+    @Published private(set) var recentRecordingPin:
+        CaptureSessionManifest.Pin?
     @Published private(set) var mediaImportState: MediaImportState = .idle
     @Published private(set) var systemTapDiagnosticState:
         SystemTapDiagnosticUIState = .idle
@@ -193,6 +198,14 @@ final class MeetingRecorderViewModel: ObservableObject {
     private var systemTapDiagnosticTask: Task<Void, Never>?
     private var notesRevision: UInt64 = 0
     private var lastSystemSpeechAt: Date?
+    private let recordingPinWriter = RecordingPinWriter()
+    private var recordingPinHotKey: GlobalHotKeyMonitor?
+    private var pinConfirmationTask: Task<Void, Never>?
+    private var pinWriteTasks: [UUID: Task<Void, Never>] = [:]
+    private var pinHotKeyRegistrationFailedForSession = false
+    private var isFinalizingRecording = false
+    private var transcriptPresentationCache =
+        RecordingTranscriptPresentationCache()
 
     init() {
         let microphonePermissionAuthorizer =
@@ -286,6 +299,8 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     deinit {
+        recordingPinHotKey?.stop()
+        pinConfirmationTask?.cancel()
         systemTapDiagnosticTask?.cancel()
         stateMonitorTask?.cancel()
         modelDownloadStateMonitorTask?.cancel()
@@ -308,6 +323,10 @@ final class MeetingRecorderViewModel: ObservableObject {
             && systemAudioPrewarmState == .preparing
     }
 
+    var canAddRecordingPin: Bool {
+        isRecording && !isFinalizingRecording
+    }
+
     var showsRecordingWorkspace: Bool {
         switch captureState {
         case .starting, .recording, .stopping:
@@ -315,10 +334,6 @@ final class MeetingRecorderViewModel: ObservableObject {
         case .idle, .stopped, .failed:
             isWaitingToStartRecording
         }
-    }
-
-    var recordingTranscriptRows: [RecordingTranscriptPresentationRow] {
-        RecordingViewPresentation.transcriptRows(from: liveTranscriptRows)
     }
 
     var recordingLevels: RecordingLevelSnapshot {
@@ -335,8 +350,8 @@ final class MeetingRecorderViewModel: ObservableObject {
         )
     }
 
-    var recordingNotice: RecordingStatusNotice? {
-        RecordingViewPresentation.notice(
+    private var recordingNotices: RecordingStatusNotices {
+        RecordingViewPresentation.notices(
             isPreparingSystemAudio: isWaitingToStartRecording,
             isRecording: isRecording,
             selectedModelDisplayName: selectedModelDescriptor.displayName,
@@ -347,6 +362,14 @@ final class MeetingRecorderViewModel: ObservableObject {
             transcriptionState: liveTranscriptionPipelineState,
             transportState: liveTransportState
         )
+    }
+
+    var sidebarRecordingNotice: RecordingStatusNotice? {
+        recordingNotices.sidebar
+    }
+
+    var transcriptRailNotice: RecordingStatusNotice? {
+        recordingNotices.transcriptRail
     }
 
     func elapsedRecordingTime(at date: Date = Date()) -> TimeInterval {
@@ -371,6 +394,58 @@ final class MeetingRecorderViewModel: ObservableObject {
                 errorMessage = ScribeCopy.Recording.notesSaveFailed
             }
         }
+    }
+
+    func addRecordingPin() {
+        guard
+            canAddRecordingPin,
+            let sessionDirectory = recordingSessionDirectory()
+        else {
+            return
+        }
+        let hostTime = mach_absolute_time()
+        let createdAt = Date()
+        let pinID = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer { pinWriteTasks[pinID] = nil }
+            let sampleOffset = await recordingPinSampleOffset(
+                atHostTime: hostTime
+            )
+            guard let sampleOffset else {
+                errorMessage = ScribeCopy.Recording.pinUnavailable
+                return
+            }
+            let pin = CaptureSessionManifest.Pin(
+                id: pinID,
+                sampleOffset: sampleOffset,
+                createdAt: createdAt
+            )
+            do {
+                try await recordingPinWriter.append(
+                    pin,
+                    to: sessionDirectory
+                )
+                recentRecordingPin = pin
+                pinConfirmationTask?.cancel()
+                pinConfirmationTask = Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                        guard self?.recentRecordingPin?.id == pin.id else {
+                            return
+                        }
+                        self?.recentRecordingPin = nil
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        return
+                    }
+                }
+            } catch {
+                errorMessage = ScribeCopy.Recording.pinSaveFailed
+            }
+        }
+        pinWriteTasks[pinID] = task
     }
 
     var systemTapDiagnosticIsActive: Bool {
@@ -943,14 +1018,17 @@ final class MeetingRecorderViewModel: ObservableObject {
         liveSpeechPipelineState = .idle
         liveTranscriptionPipeline = nil
         liveTranscriptionPipelineState = .idle
-        liveTranscriptRows = []
+        replaceLiveTranscriptRows(with: [])
         liveSpeechMetrics = .zero
         recordingStartedAt = nil
         activeNotesURL = nil
         notesText = ""
         systemTrackHasBeenSilent = false
+        recentRecordingPin = nil
+        pinConfirmationTask?.cancel()
         lastSystemSpeechAt = nil
         handledAutomaticStopSessionDirectory = nil
+        isFinalizingRecording = false
         Task {
             do {
                 let sessionDirectory = try makeSessionDirectory()
@@ -1019,9 +1097,13 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
 
         isBusy = true
+        isFinalizingRecording = true
+        recordingPinHotKey?.stop()
+        recordingPinHotKey = nil
         errorMessage = nil
         Task {
             var messages: [String] = []
+            await waitForPendingRecordingPins()
             if let activeNotesURL {
                 notesRevision &+= 1
                 do {
@@ -1049,6 +1131,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                 }
                 errorMessage = messages.joined(separator: " ")
                 captureState = await coordinator.state
+                isFinalizingRecording = false
                 isBusy = false
                 return
             }
@@ -1062,6 +1145,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                 : messages.joined(separator: " ")
             captureState = await coordinator.state
             recordingStartedAt = nil
+            isFinalizingRecording = false
             isBusy = false
         }
     }
@@ -1318,7 +1402,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         let filename = sourceURL.lastPathComponent
         isBusy = true
         transcriptSegments = []
-        liveTranscriptRows = []
+        replaceLiveTranscriptRows(with: [])
         transcriptionState = .idle
         errorMessage = nil
         mediaImportState = .copying(filename: filename)
@@ -1954,6 +2038,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                     }
                     let observedCaptureState = await coordinator.state
                     captureState = observedCaptureState
+                    updateRecordingPinHotKeyRegistration()
                     await handleAutomaticStopIfNeeded(
                         observedCaptureState
                     )
@@ -1979,7 +2064,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                         let currentRows =
                             await liveTranscriptionPipeline.rows
                         if currentRows != liveTranscriptRows {
-                            liveTranscriptRows = currentRows
+                            replaceLiveTranscriptRows(with: currentRows)
                         }
                     }
                     try await Task.sleep(for: .milliseconds(250))
@@ -2008,6 +2093,8 @@ final class MeetingRecorderViewModel: ObservableObject {
 
         handledAutomaticStopSessionDirectory = sessionDirectory
         isBusy = true
+        isFinalizingRecording = true
+        await waitForPendingRecordingPins()
         var messages: [String] = []
         if let activeNotesURL {
             notesRevision &+= 1
@@ -2052,6 +2139,7 @@ final class MeetingRecorderViewModel: ObservableObject {
             ? nil
             : messages.joined(separator: " ")
         recordingStartedAt = nil
+        isFinalizingRecording = false
         isBusy = false
     }
 
@@ -2307,8 +2395,9 @@ final class MeetingRecorderViewModel: ObservableObject {
                     finishFailureMessage = error.localizedDescription
                     failures.append(error.localizedDescription)
                 }
-                liveTranscriptRows =
-                    await liveTranscriptionPipeline.rows
+                replaceLiveTranscriptRows(
+                    with: await liveTranscriptionPipeline.rows
+                )
                 let stateBeforeShutdown =
                     await liveTranscriptionPipeline.state
                 let finalState:
@@ -2393,7 +2482,9 @@ final class MeetingRecorderViewModel: ObservableObject {
         await liveTranscriptionPipeline.shutdown(
             finalState: finalState
         )
-        liveTranscriptRows = await liveTranscriptionPipeline.rows
+        replaceLiveTranscriptRows(
+            with: await liveTranscriptionPipeline.rows
+        )
         liveTranscriptionPipelineState =
             await liveTranscriptionPipeline.state
         self.liveTranscriptionPipeline = nil
@@ -2450,6 +2541,85 @@ final class MeetingRecorderViewModel: ObservableObject {
         systemTrackHasBeenSilent = now.timeIntervalSince(lastActivity) >= 30
     }
 
+    private func replaceLiveTranscriptRows(with rows: [LiveTranscriptRow]) {
+        liveTranscriptRows = rows
+        if transcriptPresentationCache.update(with: rows) {
+            recordingTranscriptRows =
+                transcriptPresentationCache.presentationRows
+        } else if rows.isEmpty, !recordingTranscriptRows.isEmpty {
+            recordingTranscriptRows = []
+        }
+    }
+
+    private func updateRecordingPinHotKeyRegistration() {
+        if isRecording {
+            guard
+                recordingPinHotKey == nil,
+                !pinHotKeyRegistrationFailedForSession
+            else {
+                return
+            }
+            let monitor = GlobalHotKeyMonitor { [weak self] in
+                self?.addRecordingPin()
+            }
+            do {
+                try monitor.start()
+                recordingPinHotKey = monitor
+            } catch {
+                pinHotKeyRegistrationFailedForSession = true
+                errorMessage = ScribeCopy.Recording.pinShortcutUnavailable
+            }
+        } else {
+            recordingPinHotKey?.stop()
+            recordingPinHotKey = nil
+            pinHotKeyRegistrationFailedForSession = false
+        }
+    }
+
+    private func recordingPinSampleOffset(
+        atHostTime hostTime: UInt64
+    ) async -> Int64? {
+        for attempt in 0..<12 {
+            let microphoneHostTime =
+                await microphoneCapture.firstSampleHostTime()
+            let systemHostTime =
+                await systemAudioCapture.firstSampleHostTime()
+            if let offset = AudioHostTime.recordingSampleOffset(
+                atHostTime: hostTime,
+                microphoneFirstSampleHostTime: microphoneHostTime,
+                systemFirstSampleHostTime: systemHostTime
+            ) {
+                return offset
+            }
+            guard attempt < 11 else { break }
+            do {
+                try await Task.sleep(for: .milliseconds(25))
+            } catch {
+                return nil
+            }
+        }
+        return nil
+    }
+
+    private func waitForPendingRecordingPins() async {
+        let pending = Array(pinWriteTasks.values)
+        for task in pending {
+            await task.value
+        }
+    }
+
+}
+
+private actor RecordingPinWriter {
+    func append(
+        _ pin: CaptureSessionManifest.Pin,
+        to sessionDirectory: URL
+    ) async throws {
+        try await CaptureSessionManifestStore.shared.appendPin(
+            pin,
+            in: sessionDirectory
+        )
+    }
 }
 
 private actor NotesDocumentWriter {

@@ -5,9 +5,11 @@ import SwiftUI
 
 struct RecordingWorkspaceView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
-    @AppStorage("recordingTranscriptWidth") private var transcriptWidth =
+    @AppStorage(RecordingWorkspacePreferences.transcriptWidthKey)
+    private var transcriptWidth =
         RecordingWorkspaceLayout.defaultTranscriptWidth
-    @AppStorage("recordingTranscriptCollapsed") private var isCollapsed = false
+    @AppStorage(RecordingWorkspacePreferences.transcriptCollapsedKey)
+    private var isCollapsed = false
     @State private var transcriptDragStartWidth: Double?
 
     var body: some View {
@@ -90,7 +92,7 @@ struct RecordingWorkspaceView: View {
 
             Divider()
 
-            if let notice = recorder.recordingNotice {
+            if let notice = recorder.transcriptRailNotice {
                 RecordingNoticeView(notice: notice)
                     .padding(14)
             }
@@ -164,19 +166,9 @@ struct RecordingWorkspaceView: View {
         _ proposed: Double,
         totalWidth: Double
     ) -> Double {
-        let maximumForWindow = max(
-            RecordingWorkspaceLayout.minimumTranscriptWidth,
-            totalWidth - RecordingWorkspaceLayout.minimumNotesWidth
-        )
-        return min(
-            max(
-                proposed,
-                RecordingWorkspaceLayout.minimumTranscriptWidth
-            ),
-            min(
-                RecordingWorkspaceLayout.maximumTranscriptWidth,
-                maximumForWindow
-            )
+        RecordingWorkspaceLayout.constrainedTranscriptWidth(
+            proposed,
+            totalWidth: totalWidth
         )
     }
 

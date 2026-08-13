@@ -192,6 +192,7 @@ final class CaptureSessionManifestTests: XCTestCase {
             ["source.microphone", "source.system"]
         )
         XCTAssertEqual(first.speakerIdentities, second.speakerIdentities)
+        XCTAssertTrue(first.pins.isEmpty)
     }
 
     func testReadsLegacyStartTimeAsEstimatedCanonicalSamples() throws {
@@ -243,6 +244,88 @@ final class CaptureSessionManifestTests: XCTestCase {
         )
         XCTAssertEqual(missing.microphone, 0)
         XCTAssertNil(missing.system)
+    }
+
+    func testRecordingPinUsesEarliestCapturedSampleForSharedTimeline() {
+        let offset = AudioHostTime.recordingSampleOffset(
+            atHostTime: 2_000_000_000,
+            microphoneFirstSampleHostTime: 1_000_000_000,
+            systemFirstSampleHostTime: 1_100_000_000
+        )
+        let reversed = AudioHostTime.recordingSampleOffset(
+            atHostTime: 2_000_000_000,
+            microphoneFirstSampleHostTime: 1_100_000_000,
+            systemFirstSampleHostTime: 1_000_000_000
+        )
+
+        XCTAssertEqual(offset, reversed)
+        XCTAssertNotNil(offset)
+        XCTAssertNil(
+            AudioHostTime.recordingSampleOffset(
+                atHostTime: 2_000_000_000,
+                microphoneFirstSampleHostTime: nil,
+                systemFirstSampleHostTime: nil
+            )
+        )
+    }
+
+    func testPinsPersistInSessionJSON() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = CaptureSessionManifest.Pin(
+            id: UUID(),
+            sampleOffset: 32_000,
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+        let second = CaptureSessionManifest.Pin(
+            id: UUID(),
+            sampleOffset: 16_000,
+            label: "  Decision  ",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+        let manifest = try CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Pinned recording",
+            createdAt: Date(timeIntervalSince1970: 1)
+        ).appendingPin(first).appendingPin(second)
+
+        try manifest.write(to: directory)
+        let decoded = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(decoded.pins.map(\.sampleOffset), [16_000, 32_000])
+        XCTAssertEqual(decoded.pins.first?.label, "Decision")
+        XCTAssertEqual(decoded.version, CaptureSessionManifest.currentVersion)
+    }
+
+    func testPinAndTrackOffsetMutationsCannotOverwriteEachOther() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Concurrent metadata",
+            createdAt: Date(timeIntervalSince1970: 1)
+        ).write(to: directory)
+        let pin = CaptureSessionManifest.Pin(sampleOffset: 8_000)
+
+        async let pinWrite: Void = CaptureSessionManifestStore.shared
+            .appendPin(pin, in: directory)
+        async let offsetWrite: Void = CaptureSessionManifestStore.shared
+            .replaceTrackOffsets(
+                microphone: 0,
+                system: 320,
+                in: directory
+            )
+        _ = try await (pinWrite, offsetWrite)
+        let decoded = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(decoded.pins.map(\.id), [pin.id])
+        XCTAssertEqual(decoded.pins.map(\.sampleOffset), [8_000])
+        XCTAssertEqual(
+            decoded.track(for: .system)?.startSampleOffset,
+            320
+        )
     }
 
     func testRoundTripsSystemAudioStartupStageTimings() throws {

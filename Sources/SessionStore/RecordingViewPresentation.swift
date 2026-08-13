@@ -75,10 +75,68 @@ public enum RecordingStatusNotice: Equatable, Sendable {
 public enum RecordingWorkspaceLayout {
     public static let notesFraction = 0.60
     public static let transcriptFraction = 0.40
-    public static let defaultTranscriptWidth: Double = 360
+    public static let defaultTranscriptWidth: Double = 320
     public static let minimumTranscriptWidth: Double = 260
     public static let maximumTranscriptWidth: Double = 620
     public static let minimumNotesWidth: Double = 360
+
+    public static func constrainedTranscriptWidth(
+        _ proposed: Double,
+        totalWidth: Double
+    ) -> Double {
+        let maximumForWindow = max(
+            minimumTranscriptWidth,
+            totalWidth - minimumNotesWidth
+        )
+        return min(
+            max(proposed, minimumTranscriptWidth),
+            min(maximumTranscriptWidth, maximumForWindow)
+        )
+    }
+}
+
+public enum RecordingWorkspacePreferences {
+    public static let transcriptWidthKey =
+        "recordingTranscriptWidth"
+    public static let transcriptCollapsedKey =
+        "recordingTranscriptCollapsed"
+}
+
+public struct RecordingStatusNotices: Equatable, Sendable {
+    public let sidebar: RecordingStatusNotice?
+    public let transcriptRail: RecordingStatusNotice?
+
+    public init(
+        sidebar: RecordingStatusNotice?,
+        transcriptRail: RecordingStatusNotice?
+    ) {
+        self.sidebar = sidebar
+        self.transcriptRail = transcriptRail
+    }
+}
+
+public struct RecordingTranscriptPresentationCache: Sendable {
+    public private(set) var sourceRows: [LiveTranscriptRow]
+    public private(set) var presentationRows:
+        [RecordingTranscriptPresentationRow]
+    public private(set) var revision: UInt64
+
+    public init() {
+        sourceRows = []
+        presentationRows = []
+        revision = 0
+    }
+
+    @discardableResult
+    public mutating func update(with rows: [LiveTranscriptRow]) -> Bool {
+        guard rows != sourceRows else { return false }
+        sourceRows = rows
+        presentationRows = RecordingViewPresentation.transcriptRows(
+            from: rows
+        )
+        revision &+= 1
+        return true
+    }
 }
 
 public enum RecordingViewPresentation {
@@ -151,7 +209,7 @@ public enum RecordingViewPresentation {
         )
     }
 
-    public static func notice(
+    public static func notices(
         isPreparingSystemAudio: Bool,
         isRecording: Bool,
         selectedModelDisplayName: String,
@@ -161,12 +219,73 @@ public enum RecordingViewPresentation {
         speechState: LiveSpeechPipelineState,
         transcriptionState: LiveTranscriptionPipelineState,
         transportState: LiveAudioTransportState
+    ) -> RecordingStatusNotices {
+        let sidebar = captureNotice(
+            isPreparingSystemAudio: isPreparingSystemAudio,
+            isRecording: isRecording,
+            systemTrackHasBeenSilent: systemTrackHasBeenSilent,
+            transcriptionState: transcriptionState,
+            transportState: transportState
+        )
+        let transcriptRail = transcriptionNotice(
+            isRecording: isRecording,
+            selectedModelDisplayName: selectedModelDisplayName,
+            firstTextDelay: firstTextDelay,
+            rowsAreEmpty: rowsAreEmpty,
+            speechState: speechState,
+            transcriptionState: transcriptionState
+        )
+        return RecordingStatusNotices(
+            sidebar: sidebar,
+            transcriptRail: transcriptRail
+        )
+    }
+
+    private static func captureNotice(
+        isPreparingSystemAudio: Bool,
+        isRecording: Bool,
+        systemTrackHasBeenSilent: Bool,
+        transcriptionState: LiveTranscriptionPipelineState,
+        transportState: LiveAudioTransportState
     ) -> RecordingStatusNotice? {
         if isPreparingSystemAudio {
             return .preparingSystemAudio
         }
         guard isRecording else { return nil }
+        switch transcriptionState {
+        case .bufferingToDisk:
+            return .buffering
+        case .catchingUp:
+            return .catchingUp
+        case .idle, .modelUnavailable, .preparing, .running, .finishing,
+            .completed, .failed:
+            break
+        }
 
+        switch transportState {
+        case .bufferingToDisk:
+            return .buffering
+        case .catchingUp:
+            return .catchingUp
+        case .idle, .ready, .keepingUp, .recordingComplete, .drained,
+            .failed:
+            break
+        }
+        if systemTrackHasBeenSilent {
+            return .systemTrackSilent
+        }
+        return nil
+    }
+
+    private static func transcriptionNotice(
+        isRecording: Bool,
+        selectedModelDisplayName: String,
+        firstTextDelay: Int,
+        rowsAreEmpty: Bool,
+        speechState: LiveSpeechPipelineState,
+        transcriptionState: LiveTranscriptionPipelineState
+    ) -> RecordingStatusNotice? {
+        guard isRecording else { return nil }
         if case .modelUnavailable = speechState {
             return .sileroMissing
         }
@@ -185,25 +304,9 @@ public enum RecordingViewPresentation {
                 displayName: selectedModelDisplayName,
                 details: message
             )
-        case .bufferingToDisk:
-            return .buffering
-        case .catchingUp:
-            return .catchingUp
-        case .idle, .preparing, .running, .finishing, .completed:
+        case .idle, .preparing, .running, .bufferingToDisk, .catchingUp,
+            .finishing, .completed:
             break
-        }
-
-        switch transportState {
-        case .bufferingToDisk:
-            return .buffering
-        case .catchingUp:
-            return .catchingUp
-        case .idle, .ready, .keepingUp, .recordingComplete, .drained,
-            .failed:
-            break
-        }
-        if systemTrackHasBeenSilent {
-            return .systemTrackSilent
         }
         if rowsAreEmpty, firstTextDelay > 0 {
             return .waiting(firstTextSeconds: firstTextDelay)

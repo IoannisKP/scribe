@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 3
+    public static let currentVersion = 4
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -144,6 +144,41 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         }
     }
 
+    public struct Pin: Codable, Equatable, Identifiable, Sendable {
+        public let id: UUID
+        public let sampleOffset: Int64
+        public let label: String?
+        public let createdAt: Date
+
+        public init(
+            id: UUID = UUID(),
+            sampleOffset: Int64,
+            label: String? = nil,
+            createdAt: Date = Date()
+        ) {
+            self.id = id
+            self.sampleOffset = sampleOffset
+            self.label = Self.cleanLabel(label)
+            self.createdAt = createdAt
+        }
+
+        public func labeling(_ label: String?) -> Pin {
+            Pin(
+                id: id,
+                sampleOffset: sampleOffset,
+                label: label,
+                createdAt: createdAt
+            )
+        }
+
+        private static func cleanLabel(_ label: String?) -> String? {
+            let clean = label?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            return clean?.isEmpty == false ? clean : nil
+        }
+    }
+
     public enum SpeakerNameAssignment: String, Codable, Sendable {
         case machineAssigned
         case userAssigned
@@ -194,6 +229,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let speakerIdentities: [SpeakerIdentity]
     public let artifacts: [Artifact]
     public let transcriptionHistory: [TranscriptionRevision]
+    public let pins: [Pin]
     public let originalFilename: String?
     public let originalFormat: String?
     public let systemAudioStartupStageTimings:
@@ -212,6 +248,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact] = [],
         transcriptionHistory: [TranscriptionRevision] = [],
+        pins: [Pin] = [],
         originalFilename: String? = nil,
         originalFormat: String? = nil,
         systemAudioStartupStageTimings:
@@ -230,6 +267,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             ?? Self.defaultSpeakerIdentities(for: tracks)
         self.artifacts = artifacts
         self.transcriptionHistory = transcriptionHistory
+        self.pins = pins
         self.originalFilename = originalFilename
         self.originalFormat = originalFormat
         self.systemAudioStartupStageTimings = systemAudioStartupStageTimings
@@ -406,12 +444,41 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         replacing(systemAudioGraphPreparation: preparation)
     }
 
+    public func appendingPin(_ pin: Pin) throws -> CaptureSessionManifest {
+        var updated = pins.filter { $0.id != pin.id }
+        updated.append(pin)
+        updated.sort {
+            if $0.sampleOffset != $1.sampleOffset {
+                return $0.sampleOffset < $1.sampleOffset
+            }
+            return $0.createdAt < $1.createdAt
+        }
+        let manifest = replacing(pins: updated)
+        try manifest.validate()
+        return manifest
+    }
+
+    public func labelingPin(
+        identifiedBy id: UUID,
+        label: String?
+    ) throws -> CaptureSessionManifest {
+        guard let index = pins.firstIndex(where: { $0.id == id }) else {
+            throw CaptureSessionManifestError.pinNotFound(id)
+        }
+        var updated = pins
+        updated[index] = updated[index].labeling(label)
+        let manifest = replacing(pins: updated)
+        try manifest.validate()
+        return manifest
+    }
+
     public func replacing(
         sessionID: UUID? = nil,
         tracks: [Track]? = nil,
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact]? = nil,
         transcriptionHistory: [TranscriptionRevision]? = nil,
+        pins: [Pin]? = nil,
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
         systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil
@@ -430,6 +497,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             artifacts: artifacts ?? self.artifacts,
             transcriptionHistory:
                 transcriptionHistory ?? self.transcriptionHistory,
+            pins: pins ?? self.pins,
             originalFilename: originalFilename,
             originalFormat: originalFormat,
             systemAudioStartupStageTimings:
@@ -516,6 +584,12 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
                 try Self.validate(relativePath: path)
             }
         }
+        guard
+            Set(pins.map(\.id)).count == pins.count,
+            pins.allSatisfy({ $0.sampleOffset >= 0 })
+        else {
+            throw CaptureSessionManifestError.invalidPins
+        }
     }
 
     private static func validate(relativePath: String) throws {
@@ -591,6 +665,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case speakerIdentities
         case artifacts
         case transcriptionHistory
+        case pins
         case originalFilename
         case originalFormat
         case systemAudioStartupStageTimings
@@ -623,6 +698,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             [TranscriptionRevision].self,
             forKey: .transcriptionHistory
         ) ?? []
+        pins = try container.decodeIfPresent(
+            [Pin].self,
+            forKey: .pins
+        ) ?? []
         originalFilename = try container.decodeIfPresent(
             String.self,
             forKey: .originalFilename
@@ -654,6 +733,8 @@ public enum CaptureSessionManifestError:
     case invalidSpeakerSet
     case invalidSpeakerName(String)
     case speakerNotFound(String)
+    case pinNotFound(UUID)
+    case invalidPins
     case invalidTitle
     case invalidStartTime(source: AudioSource, startTime: TimeInterval)
     case invalidRelativePath(String)
@@ -672,6 +753,10 @@ public enum CaptureSessionManifestError:
             "Speaker \(id) has an invalid display-name assignment."
         case let .speakerNotFound(id):
             "Session metadata does not contain speaker \(id)."
+        case let .pinNotFound(id):
+            "Session metadata does not contain pin \(id.uuidString)."
+        case .invalidPins:
+            "Session metadata contains duplicate pins or a negative pin offset."
         case .invalidTitle:
             "Session metadata must contain a title."
         case let .invalidStartTime(source, startTime):
@@ -679,5 +764,35 @@ public enum CaptureSessionManifestError:
         case let .invalidRelativePath(path):
             "Session metadata contains an unsafe relative path: \(path)."
         }
+    }
+}
+
+/// Serializes live mutations of session.json so a pin captured while a track
+/// is finalizing cannot overwrite the track offsets written at stop.
+public actor CaptureSessionManifestStore {
+    public static let shared = CaptureSessionManifestStore()
+
+    public func appendPin(
+        _ pin: CaptureSessionManifest.Pin,
+        in sessionDirectory: URL
+    ) throws {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        )
+        try manifest.appendingPin(pin).write(to: sessionDirectory)
+    }
+
+    public func replaceTrackOffsets(
+        microphone: Int64?,
+        system: Int64?,
+        in sessionDirectory: URL
+    ) throws {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        ).replacingTrackOffsets(
+            microphone: microphone,
+            system: system
+        )
+        try manifest.write(to: sessionDirectory)
     }
 }

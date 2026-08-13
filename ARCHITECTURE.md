@@ -605,6 +605,12 @@ attributes highlight syntax without changing the stored string.
 Revision-stamped atomic writes serialize rapid edits, and stop—including an
 automatic low-disk stop—flushes the latest text.
 
+The notes/transcript split defaults to roughly 60/40, persists the transcript
+width and collapsed state, and clamps resizing so both panes remain usable.
+Transcript paragraph presentation is cached only when `LiveTranscriptRow`
+changes. Notes keystrokes therefore update their own published text and atomic
+writer without rerunning paragraph construction on the main actor.
+
 The transcript rail projects `LiveTranscriptRow` values through the shared
 `TranscriptParagrapher`. Paragraphs may span engine windows and are therefore
 independent of whether a source produced 12-second or 30-second blocks. Stable
@@ -620,6 +626,22 @@ window duration plus overlap; no Parakeet-specific delay is embedded in the
 view. Preparing, buffering, catch-up, missing-model, missing-Silero, load
 failure, and quiet-system states are pure presentation projections whose copy
 lives in `ScribeCopy` and `scribe-copy.md`.
+
+Capture notices and transcription notices are separate projections. Preparing
+system audio, buffering, catch-up, and a silent system track render in the
+persistent sidebar control. Engine waiting, missing model, failed model, and
+missing Silero render in the transcript rail, so simultaneous capture and ASR
+conditions cannot hide one another.
+
+During recording, a Carbon application-global Command-Shift-K registration
+captures a pin even when Scribe has no focused window. It is registered only
+while capture is active, requires no Accessibility permission, and is released
+before stopping so it does not consume the shortcut at other times. The key
+event's mach host time is mapped from the earliest first-sample host timestamp
+to a canonical sample offset. `session.json` version 4 stores the pin UUID,
+sample offset, optional label, and creation date. A shared manifest actor
+serializes pin and final track-offset mutations so an end-of-recording race
+cannot overwrite either value.
 
 ## Session folders and shell index projections
 
