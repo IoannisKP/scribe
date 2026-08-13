@@ -105,10 +105,8 @@ voice per screen.
 - Header field: **Search** · **⌘K**
 - Drop affordance: **Drop to import**
 - Active capture: **Recording** · **Current recording**
-- Empty library: **No sessions yet** · **Start a recording or import audio or
-  video.**
-- Temporary populated-library placeholder: **18 sessions saved. The session
-  list arrives in the next phase.**
+- Empty library: **No recordings yet** · **Start one from the menu bar or press
+  the record button above.** · **Start recording**
 - Empty smart folders: **Every session has a summary** · **No imported
   sessions**
 - Folder errors: **Enter a folder name.** · **A folder named “Client Calls”
@@ -117,6 +115,34 @@ voice per screen.
 
 Session counts are rendered as **3 sessions**, using the actual count.
 One session is rendered as **1 session**.
+
+## Sessions library
+
+- Imported metadata: **Imported**
+- Artifact labels: **Notes** · **Transcript** · **Summary** · **Audio**
+- Artifact state for accessibility: **Present** · **Not present**
+- Search empty state: **No matching sessions** · **Try another word or
+  phrase.**
+- Search hit sources without a timecode: **Session** · **Notes** ·
+  **Transcript**
+- Result counts: **1 result** · **3 results**
+- Rename: **Rename…** · **Rename session** · **Session title** · **Save** ·
+  **Cancel**
+- Empty rename: **Enter a session title.**
+- Delete action: **Move to Trash…**
+- Confirmation title: **Move “Weekly review” to Trash?**
+- Confirmation body: **The 84.2 MB session folder moves to Trash and can be
+  recovered there. Its audio, transcript, notes, and other artifacts move
+  together.**
+- Confirmation buttons: **Move to Trash** · **Cancel**
+- Unavailable session: **The session folder is unavailable. Reconnect its save
+  location and try again.**
+- Search failure: **Scribe couldn't search sessions. Session folders are
+  untouched: [reason]**
+
+Calendar group labels use the localized date, with **Today** and **Yesterday**
+for the two relative headings. Live rows render **1 speaker** or **3 speakers**;
+imported rows omit speaker count.
 
 ## Recording
 

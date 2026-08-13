@@ -253,10 +253,10 @@ final class SessionStoreTests: XCTestCase {
         )
     }
 
-    func testPopulatedLibraryPlaceholderNamesDeferredListHonestly() {
+    func testLibraryEmptyStateUsesFinalCopy() {
         XCTAssertEqual(
-            ScribeCopy.Shell.sessionListComing(18),
-            "18 sessions saved. The session list arrives in the next phase."
+            ScribeCopy.Library.noRecordings,
+            "No recordings yet"
         )
         XCTAssertEqual(ScribeCopy.Shell.sessionCount(1), "1 session")
     }
@@ -392,9 +392,9 @@ final class SessionStoreTests: XCTestCase {
     }
 
     func testEveryTranscriptionGetsImmutableHistoryAndCurrentExports()
-        throws
+        async throws
     {
-        try withTemporaryDirectory { root in
+        try await withTemporaryDirectory { root in
             let created = try SessionFolderManager().createLiveSession(in: root)
             let segment = TranscriptSegment(
                 text: "Sample text",
@@ -404,13 +404,13 @@ final class SessionStoreTests: XCTestCase {
                 words: [WordTiming(text: "Sample", startTime: 1, endTime: 1.5)]
             )
             let writer = TranscriptArtifactWriter()
-            let first = try writer.write(
+            let first = try await writer.write(
                 segments: [segment],
                 modelIdentifier: "parakeet-v3",
                 to: created.directory,
                 date: Date(timeIntervalSince1970: 1_000)
             )
-            let second = try writer.write(
+            let second = try await writer.write(
                 segments: [segment],
                 modelIdentifier: "whisper-large-v3",
                 to: created.directory,
@@ -434,9 +434,9 @@ final class SessionStoreTests: XCTestCase {
     }
 
     func testSpeakerRenamePersistsAcrossRetranscriptionAndLabelsExports()
-        throws
+        async throws
     {
-        try withTemporaryDirectory { root in
+        try await withTemporaryDirectory { root in
             let created = try SessionFolderManager().createLiveSession(
                 in: root
             )
@@ -459,18 +459,18 @@ final class SessionStoreTests: XCTestCase {
                 ]
             )
             let writer = TranscriptArtifactWriter()
-            _ = try writer.write(
+            _ = try await writer.write(
                 segments: [segment],
                 modelIdentifier: "first-model",
                 to: created.directory
             )
-            _ = try SpeakerIdentityStore().renameSpeaker(
+            _ = try await SpeakerIdentityStore().renameSpeaker(
                 identifiedBy: "source.system",
                 to: "Maria",
                 in: created.directory
             )
 
-            _ = try writer.write(
+            _ = try await writer.write(
                 segments: [segment],
                 modelIdentifier: "second-model",
                 to: created.directory
@@ -505,8 +505,8 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
-    func testTranscriptMarkdownUsesSharedParagraphBoundaries() throws {
-        try withTemporaryDirectory { root in
+    func testTranscriptMarkdownUsesSharedParagraphBoundaries() async throws {
+        try await withTemporaryDirectory { root in
             let created = try SessionFolderManager().createLiveSession(
                 in: root
             )
@@ -539,7 +539,7 @@ final class SessionStoreTests: XCTestCase {
                 ]
             )
 
-            _ = try TranscriptArtifactWriter().write(
+            _ = try await TranscriptArtifactWriter().write(
                 segments: [segment],
                 modelIdentifier: "test",
                 to: created.directory
@@ -560,8 +560,8 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
-    func testLiveTranscriptionWritesSameArtifactSetAsBatch() throws {
-        try withTemporaryDirectory { root in
+    func testLiveTranscriptionWritesSameArtifactSetAsBatch() async throws {
+        try await withTemporaryDirectory { root in
             let folderManager = SessionFolderManager()
             let batchSession = try folderManager.createLiveSession(
                 in: root,
@@ -597,12 +597,12 @@ final class SessionStoreTests: XCTestCase {
             }
             let writer = TranscriptArtifactWriter()
 
-            let batchResult = try writer.write(
+            let batchResult = try await writer.write(
                 segments: segments,
                 modelIdentifier: "parakeet-v3",
                 to: batchSession.directory
             )
-            let liveResult = try writer.write(
+            let liveResult = try await writer.write(
                 liveRows: liveRows,
                 modelIdentifier: "parakeet-v3",
                 to: liveSession.directory
@@ -647,8 +647,8 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
-    func testImportedTranscriptOmitsLiveSourceLabels() throws {
-        try withTemporaryDirectory { root in
+    func testImportedTranscriptOmitsLiveSourceLabels() async throws {
+        try await withTemporaryDirectory { root in
             let created = try SessionFolderManager().createImportedSession(
                 in: root,
                 title: "Lecture",
@@ -656,7 +656,7 @@ final class SessionStoreTests: XCTestCase {
                 originalFormat: "m4a",
                 originalRelativePath: "lecture.m4a"
             )
-            _ = try TranscriptArtifactWriter().write(
+            _ = try await TranscriptArtifactWriter().write(
                 segments: [
                     TranscriptSegment(
                         text: "Imported words",
@@ -831,6 +831,367 @@ final class SessionStoreTests: XCTestCase {
                 [created.manifest.sessionID]
             )
         }
+    }
+
+    func testAllInPlaceManifestWritersPreserveIndependentFields()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Original"
+            )
+            let staleArtifacts = created.manifest.artifacts
+            let pin = CaptureSessionManifest.Pin(sampleOffset: 4_800)
+            try await CaptureSessionManifestStore.shared.appendPin(
+                pin,
+                in: created.directory
+            )
+            _ = try await SpeakerIdentityStore().renameSpeaker(
+                identifiedBy: "source.system",
+                to: "Maria",
+                in: created.directory
+            )
+            _ = try await TranscriptArtifactWriter().write(
+                segments: [
+                    TranscriptSegment(
+                        text: "A durable transcript.",
+                        startTime: 1,
+                        endTime: 2,
+                        source: .system
+                    )
+                ],
+                modelIdentifier: "test",
+                to: created.directory
+            )
+
+            let reconciledArtifacts = staleArtifacts + [
+                .init(relativePath: "notes.md", kind: .notes),
+                .init(
+                    relativePath: "transcript.md",
+                    kind: .transcriptMarkdown
+                ),
+                .init(relativePath: "transcript.json", kind: .transcriptJSON),
+                .init(relativePath: "transcript.srt", kind: .subtitles)
+            ]
+            _ = try await CaptureSessionManifestStore.shared.replaceArtifacts(
+                reconciledArtifacts,
+                in: created.directory
+            )
+
+            let manifest = try CaptureSessionManifest.load(
+                from: created.directory
+            )
+            XCTAssertEqual(manifest.pins.map(\.id), [pin.id])
+            XCTAssertEqual(
+                manifest.speakerIdentity(identifiedBy: "source.system")?
+                    .displayName,
+                "Maria"
+            )
+            XCTAssertEqual(manifest.transcriptionHistory.count, 1)
+            XCTAssertTrue(manifest.artifacts.contains {
+                $0.relativePath == "transcript.json"
+            })
+        }
+    }
+
+    func testLibraryGroupsSessionsNewestFirstWithinNewestDateFirst() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let presentation = SessionLibraryPresentation(calendar: calendar)
+        let dayOne = Date(timeIntervalSince1970: 86_400)
+        let dayTwo = Date(timeIntervalSince1970: 172_800)
+        let items = [
+            libraryItem(title: "Earlier", date: dayOne.addingTimeInterval(100)),
+            libraryItem(title: "Newest", date: dayTwo.addingTimeInterval(500)),
+            libraryItem(title: "Later", date: dayOne.addingTimeInterval(500))
+        ]
+
+        let groups = presentation.dateGroups(from: items)
+
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].sessions.map(\.title), ["Newest"])
+        XCTAssertEqual(
+            groups[1].sessions.map(\.title),
+            ["Later", "Earlier"]
+        )
+    }
+
+    func testArtifactPresenceCoversEveryIconCombination() {
+        let definitions: [(String, CaptureSessionManifest.ArtifactKind)] = [
+            ("notes.md", .notes),
+            ("transcript.json", .transcriptJSON),
+            ("summary.md", .summary),
+            ("microphone.wav", .audio)
+        ]
+        for mask in 0..<16 {
+            let artifacts = definitions.enumerated().compactMap {
+                index, definition in
+                mask & (1 << index) == 0
+                    ? nil
+                    : CaptureSessionManifest.Artifact(
+                        relativePath: definition.0,
+                        kind: definition.1
+                    )
+            }
+            let presence = SessionArtifactPresence(artifacts: artifacts)
+            XCTAssertEqual(presence.notes, mask & 1 != 0)
+            XCTAssertEqual(presence.transcript, mask & 2 != 0)
+            XCTAssertEqual(presence.summary, mask & 4 != 0)
+            XCTAssertEqual(presence.audio, mask & 8 != 0)
+        }
+        XCTAssertFalse(SessionArtifactPresence(artifacts: [
+            .init(
+                relativePath: "Transcriptions/earlier/transcript.json",
+                kind: .transcriptJSON
+            )
+        ]).transcript)
+    }
+
+    func testSearchGroupsHitsBySessionAndCarriesTranscriptTimecodes()
+        throws
+    {
+        try withTemporaryDirectory { root in
+            let directory = root.appendingPathComponent("Search")
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let transcript = """
+                [
+                  {"text":"Budget review starts here","startTime":12.5},
+                  {"text":"Unrelated words","startTime":20},
+                  {"text":"Budget approval follows","startTime":33.25}
+                ]
+                """
+            try Data(transcript.utf8).write(
+                to: directory.appendingPathComponent("transcript.json")
+            )
+            try Data("Budget notes\nAnother line".utf8).write(
+                to: directory.appendingPathComponent("notes.md")
+            )
+            let session = SessionLibraryItem(
+                id: UUID(),
+                title: "Planning",
+                createdAt: Date(),
+                directory: directory,
+                source: .liveCapture,
+                duration: 40,
+                speakerCount: 2,
+                artifacts: .none,
+                byteCount: 0,
+                isAvailable: true
+            )
+
+            let groups = SessionLibraryPresentation().searchGroups(
+                query: "budget",
+                sessions: [session]
+            )
+
+            XCTAssertEqual(groups.count, 1)
+            XCTAssertEqual(groups[0].hits.count, 3)
+            XCTAssertEqual(
+                groups[0].hits.compactMap(\.startTime),
+                [12.5, 33.25]
+            )
+            let timedHit = try XCTUnwrap(
+                groups[0].hits.first { $0.startTime == 33.25 }
+            )
+            XCTAssertEqual(
+                SessionLibraryNavigationTarget(
+                    group: groups[0],
+                    hit: timedHit
+                ),
+                SessionLibraryNavigationTarget(
+                    sessionID: session.id,
+                    startTime: 33.25
+                )
+            )
+        }
+    }
+
+    func testLibraryMetadataUsesWAVPayloadOffsetsAndLiveSpeakerCount()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let library = root.appendingPathComponent("Library")
+            let created = try SessionFolderManager().createLiveSession(
+                in: library,
+                title: "Timing"
+            )
+            let microphone = try Int16WAVWriter(
+                url: created.directory.appendingPathComponent("microphone.wav")
+            )
+            try await microphone.append(Array(repeating: 0, count: 32_000))
+            try await microphone.finish()
+            let system = try Int16WAVWriter(
+                url: created.directory.appendingPathComponent("system.wav")
+            )
+            try await system.append(Array(repeating: 0, count: 16_000))
+            try await system.finish()
+            try await CaptureSessionManifestStore.shared.replaceTrackOffsets(
+                microphone: 0,
+                system: 16_000,
+                in: created.directory
+            )
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            _ = try await SessionReconciler(index: index).reconcile(
+                availability: .available(library)
+            )
+            let indexed = try await index.sessions()
+
+            let item = try XCTUnwrap(
+                SessionLibraryPresentation().items(from: indexed).first
+            )
+            XCTAssertEqual(item.duration, 2, accuracy: 0.000_001)
+            XCTAssertEqual(item.speakerCount, 2)
+            XCTAssertTrue(item.artifacts.notes)
+            XCTAssertTrue(item.artifacts.audio)
+            XCTAssertGreaterThan(item.byteCount, 96_000)
+        }
+    }
+
+    func testSessionRenameMovesFolderAndPreservesManifestData() async throws {
+        try await withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Before",
+                date: Date(timeIntervalSince1970: 1_000)
+            )
+            let pin = CaptureSessionManifest.Pin(sampleOffset: 2_000)
+            try await CaptureSessionManifestStore.shared.appendPin(
+                pin,
+                in: created.directory
+            )
+            let indexed = IndexedSession(
+                id: created.manifest.sessionID,
+                title: created.manifest.title,
+                createdAt: created.manifest.createdAt,
+                directory: created.directory,
+                source: created.manifest.source.rawValue,
+                isAvailable: true
+            )
+            let item = try XCTUnwrap(
+                SessionLibraryPresentation().items(from: [indexed]).first
+            )
+
+            let renamed = try await SessionLibraryOperations().rename(
+                session: item,
+                to: "After: Review"
+            )
+
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: created.directory.path)
+            )
+            XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
+            XCTAssertTrue(renamed.lastPathComponent.hasSuffix("— After- Review"))
+            let manifest = try CaptureSessionManifest.load(from: renamed)
+            XCTAssertEqual(manifest.title, "After- Review")
+            XCTAssertEqual(manifest.pins.map(\.id), [pin.id])
+        }
+    }
+
+    func testSessionRemovalMovesCompleteFolderThroughRecoverableTrash()
+        throws
+    {
+        try withTemporaryDirectory { root in
+            let created = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Trash me"
+            )
+            try Data("keep".utf8).write(
+                to: created.directory.appendingPathComponent("agenda.pdf")
+            )
+            let indexed = IndexedSession(
+                id: created.manifest.sessionID,
+                title: created.manifest.title,
+                createdAt: created.manifest.createdAt,
+                directory: created.directory,
+                source: created.manifest.source.rawValue,
+                isAvailable: true
+            )
+            let item = try XCTUnwrap(
+                SessionLibraryPresentation().items(from: [indexed]).first
+            )
+            let trashDirectory = root.appendingPathComponent(".Trash")
+            let operations = SessionLibraryOperations(
+                trash: SessionFolderTrash { directory in
+                    try FileManager.default.createDirectory(
+                        at: trashDirectory,
+                        withIntermediateDirectories: true
+                    )
+                    let destination = trashDirectory.appendingPathComponent(
+                        directory.lastPathComponent
+                    )
+                    try FileManager.default.moveItem(
+                        at: directory,
+                        to: destination
+                    )
+                    return destination
+                }
+            )
+
+            let trashed = try operations.moveToTrash(session: item)
+
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: created.directory.path)
+            )
+            XCTAssertEqual(
+                try String(
+                    contentsOf: trashed.appendingPathComponent("agenda.pdf"),
+                    encoding: .utf8
+                ),
+                "keep"
+            )
+            XCTAssertNoThrow(try CaptureSessionManifest.load(from: trashed))
+        }
+    }
+
+    func testFTSSearchScopesToNotesAndTranscriptNotSummary() async throws {
+        try await withTemporaryDirectory { root in
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            let session = IndexedSession(
+                id: UUID(),
+                title: "Search scope",
+                createdAt: Date(),
+                directory: root,
+                source: "liveCapture",
+                isAvailable: true
+            )
+            try await index.replace(
+                session: session,
+                artifacts: [],
+                transcript: "transcript needle",
+                notes: "notes marker",
+                summary: "summary secret"
+            )
+
+            let transcriptMatches = try await index.search("needle")
+            let notesMatches = try await index.search("marker")
+            let summaryMatches = try await index.search("secret")
+            XCTAssertEqual(transcriptMatches.map(\.id), [session.id])
+            XCTAssertEqual(notesMatches.map(\.id), [session.id])
+            XCTAssertTrue(summaryMatches.isEmpty)
+        }
+    }
+
+    private func libraryItem(title: String, date: Date) -> SessionLibraryItem {
+        SessionLibraryItem(
+            id: UUID(),
+            title: title,
+            createdAt: date,
+            directory: URL(fileURLWithPath: "/tmp/\(UUID().uuidString)"),
+            source: .liveCapture,
+            duration: 0,
+            speakerCount: 2,
+            artifacts: .none,
+            byteCount: 0,
+            isAvailable: true
+        )
     }
 
     private func withTemporaryDirectory<T>(

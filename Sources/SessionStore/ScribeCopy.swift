@@ -18,9 +18,6 @@ public enum ScribeCopy {
         public static let searchShortcut = "⌘K"
         public static let dropToImport = "Drop to import"
         public static let sessions = "Sessions"
-        public static let noSessions = "No sessions yet"
-        public static let noSessionsDetail =
-            "Start a recording or import audio or video."
         public static let noSummarySessions =
             "Every session has a summary"
         public static let noImportedSessions = "No imported sessions"
@@ -42,9 +39,6 @@ public enum ScribeCopy {
             count == 1 ? "1 session" : "\(count) sessions"
         }
 
-        public static func sessionListComing(_ count: Int) -> String {
-            "\(sessionCount(count)) saved. The session list arrives in the next phase."
-        }
     }
 
     public enum Recording {
@@ -121,5 +115,55 @@ public enum ScribeCopy {
 
         public static let keepRecordingWithoutTranscription =
             "Keep recording without transcription"
+    }
+
+    public enum Library {
+        public static let noRecordings = "No recordings yet"
+        public static let noRecordingsDetail =
+            "Start one from the menu bar or press the record button above."
+        public static let startRecording = "Start recording"
+        public static let noSearchResults = "No matching sessions"
+        public static let noSearchResultsDetail =
+            "Try another word or phrase."
+        public static let rename = "Rename…"
+        public static let renameSession = "Rename session"
+        public static let sessionTitle = "Session title"
+        public static let save = "Save"
+        public static let moveToTrash = "Move to Trash…"
+        public static let confirmMoveToTrash = "Move to Trash"
+        public static let cancel = "Cancel"
+        public static let imported = "Imported"
+        public static let notes = "Notes"
+        public static let transcript = "Transcript"
+        public static let summary = "Summary"
+        public static let audio = "Audio"
+        public static let session = "Session"
+        public static let present = "Present"
+        public static let absent = "Not present"
+        public static let today = "Today"
+        public static let yesterday = "Yesterday"
+        public static let invalidTitle = "Enter a session title."
+        public static let sessionUnavailable =
+            "The session folder is unavailable. Reconnect its save location and try again."
+
+        public static func speakerCount(_ count: Int) -> String {
+            count == 1 ? "1 speaker" : "\(count) speakers"
+        }
+
+        public static func resultCount(_ count: Int) -> String {
+            count == 1 ? "1 result" : "\(count) results"
+        }
+
+        public static func moveToTrashTitle(_ title: String) -> String {
+            "Move “\(title)” to Trash?"
+        }
+
+        public static func moveToTrashBody(size: String) -> String {
+            "The \(size) session folder moves to Trash and can be recovered there. Its audio, transcript, notes, and other artifacts move together."
+        }
+
+        public static func searchFailed(_ detail: String) -> String {
+            "Scribe couldn't search sessions. Session folders are untouched: \(detail)"
+        }
     }
 }
