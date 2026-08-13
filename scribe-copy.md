@@ -91,6 +91,27 @@ voice per screen.
 - Body: **Nothing you record leaves this Mac.**
 - Button: **Start your first recording**
 
+## Persistent shell
+
+- Primary action: **New recording**
+- Import action: **Import audio or video…**
+- Smart folders: **All sessions** · **Needs summary** · **Imported**
+- Manual-folder section: **Folders** · **New folder** · **Folder name** ·
+  **Create** · **Cancel**
+- Bottom item: **Settings**
+- Header field: **Search** · **⌘K**
+- Drop affordance: **Drop to import**
+- Active capture: **Recording** · **Current recording**
+- Empty library: **No sessions yet** · **Start a recording or import audio or
+  video.**
+- Empty smart folders: **Every session has a summary** · **No imported
+  sessions**
+- Folder errors: **Enter a folder name.** · **A folder named “Client Calls”
+  already exists.** · **“Meeting” is not a Scribe session folder.** · **The
+  destination is outside the Scribe save location.**
+
+Session counts are rendered as **3 sessions**, using the actual count.
+
 ## Recording
 
 - Start: **Start recording**

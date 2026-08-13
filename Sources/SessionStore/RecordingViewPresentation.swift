@@ -79,7 +79,6 @@ public enum RecordingWorkspaceLayout {
     public static let minimumTranscriptWidth: Double = 260
     public static let maximumTranscriptWidth: Double = 620
     public static let minimumNotesWidth: Double = 360
-    public static let controlGutterHeight: Double = 112
 }
 
 public enum RecordingViewPresentation {

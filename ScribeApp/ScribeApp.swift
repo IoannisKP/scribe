@@ -12,11 +12,20 @@ struct ScribeApp: App {
         .defaultSize(width: 960, height: 820)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Import audio or video…") {
+                Button(ScribeCopy.Shell.importMedia) {
                     recorder.chooseMediaForImport()
                 }
                 .keyboardShortcut("o", modifiers: [.command])
                 .disabled(!recorder.canImportMedia)
+            }
+            CommandGroup(after: .textEditing) {
+                Button(ScribeCopy.Shell.search) {
+                    NotificationCenter.default.post(
+                        name: .scribeFocusSearch,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut("k", modifiers: [.command])
             }
             CommandMenu("Diagnostics") {
                 Button("Run System Tap Privacy Diagnostic…") {

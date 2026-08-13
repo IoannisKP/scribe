@@ -122,6 +122,11 @@ final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var activeNotesURL: URL?
     @Published private(set) var notesText = ""
     @Published private(set) var systemTrackHasBeenSilent = false
+    @Published private(set) var indexedSessions: [IndexedSession] = []
+    @Published private(set) var sessionSmartFolderCounts:
+        SessionSmartFolderCounts = .zero
+    @Published private(set) var manualSessionFolders:
+        [ManualSessionFolder] = []
     @Published private(set) var mediaImportState: MediaImportState = .idle
     @Published private(set) var systemTapDiagnosticState:
         SystemTapDiagnosticUIState = .idle
@@ -168,6 +173,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         ResidentTranscriptionEngineCoordinator()
     private let sessionLocationStore: SessionLibraryLocationStore
     private let sessionFolderManager = SessionFolderManager()
+    private let sessionManualFolderManager = SessionManualFolderManager()
     private let transcriptArtifactWriter = TranscriptArtifactWriter()
     private let sessionMediaImporter = SessionMediaImporter()
     private let legacySessionMigrator = LegacySessionMigrator()
@@ -1407,6 +1413,21 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
+    func createManualSessionFolder(named name: String) {
+        Task {
+            do {
+                let library = try availableSessionLibrary()
+                _ = try sessionManualFolderManager.createFolder(
+                    named: name,
+                    in: library
+                )
+                await reconcileSessionLibrary()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     func openMicrophoneSettings() {
         openSettings(
             url: MicrophoneAuthorizationStatus.systemSettingsURL,
@@ -2142,11 +2163,21 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     private func reconcileSessionLibrary() async {
-        guard let sessionReconciler else { return }
+        guard let sessionReconciler, let sessionIndex else { return }
+        let availability = sessionLocationStore.resolve()
         do {
             _ = try await sessionReconciler.reconcile(
-                availability: sessionLocationStore.resolve()
+                availability: availability
             )
+            indexedSessions = try await sessionIndex.sessions()
+            sessionSmartFolderCounts = try await sessionIndex
+                .smartFolderCounts()
+            if case let .available(library) = availability {
+                manualSessionFolders = try sessionManualFolderManager
+                    .folders(in: library)
+            } else {
+                manualSessionFolders = []
+            }
         } catch {
             errorMessage =
                 "Scribe could not refresh its session index. Session folders are untouched: \(error.localizedDescription)"

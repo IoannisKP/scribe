@@ -195,8 +195,7 @@ final class RecordingViewPresentationTests: XCTestCase {
         XCTAssertEqual(notice, .preparingSystemAudio)
     }
 
-    func testGutterAndResizableRailConstantsProtectNotesSurface() {
-        XCTAssertGreaterThan(RecordingWorkspaceLayout.controlGutterHeight, 0)
+    func testResizableRailConstantsPreserveSixtyFortyLayout() {
         XCTAssertEqual(
             RecordingWorkspaceLayout.notesFraction
                 + RecordingWorkspaceLayout.transcriptFraction,

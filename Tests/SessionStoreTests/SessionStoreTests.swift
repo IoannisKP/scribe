@@ -5,6 +5,141 @@ import SpeechPipeline
 import XCTest
 
 final class SessionStoreTests: XCTestCase {
+    func testSmartFolderCountsMatchIndexedArtifactsAndSources() async throws {
+        try await withTemporaryDirectory { root in
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            let live = IndexedSession(
+                id: UUID(),
+                title: "Live",
+                createdAt: Date(timeIntervalSince1970: 1),
+                directory: root.appendingPathComponent("Live"),
+                source: "liveCapture",
+                isAvailable: true
+            )
+            let imported = IndexedSession(
+                id: UUID(),
+                title: "Imported",
+                createdAt: Date(timeIntervalSince1970: 2),
+                directory: root.appendingPathComponent("Imported"),
+                source: "importedFile",
+                isAvailable: true
+            )
+            try await index.replace(
+                session: live,
+                artifacts: [
+                    IndexedArtifact(
+                        relativePath: "summary.md",
+                        kind: "summary",
+                        byteCount: 4,
+                        modifiedAt: nil
+                    )
+                ],
+                transcript: "",
+                notes: "",
+                summary: "done"
+            )
+            try await index.replace(
+                session: imported,
+                artifacts: [],
+                transcript: "",
+                notes: "",
+                summary: ""
+            )
+
+            let counts = try await index.smartFolderCounts()
+            XCTAssertEqual(counts.allSessions, 2)
+            XCTAssertEqual(counts.needsSummary, 1)
+            XCTAssertEqual(counts.imported, 1)
+        }
+    }
+
+    func testManualFoldersMapToDirectoriesAndNestedSessionsReconcile()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let library = root.appendingPathComponent(
+                "Library",
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(
+                at: library,
+                withIntermediateDirectories: true
+            )
+            let manager = SessionManualFolderManager()
+            let folder = try manager.createFolder(
+                named: "Client: Calls",
+                in: library
+            )
+            XCTAssertEqual(folder.name, "Client- Calls")
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: folder.directory.path)
+            )
+
+            let created = try SessionFolderManager().createLiveSession(
+                in: library,
+                title: "Nested"
+            )
+            let moved = try manager.moveSession(
+                at: created.directory,
+                to: folder,
+                in: library
+            )
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            let report = try await SessionReconciler(index: index).reconcile(
+                availability: .available(library)
+            )
+
+            XCTAssertEqual(report.indexedSessionCount, 1)
+            let indexedSessions = try await index.sessions()
+            XCTAssertEqual(
+                indexedSessions.first?.directory.standardizedFileURL.path,
+                moved.standardizedFileURL.path
+            )
+            let folders = try manager.folders(in: library)
+            XCTAssertEqual(folders.map(\.name), [folder.name])
+            XCTAssertEqual(
+                folders.first?.directory.standardizedFileURL.path,
+                folder.directory.standardizedFileURL.path
+            )
+        }
+    }
+
+    func testShellControlAndPaneStateDoNotCoupleCaptureToNavigation() {
+        XCTAssertTrue(ScribeShellPresentation.primaryControlShowsRecording(
+            captureIsStarting: false,
+            captureIsRecording: true,
+            captureIsStopping: false
+        ))
+        XCTAssertFalse(ScribeShellPresentation.shouldShowRecordingPane(
+            selectedRecording: false,
+            captureIsActive: true
+        ))
+        XCTAssertTrue(ScribeShellPresentation.shouldShowRecordingPane(
+            selectedRecording: true,
+            captureIsActive: true
+        ))
+    }
+
+    func testShellSidebarVisibilityAndSelectionPersist() throws {
+        let suiteName = "ScribeShellTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var preferences = ScribeShellPreferences(defaults: defaults)
+
+        XCTAssertTrue(preferences.sidebarVisible)
+        XCTAssertEqual(preferences.selectionID, "smart.all")
+        preferences.sidebarVisible = false
+        preferences.selectionID = "smart.imported"
+
+        preferences = ScribeShellPreferences(defaults: defaults)
+        XCTAssertFalse(preferences.sidebarVisible)
+        XCTAssertEqual(preferences.selectionID, "smart.imported")
+    }
+
     func testCreatesHumanReadableSessionFolderAndManifest() throws {
         try withTemporaryDirectory { root in
             let date = Date(timeIntervalSince1970: 1_735_732_800)

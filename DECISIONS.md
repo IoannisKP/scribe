@@ -1144,3 +1144,37 @@ transcript's shape, and re-transcription can change it again without changing
 the meeting. Window-sized layout would make correct output look inconsistent.
 Paragraph identity and content-driven height preserve visual continuity, while
 VAD-derived meters remain responsive when ASR is loading, absent, or behind.
+
+## 2026-08-13 — Make one shell own navigation, never capture
+
+**Decision:** Keep a persistent `NavigationSplitView` shell around every app
+state. The sidebar owns recording/import actions and the live capture control;
+detail selection owns only what is rendered. Remove the floating recording
+control and notes gutter. Persist sidebar visibility and destination without
+persisting capture state.
+
+**Alternatives:** Replace the whole window for recording; keep the capture
+control inside the recording detail; stop capture when navigating away; open
+recording and reading in separate windows.
+
+**Reasoning:** Recording is process state, not navigation state. Keeping its
+control in the persistent functional layer makes capture observable and
+stoppable while the user browses, while destroying and rebuilding a detail view
+cannot affect the recorder actors or their session folder.
+
+## 2026-08-13 — Represent manual folders as real directories
+
+**Decision:** Treat top-level directories without a session manifest as manual
+folders and discover session manifests recursively beneath the save location.
+Moving a session moves its complete directory; its UUID remains identity and
+the index learns the new path during reconciliation. Do not traverse hidden
+directories, aliases, symlinks, packages, or inside a discovered session.
+
+**Alternatives:** Store folder labels only in SQLite; keep every session at the
+root and simulate hierarchy; treat every top-level directory as a session.
+
+**Reasoning:** Finder and Scribe must describe the same organization. A derived
+database label would disappear when the index is rebuilt and would make an
+ordinary Finder move look like data loss. Manifest-aware recursive discovery
+preserves local ownership without confusing organizational folders with broken
+sessions.

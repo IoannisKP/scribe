@@ -1,6 +1,48 @@
 import Foundation
 
 public enum ScribeCopy {
+    public enum Shell {
+        public static let newRecording = "New recording"
+        public static let recording = "Recording"
+        public static let importMedia = "Import audio or video…"
+        public static let allSessions = "All sessions"
+        public static let needsSummary = "Needs summary"
+        public static let imported = "Imported"
+        public static let folders = "Folders"
+        public static let newFolder = "New folder"
+        public static let folderName = "Folder name"
+        public static let create = "Create"
+        public static let cancel = "Cancel"
+        public static let settings = "Settings"
+        public static let search = "Search"
+        public static let searchShortcut = "⌘K"
+        public static let dropToImport = "Drop to import"
+        public static let sessions = "Sessions"
+        public static let noSessions = "No sessions yet"
+        public static let noSessionsDetail =
+            "Start a recording or import audio or video."
+        public static let noSummarySessions =
+            "Every session has a summary"
+        public static let noImportedSessions = "No imported sessions"
+        public static let currentRecording = "Current recording"
+        public static let invalidFolderName = "Enter a folder name."
+
+        public static func folderAlreadyExists(_ name: String) -> String {
+            "A folder named “\(name)” already exists."
+        }
+
+        public static func notASessionFolder(_ name: String) -> String {
+            "“\(name)” is not a Scribe session folder."
+        }
+
+        public static let folderOutsideLibrary =
+            "The destination is outside the Scribe save location."
+
+        public static func sessionCount(_ count: Int) -> String {
+            "\(count) sessions"
+        }
+    }
+
     public enum Recording {
         public static let notes = "Notes"
         public static let transcript = "Transcript"
