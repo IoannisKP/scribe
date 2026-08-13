@@ -652,7 +652,8 @@ This check uses the already-downloaded VAD and Parakeet models:
 2. Type Markdown syntax continuously. Confirm the syntax is highlighted while
    the plain text appears immediately in the session's `notes.md`.
 3. Resize and collapse the transcript rail, reopen it, and confirm its width is
-   retained. The floating recording control must not cover editable notes.
+   retained. The notes surface has no floating control or reserved bottom
+   gutter.
 4. Confirm **You** and **Others** meters react to Silero speech probability even
    before a transcript row exists or when live transcription is unavailable.
 5. With Parakeet selected, confirm the first-result estimate is derived from its
@@ -669,6 +670,31 @@ This check uses the already-downloaded VAD and Parakeet models:
 The recording rail is content-driven. It does not use an engine block as a
 layout unit: live rows around 26–30 seconds and batch-shaped rows around 12–13
 seconds wrap naturally and pass through the same paragraphing rules.
+
+## Milestone 5B Phase A acceptance check
+
+1. Launch Scribe and confirm the sidebar remains present while the detail pane
+   switches. Collapse and restore it with the standard sidebar toggle, relaunch,
+   and confirm visibility and the selected destination persist.
+2. Confirm **All sessions**, **Needs summary**, and **Imported** counts match
+   the actual session manifests and artifacts. No speculative categories are
+   present.
+3. Create a manual folder. Confirm the same directory appears at the root of
+   the configured Scribe save location in Finder. A session folder moved into
+   it must remain indexed by its embedded UUID.
+4. Use the **New recording** split control. Its main action starts capture; its
+   chevron exposes **Import audio or video…**, and Command-O remains available.
+5. During capture, confirm the split control is replaced in place by the red
+   state indicator, elapsed time, You/Others meters, and Stop. Switch to any
+   other sidebar destination: capture and both meters must continue, and
+   **Current recording** must return to the recording detail.
+6. Drag an audio or video file anywhere over the window. Confirm the sidebar
+   shows **Drop to import** and the existing importer receives the file.
+7. Press Command-K and confirm focus moves to the search field in the detail
+   header. Search results themselves arrive with Phase C.
+8. Inspect light, dark, Reduce Transparency, narrow sidebar limits, keyboard
+   focus, and VoiceOver labels. The content pane must remain a neutral surface;
+   glass belongs to sidebar controls.
 
 ## Privacy
 

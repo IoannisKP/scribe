@@ -8,27 +8,12 @@ struct ContentView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
 
     var body: some View {
-        Group {
-            if recorder.showsPermissionSetup {
-                PermissionSetupView(recorder: recorder)
-                    .padding(40)
-            } else if recorder.showsRecordingWorkspace {
-                RecordingWorkspaceView(recorder: recorder)
-            } else {
-                RecordingView(recorder: recorder)
-                    .padding(40)
-            }
-        }
+        ScribeShellView(recorder: recorder)
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .dropDestination(for: URL.self) { urls, _ in
-            guard recorder.canImportMedia, !urls.isEmpty else { return false }
-            recorder.importMediaFiles(urls)
-            return true
-        }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification
@@ -287,7 +272,7 @@ private struct AppHeader: View {
     }
 }
 
-private struct PermissionSetupView: View {
+struct PermissionSetupView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
 
     var body: some View {
@@ -463,7 +448,7 @@ private struct PermissionStatusHeader: View {
     }
 }
 
-private struct RecordingView: View {
+struct RecordingView: View {
     @ObservedObject var recorder: MeetingRecorderViewModel
     @State private var showsDeleteModelConfirmation = false
     @State private var showsDeleteVADConfirmation = false

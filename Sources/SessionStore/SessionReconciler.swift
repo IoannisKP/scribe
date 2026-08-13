@@ -158,16 +158,46 @@ public actor SessionReconciler {
     }
 
     private func sessionDirectories(in root: URL) throws -> [URL] {
-        try fileManager.contentsOfDirectory(
+        let keys: Set<URLResourceKey> = [
+            .isDirectoryKey, .isHiddenKey, .isSymbolicLinkKey,
+            .isAliasFileKey, .isPackageKey
+        ]
+        guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
-            options: [.skipsHiddenFiles]
-        ).filter { url in
-            guard let values = try? url.resourceValues(forKeys: [
-                .isDirectoryKey, .isHiddenKey
-            ]) else { return false }
-            return values.isDirectory == true && values.isHidden != true
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return []
         }
+
+        var sessions: [URL] = []
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: keys)
+            guard values.isDirectory == true else { continue }
+            if values.isHidden == true
+                || values.isSymbolicLink == true
+                || values.isAliasFile == true
+                || values.isPackage == true
+            {
+                enumerator.skipDescendants()
+                continue
+            }
+            let currentManifest = url.appendingPathComponent(
+                CaptureSessionManifest.fileName,
+                isDirectory: false
+            )
+            let legacyManifest = url.appendingPathComponent(
+                CaptureSessionManifest.legacyFileName,
+                isDirectory: false
+            )
+            if fileManager.fileExists(atPath: currentManifest.path)
+                || fileManager.fileExists(atPath: legacyManifest.path)
+            {
+                sessions.append(url)
+                enumerator.skipDescendants()
+            }
+        }
+        return sessions
     }
 
     private func buildInventory(

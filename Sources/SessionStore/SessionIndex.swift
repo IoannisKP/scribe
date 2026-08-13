@@ -8,6 +8,22 @@ public struct IndexedSession: Equatable, Sendable {
     public let directory: URL
     public let source: String
     public let isAvailable: Bool
+
+    public init(
+        id: UUID,
+        title: String,
+        createdAt: Date,
+        directory: URL,
+        source: String,
+        isAvailable: Bool
+    ) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.directory = directory
+        self.source = source
+        self.isAvailable = isAvailable
+    }
 }
 
 public struct IndexedArtifact: Equatable, Sendable {
@@ -15,6 +31,40 @@ public struct IndexedArtifact: Equatable, Sendable {
     public let kind: String
     public let byteCount: Int64
     public let modifiedAt: Date?
+
+    public init(
+        relativePath: String,
+        kind: String,
+        byteCount: Int64,
+        modifiedAt: Date?
+    ) {
+        self.relativePath = relativePath
+        self.kind = kind
+        self.byteCount = byteCount
+        self.modifiedAt = modifiedAt
+    }
+}
+
+public struct SessionSmartFolderCounts: Equatable, Sendable {
+    public let allSessions: Int
+    public let needsSummary: Int
+    public let imported: Int
+
+    public static let zero = SessionSmartFolderCounts(
+        allSessions: 0,
+        needsSummary: 0,
+        imported: 0
+    )
+
+    public init(
+        allSessions: Int,
+        needsSummary: Int,
+        imported: Int
+    ) {
+        self.allSessions = allSessions
+        self.needsSummary = needsSummary
+        self.imported = imported
+    }
 }
 
 public actor SessionIndex {
@@ -135,6 +185,38 @@ public actor SessionIndex {
                     ORDER BY createdAt DESC, title COLLATE NOCASE
                     """
             ).compactMap(Self.session(from:))
+        }
+    }
+
+    public func smartFolderCounts() throws -> SessionSmartFolderCounts {
+        try database.read { db in
+            let allSessions = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM session"
+            ) ?? 0
+            let needsSummary = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*)
+                    FROM session s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM artifact a
+                        WHERE a.sessionID = s.id AND a.kind = 'summary'
+                    )
+                    """
+            ) ?? 0
+            let imported = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM session
+                    WHERE source = 'importedFile'
+                    """
+            ) ?? 0
+            return SessionSmartFolderCounts(
+                allSessions: allSessions,
+                needsSummary: needsSummary,
+                imported: imported
+            )
         }
     }
 

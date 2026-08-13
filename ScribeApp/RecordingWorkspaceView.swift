@@ -12,23 +12,17 @@ struct RecordingWorkspaceView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                HStack(spacing: 0) {
-                    notesPane
-                        .frame(minWidth: RecordingWorkspaceLayout.minimumNotesWidth)
+            HStack(spacing: 0) {
+                notesPane
+                    .frame(minWidth: RecordingWorkspaceLayout.minimumNotesWidth)
 
-                    if !isCollapsed {
-                        railDivider(in: geometry.size.width)
-                        transcriptRail
-                            .frame(width: constrainedTranscriptWidth(
-                                for: geometry.size.width
-                            ))
-                    }
+                if !isCollapsed {
+                    railDivider(in: geometry.size.width)
+                    transcriptRail
+                        .frame(width: constrainedTranscriptWidth(
+                            for: geometry.size.width
+                        ))
                 }
-                .padding(.bottom, RecordingWorkspaceLayout.controlGutterHeight)
-
-                floatingControl
-                    .padding(.bottom, 16)
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
@@ -162,59 +156,6 @@ struct RecordingWorkspaceView: View {
             }
     }
 
-    private var floatingControl: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 18) {
-                Circle()
-                    .fill(recorder.isRecording ? Color.red : Color.secondary)
-                    .frame(width: 10, height: 10)
-                    .accessibilityHidden(true)
-
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(elapsedText(at: context.date))
-                        .font(.body.monospacedDigit().weight(.medium))
-                        .frame(width: 62, alignment: .leading)
-                        .accessibilityLabel(ScribeCopy.Recording.elapsedTime)
-                        .accessibilityValue(elapsedText(at: context.date))
-                }
-
-                VStack(spacing: 7) {
-                    SpeechLevelMeter(
-                        label: ScribeCopy.Recording.you,
-                        accessibilityLabel: ScribeCopy.Recording.microphoneLevel,
-                        value: recorder.recordingLevels.microphone,
-                        color: .blue
-                    )
-                    SpeechLevelMeter(
-                        label: ScribeCopy.Recording.others,
-                        accessibilityLabel: ScribeCopy.Recording.systemAudioLevel,
-                        value: recorder.recordingLevels.system,
-                        color: .purple
-                    )
-                }
-                .frame(width: 190)
-
-                Button {
-                    recorder.stopRecording()
-                } label: {
-                    Label(
-                        ScribeCopy.Recording.stop,
-                        systemImage: "stop.fill"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .disabled(!recorder.isRecording || recorder.isBusy)
-                .keyboardShortcut(.space, modifiers: [.command])
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .glassEffect(.regular.interactive())
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(ScribeCopy.Recording.recordingControls)
-        }
-    }
-
     private func constrainedTranscriptWidth(for totalWidth: Double) -> Double {
         constrainedTranscriptWidth(transcriptWidth, totalWidth: totalWidth)
     }
@@ -239,10 +180,6 @@ struct RecordingWorkspaceView: View {
         )
     }
 
-    private func elapsedText(at date: Date) -> String {
-        let elapsed = Int(recorder.elapsedRecordingTime(at: date))
-        return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
-    }
 }
 
 private struct RecordingNoticeView: View {
@@ -388,39 +325,6 @@ private struct RewritingTranscriptText: View {
     private struct Value: Equatable {
         let text: String
         let isPartial: Bool
-    }
-}
-
-private struct SpeechLevelMeter: View {
-    let label: String
-    let accessibilityLabel: String
-    let value: Double
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .frame(width: 44, alignment: .leading)
-
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule()
-                        .fill(color)
-                        .frame(width: geometry.size.width * value)
-                }
-            }
-            .frame(height: 6)
-        }
-        .animation(.linear(duration: 0.18), value: value)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(
-            ScribeCopy.Recording.speechLevel(
-                percent: Int((value * 100).rounded())
-            )
-        )
     }
 }
 

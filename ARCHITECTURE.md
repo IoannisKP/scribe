@@ -585,13 +585,25 @@ explicit skip rather than acquisition or substitution.
 
 ## Recording workspace presentation
 
-`RecordingWorkspaceView` replaces the setup surface while capture is starting,
-running, or stopping. Its notes editor writes plain UTF-8 Markdown to the active
-session's existing `notes.md`; AppKit attributes highlight syntax without
-changing the stored string. Revision-stamped atomic writes serialize rapid
-edits, and stop—including an automatic low-disk stop—flushes the latest text.
-The bottom recording control has reserved layout space, so it never obscures
-editable notes.
+`ScribeShellView` is the persistent window owner. A bounded, collapsible native
+sidebar contains the recording/import split action, real index-derived smart
+folders, Finder-backed manual folders, and Settings. The detail column owns the
+search header and switches among library, recording, and settings content
+without starting, stopping, or replacing capture actors. The root drop target
+keeps imported media independent of the currently displayed detail pane.
+
+When capture is starting, running, or stopping, the sidebar's split action is
+replaced in place by elapsed time, both Silero meters, and Stop. Selecting other
+sidebar destinations changes only presentation, so the capture control remains
+visible while browsing. The former floating control and the notes editor's
+reserved bottom gutter were deleted; recording chrome no longer overlays the
+content surface.
+
+`RecordingWorkspaceView` remains the recording detail. Its notes editor writes
+plain UTF-8 Markdown to the active session's existing `notes.md`; AppKit
+attributes highlight syntax without changing the stored string.
+Revision-stamped atomic writes serialize rapid edits, and stop—including an
+automatic low-disk stop—flushes the latest text.
 
 The transcript rail projects `LiveTranscriptRow` values through the shared
 `TranscriptParagrapher`. Paragraphs may span engine windows and are therefore
@@ -608,6 +620,21 @@ window duration plus overlap; no Parakeet-specific delay is embedded in the
 view. Preparing, buffering, catch-up, missing-model, missing-Silero, load
 failure, and quiet-system states are pure presentation projections whose copy
 lives in `ScribeCopy` and `scribe-copy.md`.
+
+## Session folders and shell index projections
+
+`SessionReconciler` discovers session manifests recursively beneath the save
+location and stops traversal at each session boundary. A top-level directory
+without a manifest is therefore a manual folder, while a directory containing
+`session.json` remains a session. Hidden directories, aliases, symlinks, and
+packages are never traversed. `SessionManualFolderManager` creates top-level
+folders and moves complete session directories into them; the embedded UUID
+remains identity and the next reconciliation updates the incidental path.
+
+The SQLite derivative computes All sessions, Needs summary, and Imported counts
+from indexed sessions, artifact kinds, and manifest source. No UI category is
+inferred from titles or filenames. Sidebar visibility and selection use stable
+UserDefaults keys; session and folder data remain filesystem-owned.
 
 ## Concurrency
 

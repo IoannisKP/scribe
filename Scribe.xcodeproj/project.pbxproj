@@ -79,6 +79,9 @@
 		100000000000000000000046 /* RecordingWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000045 /* RecordingWorkspaceView.swift */; };
 		100000000000000000000047 /* ScribeCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000046 /* ScribeCopy.swift */; };
 		100000000000000000000048 /* RecordingViewPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000047 /* RecordingViewPresentation.swift */; };
+		100000000000000000000049 /* ScribeShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000048 /* ScribeShellView.swift */; };
+		10000000000000000000004A /* SessionManualFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000049 /* SessionManualFolderManager.swift */; };
+		10000000000000000000004B /* ScribeShellPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004A /* ScribeShellPresentation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -207,6 +210,9 @@
 		110000000000000000000045 /* RecordingWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingWorkspaceView.swift; sourceTree = "<group>"; };
 		110000000000000000000046 /* ScribeCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeCopy.swift; sourceTree = "<group>"; };
 		110000000000000000000047 /* RecordingViewPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingViewPresentation.swift; sourceTree = "<group>"; };
+		110000000000000000000048 /* ScribeShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeShellView.swift; sourceTree = "<group>"; };
+		110000000000000000000049 /* SessionManualFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManualFolderManager.swift; sourceTree = "<group>"; };
+		11000000000000000000004A /* ScribeShellPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeShellPresentation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -264,6 +270,7 @@
 			children = (
 				110000000000000000000001 /* ScribeApp.swift */,
 				110000000000000000000002 /* ContentView.swift */,
+				110000000000000000000048 /* ScribeShellView.swift */,
 				110000000000000000000045 /* RecordingWorkspaceView.swift */,
 				110000000000000000000010 /* MeetingRecorderViewModel.swift */,
 				11000000000000000000000A /* Info.plist */,
@@ -385,10 +392,12 @@
 				110000000000000000000039 /* SessionArtifactPolicy.swift */,
 				11000000000000000000003A /* SessionIndex.swift */,
 				11000000000000000000003B /* SessionReconciler.swift */,
+				110000000000000000000049 /* SessionManualFolderManager.swift */,
 				110000000000000000000043 /* SpeakerIdentityStore.swift */,
 				110000000000000000000044 /* TranscriptParagrapher.swift */,
 				110000000000000000000046 /* ScribeCopy.swift */,
 				110000000000000000000047 /* RecordingViewPresentation.swift */,
+				11000000000000000000004A /* ScribeShellPresentation.swift */,
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
@@ -568,6 +577,7 @@
 			files = (
 				100000000000000000000001 /* ScribeApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
+				100000000000000000000049 /* ScribeShellView.swift in Sources */,
 				100000000000000000000046 /* RecordingWorkspaceView.swift in Sources */,
 				10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */,
 				100000000000000000000039 /* SessionLibraryLocation.swift in Sources */,
@@ -575,10 +585,12 @@
 				10000000000000000000003B /* SessionArtifactPolicy.swift in Sources */,
 				10000000000000000000003C /* SessionIndex.swift in Sources */,
 				10000000000000000000003D /* SessionReconciler.swift in Sources */,
+				10000000000000000000004A /* SessionManualFolderManager.swift in Sources */,
 				100000000000000000000044 /* SpeakerIdentityStore.swift in Sources */,
 				100000000000000000000045 /* TranscriptParagrapher.swift in Sources */,
 				100000000000000000000047 /* ScribeCopy.swift in Sources */,
 				100000000000000000000048 /* RecordingViewPresentation.swift in Sources */,
+				10000000000000000000004B /* ScribeShellPresentation.swift in Sources */,
 				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
