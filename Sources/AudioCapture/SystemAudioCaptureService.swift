@@ -45,6 +45,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     private var realtimeRouter: SystemAudioRealtimeRouter?
     private var firstSampleTime: FirstSampleHostTime?
     private var recordedStartupStageTimings: [SystemAudioStartupStageTiming] = []
+    private var recordedGraphPreparation: SystemAudioGraphPreparation?
     private var outputURL: URL?
     private var isRecovering = false
     private var isSleeping = false
@@ -53,6 +54,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     private var workspaceObservers: [SystemWorkspaceObserver] = []
     private let permissionRecorder: any SystemAudioPermissionRecording
     private let liveSink: (any CanonicalAudioBlockSink)?
+    private let prewarmGate = SingleFlightPreparation<PreparedSystemAudioGraph>()
 
     public init(
         permissionRecorder: any SystemAudioPermissionRecording =
@@ -65,41 +67,22 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     /// Prepares the private process tap, aggregate device, and unstarted
     /// IOProc. Audio storage and writing remain unallocated until recording.
-    public func prewarm() {
+    public func prewarm() async {
         guard
             !state.isActive,
-            !isSleeping,
-            graph == nil,
-            realtimeRouter == nil
+            !isSleeping
         else {
-            if graph != nil, realtimeRouter != nil {
-                prewarmState = .ready
-            }
             return
         }
 
-        prewarmState = .preparing
         do {
-            let realtimeRouter = try SystemAudioRealtimeRouter()
-            let graph = CoreAudioSystemTapGraph(
-                realtimeRouter: realtimeRouter
-            )
-            try graph.prepare()
-            self.realtimeRouter = realtimeRouter
-            self.graph = graph
-            recordedStartupStageTimings = graph.startupStageTimings
-            try registerCoreAudioListeners(for: graph)
-            registerWorkspaceObservers()
-            prewarmState = .ready
+            _ = try await ensurePreparedGraph()
+        } catch is CancellationError {
+            if !isSleeping {
+                prewarmState = .idle
+            }
         } catch {
             let message = error.localizedDescription
-            _ = unregisterCoreAudioListeners()
-            if let graph {
-                try? graph.tearDown()
-            }
-            realtimeRouter?.detach()
-            graph = nil
-            realtimeRouter = nil
             prewarmState = .failed(message: message)
         }
     }
@@ -109,40 +92,35 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             throw AudioCaptureError.systemCaptureAlreadyRunning
         }
 
+        let preparationWasAlreadyUnderway =
+            prewarmState == .preparing
+            || (graph != nil && realtimeRouter != nil)
         state = .starting
         recordedStartupStageTimings = []
+        recordedGraphPreparation = nil
         var serviceProfiler = SystemAudioStartupProfiler()
         do {
+            let recordingStartedPreparation = try await ensurePreparedGraph()
+            recordedGraphPreparation = preparationWasAlreadyUnderway
+                || !recordingStartedPreparation
+                ? .prewarmed
+                : .builtAtRecordingStart
+
             // Ten seconds at the highest conventional Core Audio hardware rate.
             let ringBuffer = try FloatRingBuffer(capacity: 1_920_000)
             let firstSampleTime = try FirstSampleHostTime()
-            let graph: CoreAudioSystemTapGraph
-            let realtimeRouter: SystemAudioRealtimeRouter
-            if
-                let preparedGraph = self.graph,
-                let preparedRouter = self.realtimeRouter,
-                !preparedGraph.isStarted,
-                !preparedRouter.isAttached
-            {
-                graph = preparedGraph
-                realtimeRouter = preparedRouter
-            } else {
-                _ = unregisterCoreAudioListeners()
-                if let staleGraph = self.graph {
-                    try staleGraph.tearDown()
-                }
-                self.realtimeRouter?.detach()
-                self.graph = nil
-                self.realtimeRouter = nil
-                let newRouter = try SystemAudioRealtimeRouter()
-                let newGraph = CoreAudioSystemTapGraph(
-                    realtimeRouter: newRouter
+            guard
+                let graph = self.graph,
+                let realtimeRouter = self.realtimeRouter,
+                !graph.isStarted,
+                !realtimeRouter.isAttached
+            else {
+                throw AudioCaptureError.coreAudioOperationFailed(
+                    operation: "Using the prepared system-audio graph",
+                    status: kAudioHardwareUnspecifiedError,
+                    statusDescription:
+                        "The shared preparation completed without a reusable graph."
                 )
-                try newGraph.prepare()
-                self.realtimeRouter = newRouter
-                self.graph = newGraph
-                realtimeRouter = newRouter
-                graph = newGraph
             }
             realtimeRouter.attach(
                 ringBuffer: ringBuffer,
@@ -254,6 +232,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             firstSampleHostTime: capturedFirstSampleHostTime
         )
         if !failures.isEmpty {
+            await prewarmGate.clear(cancelling: true)
             failures.append(contentsOf: unregisterCoreAudioListeners())
             unregisterWorkspaceObservers()
             if let graph {
@@ -294,6 +273,79 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         recordedStartupStageTimings
     }
 
+    public func systemAudioGraphPreparation() async
+        -> SystemAudioGraphPreparation?
+    {
+        recordedGraphPreparation
+    }
+
+    /// Returns true only to the caller that created the shared operation.
+    /// Other callers await that exact operation and reuse its graph.
+    private func ensurePreparedGraph() async throws -> Bool {
+        if
+            let graph,
+            let realtimeRouter,
+            !graph.isStarted,
+            !realtimeRouter.isAttached
+        {
+            prewarmState = .ready
+            return false
+        }
+
+        prewarmState = .preparing
+        let result: SingleFlightPreparation<PreparedSystemAudioGraph>.Result
+        do {
+            result = try await prewarmGate.value {
+                let realtimeRouter = try SystemAudioRealtimeRouter()
+                let graph = CoreAudioSystemTapGraph(
+                    realtimeRouter: realtimeRouter
+                )
+                do {
+                    try graph.prepare()
+                    return PreparedSystemAudioGraph(
+                        graph: graph,
+                        realtimeRouter: realtimeRouter
+                    )
+                } catch {
+                    try? graph.tearDown()
+                    realtimeRouter.detach()
+                    throw error
+                }
+            }
+        } catch {
+            await prewarmGate.clear(cancelling: false)
+            throw error
+        }
+
+        guard await prewarmGate.isCurrent(result.operationID) else {
+            try? result.value.graph.tearDown()
+            result.value.realtimeRouter.detach()
+            throw CancellationError()
+        }
+
+        if graph == nil, realtimeRouter == nil {
+            do {
+                try registerCoreAudioListeners(for: result.value.graph)
+                registerWorkspaceObservers()
+                graph = result.value.graph
+                realtimeRouter = result.value.realtimeRouter
+                recordedStartupStageTimings =
+                    result.value.graph.startupStageTimings
+            } catch {
+                try? result.value.graph.tearDown()
+                result.value.realtimeRouter.detach()
+                await prewarmGate.clear(
+                    operationID: result.operationID,
+                    cancelling: false
+                )
+                throw error
+            }
+        }
+
+        prewarmState = .ready
+        return result.startedNewOperation
+    }
+
     private func startDrainTask(consumer: CanonicalAudioFileConsumer) {
         drainTask = Task.detached(priority: .high) { [weak self] in
             do {
@@ -322,6 +374,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         }
 
         var finalMessage = message
+        await prewarmGate.clear(cancelling: true)
         let listenerFailures = unregisterCoreAudioListeners()
         if !listenerFailures.isEmpty {
             finalMessage += " " + listenerFailures.joined(separator: " ")
@@ -517,6 +570,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         }
 
         isSleeping = true
+        await prewarmGate.clear(cancelling: true)
         guard state.isActive, let outputURL else {
             _ = unregisterCoreAudioListeners()
             if let graph {
@@ -563,7 +617,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             isRecovering = false
             await recoverGraph(reason: "The Mac woke from sleep.")
         } else {
-            prewarm()
+            await prewarm()
         }
     }
 
@@ -578,6 +632,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
         isRebuildingPreparedGraph = true
         prewarmState = .preparing
+        await prewarmGate.clear(cancelling: true)
         _ = unregisterCoreAudioListeners()
         if let graph {
             try? graph.tearDown()
@@ -586,7 +641,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         graph = nil
         realtimeRouter = nil
         isRebuildingPreparedGraph = false
-        prewarm()
+        await prewarm()
     }
 
     private func recoverGraph(reason: String) async {
@@ -601,6 +656,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
         isRecovering = true
         state = .recovering(reason: reason, outputURL: outputURL)
+        await prewarmGate.clear(cancelling: true)
         let listenerFailures = unregisterCoreAudioListeners()
 
         do {
@@ -653,6 +709,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     private func failRecovery(message: String) async {
         var finalMessage = message
+        await prewarmGate.clear(cancelling: true)
         let listenerFailures = unregisterCoreAudioListeners()
         if !listenerFailures.isEmpty {
             finalMessage += " " + listenerFailures.joined(separator: " ")
@@ -690,6 +747,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     private func shutDownPipelineAfterFailure() async -> String? {
         var failures: [String] = []
+        await prewarmGate.clear(cancelling: true)
         failures.append(contentsOf: unregisterCoreAudioListeners())
         unregisterWorkspaceObservers()
 
@@ -733,6 +791,73 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         realtimeRouter = nil
         isSleeping = false
         isRebuildingPreparedGraph = false
+    }
+}
+
+private struct PreparedSystemAudioGraph: @unchecked Sendable {
+    let graph: CoreAudioSystemTapGraph
+    let realtimeRouter: SystemAudioRealtimeRouter
+}
+
+/// Owns exactly one asynchronous preparation operation. Callers arriving
+/// while it runs await the same task instead of creating competing graphs.
+actor SingleFlightPreparation<Value: Sendable> {
+    struct Result: Sendable {
+        let value: Value
+        let operationID: UUID
+        let startedNewOperation: Bool
+    }
+
+    private struct Operation: Sendable {
+        let id: UUID
+        let task: Task<Value, any Error>
+    }
+
+    private var operation: Operation?
+
+    func value(
+        operation create: @escaping @Sendable () async throws -> Value
+    ) async throws -> Result {
+        let selected: Operation
+        let startedNewOperation: Bool
+        if let operation {
+            selected = operation
+            startedNewOperation = false
+        } else {
+            selected = Operation(
+                id: UUID(),
+                task: Task.detached(priority: .userInitiated) {
+                    try await create()
+                }
+            )
+            operation = selected
+            startedNewOperation = true
+        }
+
+        return try await Result(
+            value: selected.task.value,
+            operationID: selected.id,
+            startedNewOperation: startedNewOperation
+        )
+    }
+
+    func isCurrent(_ operationID: UUID) -> Bool {
+        operation?.id == operationID
+    }
+
+    func clear(
+        operationID: UUID? = nil,
+        cancelling: Bool
+    ) {
+        guard
+            operationID == nil || operation?.id == operationID
+        else {
+            return
+        }
+        if cancelling {
+            operation?.task.cancel()
+        }
+        operation = nil
     }
 }
 

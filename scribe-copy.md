@@ -99,6 +99,14 @@ voice per screen.
 - Menu bar active: **Recording · 12:04**
 - Both tracks live: **You · Others** (level meters, no text needed)
 
+### Preparing system audio
+
+- Status: **Preparing system audio before recording**
+- Button after Record is pressed: **Preparing system audio…**
+
+Recording waits for the one launch-time preparation already in progress. Do not
+imply that recording has started until both capture tracks are running.
+
 ### System track silent for more than 30 seconds
 
 **Nothing plays through your Mac right now**

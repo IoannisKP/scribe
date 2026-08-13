@@ -514,10 +514,14 @@ private struct RecordingView: View {
                                 Label(
                                     recorder.isRecording
                                         ? "Stop recording"
-                                        : "Record meeting",
+                                        : recorder.isWaitingToStartRecording
+                                            ? "Preparing system audio…"
+                                            : "Record meeting",
                                     systemImage: recorder.isRecording
                                         ? "stop.fill"
-                                        : "record.circle"
+                                        : recorder.isWaitingToStartRecording
+                                            ? "hourglass"
+                                            : "record.circle"
                                 )
                             }
                             .buttonStyle(.borderedProminent)

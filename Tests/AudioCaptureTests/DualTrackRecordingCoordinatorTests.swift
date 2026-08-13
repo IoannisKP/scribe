@@ -203,6 +203,30 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         _ = try await coordinator.stopRecording()
     }
 
+    func testPersistsExplicitSystemAudioGraphPreparation() async throws {
+        let microphone = FakeTrackCapture(source: .microphone)
+        let system = FakeTrackCapture(
+            source: .system,
+            graphPreparation: .prewarmed
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        _ = try await coordinator.startRecording(in: directory)
+
+        let manifest = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(manifest.systemAudioGraphPreparation, .prewarmed)
+        _ = try await coordinator.stopRecording()
+    }
+
     func testNormalizesOffsetWhenSystemProducesFirstSampleFirst()
         async throws
     {
@@ -431,6 +455,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     let stopFailure: AudioCaptureError?
     let capturedFirstSampleHostTime: UInt64?
     let startupStageTimings: [SystemAudioStartupStageTiming]
+    let graphPreparation: SystemAudioGraphPreparation?
     let startOrder: CaptureStartOrder?
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -442,6 +467,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         stopFailure: AudioCaptureError? = nil,
         firstSampleHostTime: UInt64? = nil,
         startupStageTimings: [SystemAudioStartupStageTiming] = [],
+        graphPreparation: SystemAudioGraphPreparation? = nil,
         startOrder: CaptureStartOrder? = nil
     ) {
         self.source = source
@@ -449,6 +475,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         self.stopFailure = stopFailure
         self.capturedFirstSampleHostTime = firstSampleHostTime
         self.startupStageTimings = startupStageTimings
+        self.graphPreparation = graphPreparation
         self.startOrder = startOrder
     }
 
@@ -483,6 +510,10 @@ private actor FakeTrackCapture: AudioTrackCapturing {
 
     func systemStartupStageTimings() -> [SystemAudioStartupStageTiming] {
         startupStageTimings
+    }
+
+    func systemAudioGraphPreparation() -> SystemAudioGraphPreparation? {
+        graphPreparation
     }
 }
 

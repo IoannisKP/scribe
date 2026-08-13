@@ -165,4 +165,20 @@ final class CaptureSessionManifestTests: XCTestCase {
 
         XCTAssertEqual(decoded.systemAudioStartupStageTimings, timings)
     }
+
+    func testRoundTripsSystemAudioGraphPreparation() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Prepared capture",
+            createdAt: Date(timeIntervalSince1970: 10)
+        ).replacingSystemAudioGraphPreparation(.prewarmed)
+
+        try manifest.write(to: directory)
+        let decoded = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(decoded.systemAudioGraphPreparation, .prewarmed)
+    }
 }

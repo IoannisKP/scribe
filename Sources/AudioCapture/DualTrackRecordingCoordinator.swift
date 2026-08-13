@@ -165,6 +165,8 @@ public actor DualTrackRecordingCoordinator {
         }
         let systemStartupStageTimings =
             await systemCapture.systemStartupStageTimings()
+        let systemAudioGraphPreparation =
+            await systemCapture.systemAudioGraphPreparation()
         do {
             let manifest: CaptureSessionManifest
             if !FileManager.default.fileExists(
@@ -180,12 +182,20 @@ public actor DualTrackRecordingCoordinator {
                     from: paths.sessionDirectory
                 )
             }
-            let manifestWithStartupTimings = systemStartupStageTimings.isEmpty
+            var manifestWithCaptureDiagnostics = systemStartupStageTimings.isEmpty
                 ? manifest
                 : manifest.replacingSystemAudioStartupStageTimings(
                     systemStartupStageTimings
                 )
-            try manifestWithStartupTimings.write(to: paths.sessionDirectory)
+            if let systemAudioGraphPreparation {
+                manifestWithCaptureDiagnostics = manifestWithCaptureDiagnostics
+                    .replacingSystemAudioGraphPreparation(
+                        systemAudioGraphPreparation
+                    )
+            }
+            try manifestWithCaptureDiagnostics.write(
+                to: paths.sessionDirectory
+            )
         } catch {
             var message =
                 "Writing session metadata failed: \(error.localizedDescription)"

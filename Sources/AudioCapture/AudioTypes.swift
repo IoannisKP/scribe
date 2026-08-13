@@ -61,6 +61,16 @@ public struct SystemAudioStartupStageTiming:
     }
 }
 
+public enum SystemAudioGraphPreparation: String, Codable, Sendable {
+    /// Recording reused the graph completed by launch-time or lifecycle
+    /// prewarming, including waiting for an in-flight preparation.
+    case prewarmed
+
+    /// No launch-time preparation had started, so the recording request
+    /// initiated the one shared preparation operation itself.
+    case builtAtRecordingStart
+}
+
 public struct SystemTapProcessMetrics: Codable, Equatable, Sendable {
     public let processID: Int32
     public let processName: String
@@ -145,12 +155,16 @@ public protocol AudioTrackCapturing: Sendable {
     func stopCapture() async throws -> AudioTrackCaptureResult
     func firstSampleHostTime() async -> UInt64?
     func systemStartupStageTimings() async -> [SystemAudioStartupStageTiming]
+    func systemAudioGraphPreparation() async -> SystemAudioGraphPreparation?
 }
 
 public extension AudioTrackCapturing {
     func firstSampleHostTime() async -> UInt64? { nil }
     func systemStartupStageTimings() async -> [SystemAudioStartupStageTiming] {
         []
+    }
+    func systemAudioGraphPreparation() async -> SystemAudioGraphPreparation? {
+        nil
     }
 }
 
