@@ -130,8 +130,8 @@ final class MeetingRecorderViewModel: ObservableObject {
         SessionSmartFolderCounts = .zero
     @Published private(set) var manualSessionFolders:
         [ManualSessionFolder] = []
-    @Published private(set) var recentRecordingPin:
-        CaptureSessionManifest.Pin?
+    @Published private(set) var recordingPinStatus:
+        RecordingPinFeedback?
     @Published private(set) var mediaImportState: MediaImportState = .idle
     @Published private(set) var systemTapDiagnosticState:
         SystemTapDiagnosticUIState = .idle
@@ -413,7 +413,10 @@ final class MeetingRecorderViewModel: ObservableObject {
                 atHostTime: hostTime
             )
             guard let sampleOffset else {
-                errorMessage = ScribeCopy.Recording.pinUnavailable
+                showRecordingPinStatus(
+                    .failed(message: ScribeCopy.Recording.pinUnavailable),
+                    duration: .seconds(4)
+                )
                 return
             }
             let pin = CaptureSessionManifest.Pin(
@@ -426,23 +429,15 @@ final class MeetingRecorderViewModel: ObservableObject {
                     pin,
                     to: sessionDirectory
                 )
-                recentRecordingPin = pin
-                pinConfirmationTask?.cancel()
-                pinConfirmationTask = Task { [weak self] in
-                    do {
-                        try await Task.sleep(for: .seconds(2))
-                        guard self?.recentRecordingPin?.id == pin.id else {
-                            return
-                        }
-                        self?.recentRecordingPin = nil
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        return
-                    }
-                }
+                showRecordingPinStatus(
+                    .saved(sampleOffset: pin.sampleOffset),
+                    duration: .seconds(2)
+                )
             } catch {
-                errorMessage = ScribeCopy.Recording.pinSaveFailed
+                showRecordingPinStatus(
+                    .failed(message: ScribeCopy.Recording.pinSaveFailed),
+                    duration: .seconds(4)
+                )
             }
         }
         pinWriteTasks[pinID] = task
@@ -1024,7 +1019,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         activeNotesURL = nil
         notesText = ""
         systemTrackHasBeenSilent = false
-        recentRecordingPin = nil
+        recordingPinStatus = nil
         pinConfirmationTask?.cancel()
         lastSystemSpeechAt = nil
         handledAutomaticStopSessionDirectory = nil
@@ -2605,6 +2600,25 @@ final class MeetingRecorderViewModel: ObservableObject {
         let pending = Array(pinWriteTasks.values)
         for task in pending {
             await task.value
+        }
+    }
+
+    private func showRecordingPinStatus(
+        _ status: RecordingPinFeedback,
+        duration: Duration
+    ) {
+        recordingPinStatus = status
+        pinConfirmationTask?.cancel()
+        pinConfirmationTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: duration)
+                guard self?.recordingPinStatus == status else { return }
+                self?.recordingPinStatus = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
         }
     }
 

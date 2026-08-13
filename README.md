@@ -679,6 +679,12 @@ This check uses the already-downloaded VAD and Parakeet models:
 11. Type continuously while transcript rows are arriving. Notes must remain
     immediate because paragraph presentation is recomputed only when live rows
     change, not when the notes editor redraws.
+12. Record with nothing playing through the Mac so `system.wav` remains a
+    44-byte header and its track offset remains unavailable. Add several pins,
+    including one immediately before Stop. Confirm every pin and the microphone
+    offset survive reconciliation in `session.json`; the empty system track is
+    valid. A pin confirmation must appear only after its manifest write, while
+    a failed write must show the failure in the sidebar.
 
 The recording rail is content-driven. It does not use an engine block as a
 layout unit: live rows around 26–30 seconds and batch-shaped rows around 12–13

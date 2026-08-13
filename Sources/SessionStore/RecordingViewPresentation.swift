@@ -115,6 +115,35 @@ public struct RecordingStatusNotices: Equatable, Sendable {
     }
 }
 
+public enum RecordingPinFeedback: Equatable, Sendable {
+    case saved(sampleOffset: Int64)
+    case failed(message: String)
+
+    public var message: String {
+        switch self {
+        case let .saved(sampleOffset):
+            ScribeCopy.Recording.pinAdded(
+                timecode: Self.timecode(sampleOffset)
+            )
+        case let .failed(message):
+            message
+        }
+    }
+
+    public var isFailure: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+
+    private static func timecode(_ sampleOffset: Int64) -> String {
+        let seconds = max(
+            0,
+            Int(Double(sampleOffset) / CanonicalAudioFormat.sampleRate)
+        )
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
 public struct RecordingTranscriptPresentationCache: Sendable {
     public private(set) var sourceRows: [LiveTranscriptRow]
     public private(set) var presentationRows:
