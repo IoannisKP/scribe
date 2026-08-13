@@ -157,6 +157,8 @@ realtime callback free of allocation, locks, logging, conversion, and disk I/O.
 
 ## 2026-07-29 — Start microphone before the global process tap
 
+**Superseded on 2026-08-11 by launch-time system-tap prewarming below.**
+
 **Decision:** The dual coordinator starts microphone capture first and system
 capture second.
 
@@ -211,6 +213,36 @@ assuming both sources start together would misorder early transcript results.
 A monotonic offset is immune to wall-clock adjustments and keeps the recording
 self-describing without prematurely introducing the database layer. If the
 manifest cannot be written, both capture services are stopped and finalized.
+
+## 2026-08-11 — Prewarm an unstarted system tap at launch
+
+**Decision:** Prepare the self-excluding process tap, private aggregate device,
+and registered IOProc concurrently with app initialization, but do not call
+`AudioDeviceStart` until the user records. Keep the IOProc's atomic realtime
+routing slot empty while idle; allocate and attach the 7.32 MiB ring,
+first-sample latch, consumer, and WAV writer only at Record. After a clean stop,
+detach those recording resources and retain the unstarted graph. Fully discard
+the graph before sleep, on default-output or format change, aggregate death,
+and after a Core Audio service restart; rebuild on wake or route recovery.
+
+**Alternatives:** Pay graph preparation after Record; start the prepared device
+at launch; allocate the full recording pipeline while idle; keep graph objects
+across sleep and route changes.
+
+**Reasoning:** On real macOS 26 hardware, IOProc registration measured
+13,725.23 ms cold and about 2 ms warm in the original stage sweep. A dedicated
+privacy run then measured 2,134.54 ms for the process's first registration and
+6.16 ms for a second registration on the same unstarted aggregate, showing that
+the delay belongs to first registration rather than every IOProc. During a
+90-second hold with audible YouTube playback, both IOProcs delivered zero
+callbacks, macOS showed no purple indicator, and Control Center listed no Scribe
+capture. Preparation added about 1 MB to app RSS; `coreaudiod` counters were not
+readable from the app. The app reported 39 package-idle and 1,440 interrupt
+wakeups during the UI-driven hold, an upper bound that includes the countdown
+and cannot be attributed solely to the unstarted graph. The diagnostic confirmed
+that neither the ring nor writer was allocated. Prewarming therefore converts
+variable Core Audio initialization into launch work without recording early,
+showing a privacy indicator, or retaining recording-sized idle memory.
 
 ## 2026-07-30 — Bound batch input to 14-second canonical chunks
 

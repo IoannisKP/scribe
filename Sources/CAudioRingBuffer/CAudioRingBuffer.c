@@ -17,6 +17,69 @@ struct ScribeAtomicHostTime {
     _Atomic uint64_t value;
 };
 
+struct ScribeAtomicCounter {
+    _Atomic uint64_t value;
+};
+
+struct ScribeAtomicPointer {
+    _Atomic(const void *) value;
+};
+
+ScribeAtomicCounter *scribe_atomic_counter_create(void) {
+    ScribeAtomicCounter *counter = calloc(1, sizeof(ScribeAtomicCounter));
+    if (counter != NULL) {
+        atomic_init(&counter->value, 0);
+    }
+    return counter;
+}
+
+void scribe_atomic_counter_destroy(ScribeAtomicCounter *counter) {
+    free(counter);
+}
+
+void scribe_atomic_counter_increment(ScribeAtomicCounter *counter) {
+    if (counter == NULL) {
+        return;
+    }
+    atomic_fetch_add_explicit(&counter->value, 1, memory_order_relaxed);
+}
+
+uint64_t scribe_atomic_counter_load(const ScribeAtomicCounter *counter) {
+    if (counter == NULL) {
+        return 0;
+    }
+    return atomic_load_explicit(&counter->value, memory_order_relaxed);
+}
+
+ScribeAtomicPointer *scribe_atomic_pointer_create(void) {
+    ScribeAtomicPointer *slot = calloc(1, sizeof(ScribeAtomicPointer));
+    if (slot != NULL) {
+        atomic_init(&slot->value, NULL);
+    }
+    return slot;
+}
+
+void scribe_atomic_pointer_destroy(ScribeAtomicPointer *slot) {
+    free(slot);
+}
+
+void scribe_atomic_pointer_store(
+    ScribeAtomicPointer *slot,
+    const void *pointer
+) {
+    if (slot == NULL) {
+        return;
+    }
+    atomic_store_explicit(&slot->value, pointer, memory_order_release);
+}
+
+const void *scribe_atomic_pointer_load(const ScribeAtomicPointer *slot) {
+    if (slot == NULL) {
+        return NULL;
+    }
+    return atomic_load_explicit(&slot->value, memory_order_acquire);
+}
+
 ScribeAtomicHostTime *scribe_atomic_host_time_create(void) {
     ScribeAtomicHostTime *latch = calloc(1, sizeof(ScribeAtomicHostTime));
     if (latch != NULL) {

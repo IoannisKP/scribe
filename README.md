@@ -19,6 +19,8 @@ recording, and the complete first-run permission experience:
 - a private aggregate device with the real output device as its main
   subdevice and the process tap attached as a drift-compensated subtap;
 - direct system-audio reads through `AudioDeviceCreateIOProcIDWithBlock`;
+- launch-time prewarming of the private tap, aggregate, and unstarted IOProc,
+  with the 7.32 MiB ring and WAV writer deferred until Record;
 - recovery for default output changes, tap format changes, aggregate death,
   Core Audio service restarts, sleep, and wake;
 - first-run microphone and system-audio permission cards with accurate

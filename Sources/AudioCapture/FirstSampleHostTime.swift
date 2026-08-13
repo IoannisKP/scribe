@@ -28,7 +28,39 @@ final class FirstSampleHostTime: @unchecked Sendable {
     }
 }
 
+final class RealtimeCallbackCounter: @unchecked Sendable {
+    private let storage: OpaquePointer
+
+    init() throws {
+        guard let storage = scribe_atomic_counter_create() else {
+            throw AudioCaptureError.diagnosticCounterAllocationFailed
+        }
+        self.storage = storage
+    }
+
+    deinit {
+        scribe_atomic_counter_destroy(storage)
+    }
+
+    func increment() {
+        scribe_atomic_counter_increment(storage)
+    }
+
+    var value: UInt64 {
+        scribe_atomic_counter_load(storage)
+    }
+}
+
 public enum AudioHostTime {
+    public static func nanoseconds(forMachTicks ticks: UInt64) -> UInt64 {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let nanoseconds = Double(ticks)
+            * Double(timebase.numer)
+            / Double(timebase.denom)
+        return UInt64(nanoseconds.rounded())
+    }
+
     public static func canonicalSampleOffset(
         from earlierHostTime: UInt64,
         to laterHostTime: UInt64
@@ -72,5 +104,29 @@ public enum AudioHostTime {
             ),
             0
         )
+    }
+}
+
+struct SystemAudioStartupProfiler {
+    private(set) var timings: [SystemAudioStartupStageTiming] = []
+
+    mutating func measure<Result>(
+        _ stage: SystemAudioStartupStage,
+        operation: () throws -> Result
+    ) rethrows -> Result {
+        let start = mach_absolute_time()
+        defer {
+            let ticks = mach_absolute_time() - start
+            timings.append(
+                SystemAudioStartupStageTiming(
+                    stage: stage,
+                    durationMachTicks: ticks,
+                    durationNanoseconds: AudioHostTime.nanoseconds(
+                        forMachTicks: ticks
+                    )
+                )
+            )
+        }
+        return try operation()
     }
 }

@@ -16,6 +16,28 @@ extern "C" {
 
 typedef struct ScribeFloatRingBuffer ScribeFloatRingBuffer;
 typedef struct ScribeAtomicHostTime ScribeAtomicHostTime;
+typedef struct ScribeAtomicCounter ScribeAtomicCounter;
+typedef struct ScribeAtomicPointer ScribeAtomicPointer;
+
+/// A lock-free counter suitable for observing diagnostic audio callbacks.
+/// Creation and destruction must not happen on a realtime audio thread.
+ScribeAtomicCounter * _Nullable scribe_atomic_counter_create(void);
+void scribe_atomic_counter_destroy(ScribeAtomicCounter *counter);
+void scribe_atomic_counter_increment(ScribeAtomicCounter *counter);
+uint64_t scribe_atomic_counter_load(const ScribeAtomicCounter *counter);
+
+/// A lock-free pointer slot used to attach a prepared IOProc to its realtime
+/// sink immediately before the device starts. The pointee remains owned by
+/// Swift; callers must clear the slot after AudioDeviceStop and before release.
+ScribeAtomicPointer * _Nullable scribe_atomic_pointer_create(void);
+void scribe_atomic_pointer_destroy(ScribeAtomicPointer *slot);
+void scribe_atomic_pointer_store(
+    ScribeAtomicPointer *slot,
+    const void * _Nullable pointer
+);
+const void * _Nullable scribe_atomic_pointer_load(
+    const ScribeAtomicPointer *slot
+);
 
 /// A lock-free, write-once latch for the first valid audio host timestamp.
 /// Creation and destruction must not happen on a realtime audio thread.

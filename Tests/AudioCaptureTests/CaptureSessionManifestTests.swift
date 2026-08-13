@@ -140,4 +140,29 @@ final class CaptureSessionManifestTests: XCTestCase {
         XCTAssertEqual(missing.microphone, 0)
         XCTAssertNil(missing.system)
     }
+
+    func testRoundTripsSystemAudioStartupStageTimings() throws {
+        let timings = SystemAudioStartupStage.allCases.enumerated().map {
+            index,
+            stage in
+            SystemAudioStartupStageTiming(
+                stage: stage,
+                durationMachTicks: UInt64(index + 1),
+                durationNanoseconds: UInt64((index + 1) * 100)
+            )
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Startup timing",
+            createdAt: Date(timeIntervalSince1970: 10)
+        ).replacingSystemAudioStartupStageTimings(timings)
+
+        try manifest.write(to: directory)
+        let decoded = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(decoded.systemAudioStartupStageTimings, timings)
+    }
 }

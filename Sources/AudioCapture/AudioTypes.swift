@@ -31,14 +31,127 @@ public struct AudioTrackCaptureResult: Equatable, Sendable {
     }
 }
 
+public enum SystemAudioStartupStage: String, Codable, CaseIterable, Sendable {
+    case processTapCreation
+    case tapFormatLookup
+    case aggregateDeviceCreation
+    case ioProcRegistration
+    case wavWriterCreationAndHeaderFlush
+    case listenerRegistration
+    case audioDeviceStart
+}
+
+public struct SystemAudioStartupStageTiming:
+    Codable,
+    Equatable,
+    Sendable
+{
+    public let stage: SystemAudioStartupStage
+    public let durationMachTicks: UInt64
+    public let durationNanoseconds: UInt64
+
+    public init(
+        stage: SystemAudioStartupStage,
+        durationMachTicks: UInt64,
+        durationNanoseconds: UInt64
+    ) {
+        self.stage = stage
+        self.durationMachTicks = durationMachTicks
+        self.durationNanoseconds = durationNanoseconds
+    }
+}
+
+public struct SystemTapProcessMetrics: Codable, Equatable, Sendable {
+    public let processID: Int32
+    public let processName: String
+    public let residentBytes: UInt64
+    public let physicalFootprintBytes: UInt64
+    public let packageIdleWakeups: UInt64
+    public let interruptWakeups: UInt64
+
+    public init(
+        processID: Int32,
+        processName: String,
+        residentBytes: UInt64,
+        physicalFootprintBytes: UInt64,
+        packageIdleWakeups: UInt64,
+        interruptWakeups: UInt64
+    ) {
+        self.processID = processID
+        self.processName = processName
+        self.residentBytes = residentBytes
+        self.physicalFootprintBytes = physicalFootprintBytes
+        self.packageIdleWakeups = packageIdleWakeups
+        self.interruptWakeups = interruptWakeups
+    }
+}
+
+public struct SystemTapResourceSnapshot: Codable, Equatable, Sendable {
+    public let capturedAt: Date
+    public let app: SystemTapProcessMetrics?
+    public let coreaudiod: SystemTapProcessMetrics?
+
+    public init(
+        capturedAt: Date,
+        app: SystemTapProcessMetrics?,
+        coreaudiod: SystemTapProcessMetrics?
+    ) {
+        self.capturedAt = capturedAt
+        self.app = app
+        self.coreaudiod = coreaudiod
+    }
+}
+
+public enum SystemTapDiagnosticProgress: Equatable, Sendable {
+    case preparing
+    case holding(secondsRemaining: Int, callbackCount: UInt64)
+    case registeringComparison
+    case cleaningUp
+}
+
+public struct SystemTapPrivacyDiagnosticReport:
+    Codable,
+    Equatable,
+    Sendable
+{
+    public let runID: UUID
+    public let startedAt: Date
+    public let completedAt: Date
+    public let holdSeconds: Int
+    public let outputDeviceUID: String
+    public let preparationTimings: [SystemAudioStartupStageTiming]
+    public let secondIOProcRegistrationTiming: SystemAudioStartupStageTiming
+    public let primaryCallbackCount: UInt64
+    public let secondIOProcCallbackCount: UInt64
+    public let resourcesBeforePreparation: SystemTapResourceSnapshot
+    public let resourcesAfterPreparation: SystemTapResourceSnapshot
+    public let resourcesAfterHold: SystemTapResourceSnapshot
+    public let ringBufferAllocated: Bool
+    public let wavWriterCreated: Bool
+}
+
+public struct SystemTapTimingSample: Codable, Equatable, Sendable {
+    public let runID: UUID
+    public let capturedAt: Date
+    public let outputDeviceUID: String
+    public let timings: [SystemAudioStartupStageTiming]
+    public let callbackCount: UInt64
+    public let ringBufferAllocated: Bool
+    public let wavWriterCreated: Bool
+}
+
 public protocol AudioTrackCapturing: Sendable {
     func startRecording(to outputURL: URL) async throws
     func stopCapture() async throws -> AudioTrackCaptureResult
     func firstSampleHostTime() async -> UInt64?
+    func systemStartupStageTimings() async -> [SystemAudioStartupStageTiming]
 }
 
 public extension AudioTrackCapturing {
     func firstSampleHostTime() async -> UInt64? { nil }
+    func systemStartupStageTimings() async -> [SystemAudioStartupStageTiming] {
+        []
+    }
 }
 
 public enum CanonicalAudioFormat {
@@ -73,6 +186,8 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
     case audioConsumerFailed(String)
     case audioFormatChangedBeforeBufferedSamplesDrained
     case hostTimeLatchAllocationFailed
+    case diagnosticCounterAllocationFailed
+    case realtimeRouterAllocationFailed
     case systemCaptureAlreadyRunning
     case systemCaptureNotRunning
     case systemOutputDeviceUnavailable
@@ -145,6 +260,10 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
             "The input format changed before previously captured samples could be drained safely."
         case .hostTimeLatchAllocationFailed:
             "Scribe could not allocate first-sample timing storage."
+        case .diagnosticCounterAllocationFailed:
+            "Scribe could not allocate the system-tap diagnostic callback counter."
+        case .realtimeRouterAllocationFailed:
+            "Scribe could not allocate the system-audio realtime routing slot."
         case .systemCaptureAlreadyRunning:
             "System-audio recording is already active."
         case .systemCaptureNotRunning:

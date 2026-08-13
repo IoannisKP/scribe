@@ -35,6 +35,234 @@ struct ContentView: View {
                 await recorder.refreshPermissionStatus()
             }
         }
+        .sheet(isPresented: $recorder.showsSystemTapDiagnostic) {
+            SystemTapDiagnosticView(recorder: recorder)
+                .interactiveDismissDisabled(
+                    recorder.systemTapDiagnosticIsActive
+                )
+        }
+    }
+}
+
+private struct SystemTapDiagnosticView: View {
+    @ObservedObject var recorder: MeetingRecorderViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Image(systemName: "waveform.badge.magnifyingglass")
+                    .font(.title)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("System Tap Diagnostic")
+                        .font(.title2.bold())
+                    Text("The aggregate device is never started")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            statusContent
+
+            GroupBox("Privacy observation") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(
+                        "During the 90-second hold, play audible browser audio. Check the upper-right menu bar for a purple recording dot, then open Control Center and look for Scribe under the system-audio recording disclosure."
+                    )
+                    Text(
+                        "A passing result requires no purple dot, no Scribe recording entry, and a callback count of zero."
+                    )
+                    .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+            }
+
+            if let logURL = recorder.systemTapDiagnosticLogURL {
+                Text("Log: \(logURL.path)")
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+
+            HStack {
+                Button("Reveal log") {
+                    recorder.revealSystemTapDiagnosticLog()
+                }
+
+                Spacer()
+
+                if recorder.systemTapDiagnosticIsActive {
+                    Button("Stop and tear down") {
+                        recorder.cancelSystemTapDiagnostic()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                } else {
+                    Button("Close") {
+                        recorder.showsSystemTapDiagnostic = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 650, maxWidth: 650, minHeight: 500)
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
+        switch recorder.systemTapDiagnosticState {
+        case .idle:
+            Text("Ready")
+        case .preparing:
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView()
+                Text("Preparing the unstarted tap and registering the first IOProc…")
+                    .font(.headline)
+                Text("The first registration may take about 14 seconds.")
+                    .foregroundStyle(.secondary)
+            }
+        case let .holding(secondsRemaining, callbackCount):
+            VStack(alignment: .leading, spacing: 8) {
+                Text("HELD — DO NOT CLOSE")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+                Text("\(secondsRemaining) seconds remaining")
+                    .font(.system(.title, design: .monospaced).bold())
+                ProgressView(
+                    value: Double(90 - secondsRemaining),
+                    total: 90
+                )
+                Text("Unstarted IOProc callbacks: \(callbackCount)")
+                    .font(.body.monospaced())
+                    .foregroundStyle(
+                        callbackCount == 0
+                            ? Color.primary
+                            : Color.red
+                    )
+            }
+        case .registeringComparison:
+            ProgressView("Registering the second IOProc for comparison…")
+        case .cleaningUp:
+            ProgressView("Destroying IOProcs, aggregate device, and process tap…")
+        case let .completed(report):
+            diagnosticReport(report)
+        case let .timingSampleCompleted(sample):
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Timing sample appended", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+                Text(
+                    "IOProc registration: \(milliseconds(ioProcTiming(in: sample.timings))) ms"
+                )
+                    .font(.body.monospaced())
+                Text("Callbacks before teardown: \(sample.callbackCount)")
+                    .font(.body.monospaced())
+            }
+        case .cancelled:
+            Label(
+                "Stopped cleanly; both IOProcs, the aggregate device, and the tap were removed.",
+                systemImage: "checkmark.circle"
+            )
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Diagnostic failed", systemImage: "xmark.octagon.fill")
+                    .font(.headline)
+                    .foregroundStyle(.red)
+                Text(message)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func diagnosticReport(
+        _ report: SystemTapPrivacyDiagnosticReport
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Diagnostic completed and cleaned up", systemImage: "checkmark.circle.fill")
+                .font(.headline)
+                .foregroundStyle(.green)
+            Text(
+                "First IOProc registration: \(milliseconds(ioProcTiming(in: report.preparationTimings))) ms"
+            )
+            Text(
+                "Second IOProc registration: \(milliseconds(report.secondIOProcRegistrationTiming)) ms"
+            )
+            Text("Callbacks during hold: \(report.primaryCallbackCount)")
+            Text(
+                "Callbacks on second unstarted IOProc: \(report.secondIOProcCallbackCount)"
+            )
+            Text(
+                "App RSS preparation delta: \(memoryDelta(from: report.resourcesBeforePreparation.app, to: report.resourcesAfterPreparation.app))"
+            )
+            Text(
+                "coreaudiod RSS preparation delta: \(memoryDelta(from: report.resourcesBeforePreparation.coreaudiod, to: report.resourcesAfterPreparation.coreaudiod))"
+            )
+            Text(
+                "App idle wakeups during hold: \(wakeupsDelta(from: report.resourcesAfterPreparation.app, to: report.resourcesAfterHold.app))"
+            )
+            Text(
+                "coreaudiod idle wakeups during hold: \(wakeupsDelta(from: report.resourcesAfterPreparation.coreaudiod, to: report.resourcesAfterHold.coreaudiod))"
+            )
+            Text("Ring buffer allocated: no")
+            Text("WAV writer created: no")
+        }
+        .font(.body.monospaced())
+        .textSelection(.enabled)
+    }
+
+    private func ioProcTiming(
+        in timings: [SystemAudioStartupStageTiming]
+    ) -> SystemAudioStartupStageTiming? {
+        timings.first { $0.stage == .ioProcRegistration }
+    }
+
+    private func milliseconds(
+        _ timing: SystemAudioStartupStageTiming?
+    ) -> String {
+        guard let timing else { return "unavailable" }
+        return String(
+            format: "%.2f",
+            Double(timing.durationNanoseconds) / 1_000_000
+        )
+    }
+
+    private func memoryDelta(
+        from before: SystemTapProcessMetrics?,
+        to after: SystemTapProcessMetrics?
+    ) -> String {
+        guard
+            let before,
+            let after,
+            before.processID == after.processID
+        else {
+            return "unavailable"
+        }
+        let delta = Int64(after.residentBytes) - Int64(before.residentBytes)
+        return ByteCountFormatter.string(
+            fromByteCount: delta,
+            countStyle: .memory
+        )
+    }
+
+    private func wakeupsDelta(
+        from before: SystemTapProcessMetrics?,
+        to after: SystemTapProcessMetrics?
+    ) -> String {
+        guard
+            let before,
+            let after,
+            before.processID == after.processID,
+            after.packageIdleWakeups >= before.packageIdleWakeups,
+            after.interruptWakeups >= before.interruptWakeups
+        else {
+            return "unavailable"
+        }
+        let packageDelta = after.packageIdleWakeups
+            - before.packageIdleWakeups
+        let interruptDelta = after.interruptWakeups
+            - before.interruptWakeups
+        return "\(packageDelta) package-idle, \(interruptDelta) interrupt"
     }
 }
 

@@ -137,9 +137,7 @@ public actor DualTrackRecordingCoordinator {
         state = .starting(paths: paths)
 
         do {
-            try await microphoneCapture.startRecording(
-                to: paths.microphoneURL
-            )
+            try await systemCapture.startRecording(to: paths.systemURL)
         } catch {
             activePaths = nil
             state = .failed(
@@ -151,28 +149,43 @@ public actor DualTrackRecordingCoordinator {
             )
         }
         do {
-            try await systemCapture.startRecording(to: paths.systemURL)
+            try await microphoneCapture.startRecording(
+                to: paths.microphoneURL
+            )
         } catch {
             var message = error.localizedDescription
             do {
-                _ = try await microphoneCapture.stopCapture()
+                _ = try await systemCapture.stopCapture()
             } catch {
-                message += " Stopping the microphone track also failed: \(error.localizedDescription)"
+                message += " Stopping system audio also failed: \(error.localizedDescription)"
             }
             activePaths = nil
             state = .failed(message: message, paths: paths)
             throw AudioCaptureError.dualTrackStartFailed(message)
         }
+        let systemStartupStageTimings =
+            await systemCapture.systemStartupStageTimings()
         do {
+            let manifest: CaptureSessionManifest
             if !FileManager.default.fileExists(
                 atPath: paths.manifestURL.path
             ) {
-                try CaptureSessionManifest.pendingDualTrack(
+                manifest = CaptureSessionManifest.pendingDualTrack(
                     sessionID: UUID(),
                     title: paths.sessionDirectory.lastPathComponent,
                     createdAt: Date()
-                ).write(to: paths.sessionDirectory)
+                )
+            } else {
+                manifest = try CaptureSessionManifest.load(
+                    from: paths.sessionDirectory
+                )
             }
+            let manifestWithStartupTimings = systemStartupStageTimings.isEmpty
+                ? manifest
+                : manifest.replacingSystemAudioStartupStageTimings(
+                    systemStartupStageTimings
+                )
+            try manifestWithStartupTimings.write(to: paths.sessionDirectory)
         } catch {
             var message =
                 "Writing session metadata failed: \(error.localizedDescription)"

@@ -69,7 +69,7 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         )
     }
 
-    func testSystemStartFailureStopsAlreadyRunningMicrophone() async {
+    func testSystemStartFailureDoesNotStartMicrophone() async {
         let microphone = FakeTrackCapture(source: .microphone)
         let system = FakeTrackCapture(
             source: .system,
@@ -99,14 +99,144 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
             )
         }
 
+        let microphoneStarts = await microphone.startCount
         let microphoneStops = await microphone.stopCount
-        XCTAssertEqual(microphoneStops, 1)
+        XCTAssertEqual(microphoneStarts, 0)
+        XCTAssertEqual(microphoneStops, 0)
         let state = await coordinator.state
         if case .failed = state {
             // Expected terminal state.
         } else {
             XCTFail("Expected a failed coordinator state.")
         }
+    }
+
+    func testMicrophoneStartFailureStopsAlreadyRunningSystem() async {
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            startFailure: .microphonePermissionDenied
+        )
+        let system = FakeTrackCapture(source: .system)
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        do {
+            _ = try await coordinator.startRecording(in: directory)
+            XCTFail("Expected microphone startup to fail.")
+        } catch let error as AudioCaptureError {
+            guard case .dualTrackStartFailed = error else {
+                return XCTFail("Unexpected capture error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let systemStarts = await system.startCount
+        let systemStops = await system.stopCount
+        XCTAssertEqual(systemStarts, 1)
+        XCTAssertEqual(systemStops, 1)
+    }
+
+    func testStartsSystemBeforeMicrophone() async throws {
+        let order = CaptureStartOrder()
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            startOrder: order
+        )
+        let system = FakeTrackCapture(source: .system, startOrder: order)
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        _ = try await coordinator.startRecording(in: directory)
+
+        let recordedOrder = await order.sources
+        XCTAssertEqual(recordedOrder, [.system, .microphone])
+        _ = try await coordinator.stopRecording()
+    }
+
+    func testPersistsSystemStartupStageTimings() async throws {
+        let timings = SystemAudioStartupStage.allCases.enumerated().map {
+            index,
+            stage in
+            SystemAudioStartupStageTiming(
+                stage: stage,
+                durationMachTicks: UInt64(index + 1),
+                durationNanoseconds: UInt64((index + 1) * 10)
+            )
+        }
+        let microphone = FakeTrackCapture(source: .microphone)
+        let system = FakeTrackCapture(
+            source: .system,
+            startupStageTimings: timings
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        _ = try await coordinator.startRecording(in: directory)
+
+        let manifest = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(manifest.systemAudioStartupStageTimings, timings)
+        _ = try await coordinator.stopRecording()
+    }
+
+    func testNormalizesOffsetWhenSystemProducesFirstSampleFirst()
+        async throws
+    {
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            firstSampleHostTime: 2_000_000
+        )
+        let system = FakeTrackCapture(
+            source: .system,
+            firstSampleHostTime: 1_000_000
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        _ = try await coordinator.startRecording(in: directory)
+        _ = try await coordinator.stopRecording()
+
+        let manifest = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(manifest.track(for: .system)?.startSampleOffset, 0)
+        XCTAssertEqual(
+            manifest.track(for: .microphone)?.startSampleOffset,
+            AudioHostTime.canonicalSampleOffset(
+                from: 1_000_000,
+                to: 2_000_000
+            )
+        )
     }
 
     func testStopAttemptsMicrophoneAfterSystemStopFailure() async throws {
@@ -300,6 +430,8 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     let startFailure: AudioCaptureError?
     let stopFailure: AudioCaptureError?
     let capturedFirstSampleHostTime: UInt64?
+    let startupStageTimings: [SystemAudioStartupStageTiming]
+    let startOrder: CaptureStartOrder?
     private(set) var startCount = 0
     private(set) var stopCount = 0
     private var outputURL: URL?
@@ -308,16 +440,23 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         source: AudioSource,
         startFailure: AudioCaptureError? = nil,
         stopFailure: AudioCaptureError? = nil,
-        firstSampleHostTime: UInt64? = nil
+        firstSampleHostTime: UInt64? = nil,
+        startupStageTimings: [SystemAudioStartupStageTiming] = [],
+        startOrder: CaptureStartOrder? = nil
     ) {
         self.source = source
         self.startFailure = startFailure
         self.stopFailure = stopFailure
         self.capturedFirstSampleHostTime = firstSampleHostTime
+        self.startupStageTimings = startupStageTimings
+        self.startOrder = startOrder
     }
 
-    func startRecording(to outputURL: URL) throws {
+    func startRecording(to outputURL: URL) async throws {
         startCount += 1
+        if let startOrder {
+            await startOrder.record(source)
+        }
         if let startFailure {
             throw startFailure
         }
@@ -340,5 +479,17 @@ private actor FakeTrackCapture: AudioTrackCapturing {
             droppedSampleCount: 0,
             firstSampleHostTime: capturedFirstSampleHostTime
         )
+    }
+
+    func systemStartupStageTimings() -> [SystemAudioStartupStageTiming] {
+        startupStageTimings
+    }
+}
+
+private actor CaptureStartOrder {
+    private(set) var sources: [AudioSource] = []
+
+    func record(_ source: AudioSource) {
+        sources.append(source)
     }
 }

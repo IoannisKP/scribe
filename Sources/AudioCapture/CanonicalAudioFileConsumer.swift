@@ -17,12 +17,17 @@ actor CanonicalAudioFileConsumer {
         ringBuffer: FloatRingBuffer,
         inputSampleRate: Double,
         outputURL: URL,
+        writer: Int16WAVWriter? = nil,
         liveSink: (any CanonicalAudioBlockSink)? = nil
     ) throws {
         self.source = source
         self.ringBuffer = ringBuffer
         self.resampler = try AudioResampler(inputSampleRate: inputSampleRate)
-        self.writer = try Int16WAVWriter(url: outputURL)
+        if let writer {
+            self.writer = writer
+        } else {
+            self.writer = try Int16WAVWriter(url: outputURL)
+        }
         self.liveSink = liveSink
     }
 
