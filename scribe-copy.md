@@ -471,6 +471,7 @@ No message. The summary appearing in the rail is the confirmation.
 - Actions: **Test key** · **Remove key**
 - Testing: **Testing…**
 - Valid: **Key works**
+- Missing: **No key provided.**
 - Invalid: **That key was rejected. Check it hasn't expired.**
 - Local keyless preset: **No API key needed. Requests stay on this Mac.**
 - Keyless custom provider: **This provider does not require an API key.**

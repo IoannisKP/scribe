@@ -255,6 +255,7 @@ public enum ScribeCopy {
         public static let testing = "Testing…"
         public static let keyWorks = "Key works"
         public static let connectionWorks = "Connection works"
+        public static let noKeyProvided = "No key provided."
         public static let keyRejected =
             "That key was rejected. Check it hasn't expired."
         public static let connectionFailed =

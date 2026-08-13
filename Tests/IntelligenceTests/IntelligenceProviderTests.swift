@@ -197,6 +197,10 @@ final class IntelligenceProviderTests: XCTestCase {
                 error as? IntelligenceProviderError,
                 .missingAPIKey(provider: "OpenAI")
             )
+            XCTAssertEqual(
+                error.localizedDescription,
+                "No key provided for OpenAI."
+            )
         }
         let requests = await recorder.requests
         XCTAssertTrue(requests.isEmpty)
@@ -223,6 +227,31 @@ final class IntelligenceProviderTests: XCTestCase {
         _ = try await provider.availableModels()
         let requests = await recorder.requests
         XCTAssertNil(requests[0].value(forHTTPHeaderField: "Authorization"))
+    }
+
+    func testRejectedKeyReturnsVisibleSanitizedStatus() async throws {
+        let secret = "rejected-secret-value"
+        let provider = IntelligenceProviderPresets.openAI.provider(
+            credential: .volatile(secret),
+            transport: TestTransport(
+                recorder: RequestRecorder(),
+                data: Data(),
+                streamChunks: [],
+                statusCode: 401
+            )
+        )
+
+        do {
+            _ = try await provider.availableModels()
+            XCTFail("Expected the endpoint to reject the key")
+        } catch {
+            XCTAssertEqual(
+                error as? IntelligenceProviderError,
+                .requestRejected(statusCode: 401)
+            )
+            XCTAssertTrue(error.localizedDescription.contains("HTTP 401"))
+            XCTAssertFalse(error.localizedDescription.contains(secret))
+        }
     }
 
     func testCredentialNeverSerializesOrAppearsInDescriptionsAndErrors()

@@ -241,9 +241,23 @@ private final class ProviderSettingsViewModel: ObservableObject {
 
     func testSelectedProvider() {
         guard !isTesting else { return }
+        let enteredKey = apiKey.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard
+            !selectedProviderRequiresKey
+                || hasStoredKey
+                || !enteredKey.isEmpty
+        else {
+            status = Status(
+                message: ScribeCopy.IntelligenceSettings.noKeyProvided,
+                systemImage: "exclamationmark.triangle"
+            )
+            return
+        }
         do {
-            if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                try keyStore.set(apiKey, for: selectedProviderID)
+            if !enteredKey.isEmpty {
+                try keyStore.set(enteredKey, for: selectedProviderID)
                 apiKey = ""
                 hasStoredKey = true
             }
