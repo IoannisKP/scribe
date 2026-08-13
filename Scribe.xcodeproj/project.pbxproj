@@ -97,6 +97,9 @@
 		100000000000000000000058 /* SummaryTemplateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000057 /* SummaryTemplateSettingsView.swift */; };
 		100000000000000000000059 /* SummaryTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000058 /* SummaryTemplate.swift */; };
 		10000000000000000000005A /* SummaryTemplateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000059 /* SummaryTemplateStore.swift */; };
+		10000000000000000000005B /* SummaryGenerationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000005A /* SummaryGenerationView.swift */; };
+		10000000000000000000005C /* SummaryGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000005B /* SummaryGeneration.swift */; };
+		10000000000000000000005D /* SummaryArtifactWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000005C /* SummaryArtifactWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -243,6 +246,9 @@
 		110000000000000000000057 /* SummaryTemplateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplateSettingsView.swift; sourceTree = "<group>"; };
 		110000000000000000000058 /* SummaryTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplate.swift; sourceTree = "<group>"; };
 		110000000000000000000059 /* SummaryTemplateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplateStore.swift; sourceTree = "<group>"; };
+		11000000000000000000005A /* SummaryGenerationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryGenerationView.swift; sourceTree = "<group>"; };
+		11000000000000000000005B /* SummaryGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryGeneration.swift; sourceTree = "<group>"; };
+		11000000000000000000005C /* SummaryArtifactWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryArtifactWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -305,6 +311,7 @@
 				11000000000000000000004F /* ScribeInterfaceStyle.swift */,
 				110000000000000000000050 /* ProviderSettingsView.swift */,
 				110000000000000000000057 /* SummaryTemplateSettingsView.swift */,
+				11000000000000000000005A /* SummaryGenerationView.swift */,
 				11000000000000000000004B /* GlobalHotKeyMonitor.swift */,
 				110000000000000000000045 /* RecordingWorkspaceView.swift */,
 				110000000000000000000010 /* MeetingRecorderViewModel.swift */,
@@ -438,6 +445,8 @@
 				11000000000000000000004D /* SessionReadingPresentation.swift */,
 				110000000000000000000058 /* SummaryTemplate.swift */,
 				110000000000000000000059 /* SummaryTemplateStore.swift */,
+				11000000000000000000005B /* SummaryGeneration.swift */,
+				11000000000000000000005C /* SummaryArtifactWriter.swift */,
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
@@ -635,6 +644,7 @@
 				100000000000000000000050 /* ScribeInterfaceStyle.swift in Sources */,
 				100000000000000000000051 /* ProviderSettingsView.swift in Sources */,
 				100000000000000000000058 /* SummaryTemplateSettingsView.swift in Sources */,
+				10000000000000000000005B /* SummaryGenerationView.swift in Sources */,
 				10000000000000000000004C /* GlobalHotKeyMonitor.swift in Sources */,
 				100000000000000000000046 /* RecordingWorkspaceView.swift in Sources */,
 				10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */,
@@ -663,6 +673,8 @@
 				100000000000000000000057 /* KeychainAPIKeyStore.swift in Sources */,
 				100000000000000000000059 /* SummaryTemplate.swift in Sources */,
 				10000000000000000000005A /* SummaryTemplateStore.swift in Sources */,
+				10000000000000000000005C /* SummaryGeneration.swift in Sources */,
+				10000000000000000000005D /* SummaryArtifactWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

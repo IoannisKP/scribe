@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 4
+    public static let currentVersion = 5
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -144,6 +144,37 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         }
     }
 
+    public struct SummaryRevision: Codable, Equatable, Sendable {
+        public let id: UUID
+        public let providerIdentifier: String
+        public let providerDisplayName: String
+        public let modelIdentifier: String
+        public let templateIdentifier: String
+        public let templateName: String
+        public let createdAt: Date
+        public let artifacts: [String]
+
+        public init(
+            id: UUID = UUID(),
+            providerIdentifier: String,
+            providerDisplayName: String,
+            modelIdentifier: String,
+            templateIdentifier: String,
+            templateName: String,
+            createdAt: Date = Date(),
+            artifacts: [String]
+        ) {
+            self.id = id
+            self.providerIdentifier = providerIdentifier
+            self.providerDisplayName = providerDisplayName
+            self.modelIdentifier = modelIdentifier
+            self.templateIdentifier = templateIdentifier
+            self.templateName = templateName
+            self.createdAt = createdAt
+            self.artifacts = artifacts
+        }
+    }
+
     public struct Pin: Codable, Equatable, Identifiable, Sendable {
         public let id: UUID
         public let sampleOffset: Int64
@@ -229,6 +260,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let speakerIdentities: [SpeakerIdentity]
     public let artifacts: [Artifact]
     public let transcriptionHistory: [TranscriptionRevision]
+    public let summaryHistory: [SummaryRevision]
     public let pins: [Pin]
     public let originalFilename: String?
     public let originalFormat: String?
@@ -248,6 +280,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact] = [],
         transcriptionHistory: [TranscriptionRevision] = [],
+        summaryHistory: [SummaryRevision] = [],
         pins: [Pin] = [],
         originalFilename: String? = nil,
         originalFormat: String? = nil,
@@ -267,6 +300,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             ?? Self.defaultSpeakerIdentities(for: tracks)
         self.artifacts = artifacts
         self.transcriptionHistory = transcriptionHistory
+        self.summaryHistory = summaryHistory
         self.pins = pins
         self.originalFilename = originalFilename
         self.originalFormat = originalFormat
@@ -479,6 +513,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact]? = nil,
         transcriptionHistory: [TranscriptionRevision]? = nil,
+        summaryHistory: [SummaryRevision]? = nil,
         pins: [Pin]? = nil,
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
@@ -498,6 +533,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             artifacts: artifacts ?? self.artifacts,
             transcriptionHistory:
                 transcriptionHistory ?? self.transcriptionHistory,
+            summaryHistory: summaryHistory ?? self.summaryHistory,
             pins: pins ?? self.pins,
             originalFilename: originalFilename,
             originalFormat: originalFormat,
@@ -585,6 +621,11 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
                 try Self.validate(relativePath: path)
             }
         }
+        for revision in summaryHistory {
+            for path in revision.artifacts {
+                try Self.validate(relativePath: path)
+            }
+        }
         guard
             Set(pins.map(\.id)).count == pins.count,
             pins.allSatisfy({ $0.sampleOffset >= 0 })
@@ -666,6 +707,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case speakerIdentities
         case artifacts
         case transcriptionHistory
+        case summaryHistory
         case pins
         case originalFilename
         case originalFormat
@@ -698,6 +740,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         transcriptionHistory = try container.decodeIfPresent(
             [TranscriptionRevision].self,
             forKey: .transcriptionHistory
+        ) ?? []
+        summaryHistory = try container.decodeIfPresent(
+            [SummaryRevision].self,
+            forKey: .summaryHistory
         ) ?? []
         pins = try container.decodeIfPresent(
             [Pin].self,
@@ -852,6 +898,27 @@ public actor CaptureSessionManifestStore {
                 !currentPaths.contains($0.relativePath)
             } + currentArtifacts,
             transcriptionHistory: manifest.transcriptionHistory + [revision]
+        )
+        try updated.write(to: sessionDirectory)
+        return updated
+    }
+
+    public func commitSummaryRevision(
+        _ revision: CaptureSessionManifest.SummaryRevision,
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        )
+        let summaryArtifact = CaptureSessionManifest.Artifact(
+            relativePath: "summary.md",
+            kind: .summary
+        )
+        let updated = manifest.replacing(
+            artifacts: manifest.artifacts.filter {
+                $0.relativePath != summaryArtifact.relativePath
+            } + [summaryArtifact],
+            summaryHistory: manifest.summaryHistory + [revision]
         )
         try updated.write(to: sessionDirectory)
         return updated

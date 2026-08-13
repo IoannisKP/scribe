@@ -41,7 +41,8 @@ transcription:
 - the public `TranscriptionEngine` contract, including engine-selected window
   duration and overlap, plus audio, word-timing, and transcript-segment values;
 - `session.json`, which records stable session identity, artifact inventory,
-  transcription history, and each source's offset on the shared timeline;
+  transcription and summary history, and each source's offset on the shared
+  timeline;
 - bounded canonical-WAV reads sized by the selected engine instead of loading
   an entire long meeting into memory;
 - overlapping batch reads advance by window minus overlap and pass each
@@ -212,10 +213,7 @@ can create, duplicate, edit, and remove custom templates from Settings.
 
 Templates support `{{notes}}`, `{{transcript}}`, `{{title}}`, `{{date}}`,
 `{{participants}}`, and `{{pins}}`. Rendering rejects unknown or malformed
-variables instead of silently omitting them. Phase 2 will prepare the actual
-context values—including pinned timestamps with surrounding transcript—and
-stream the selected rendered template to a provider. No generation or
-transcript transmission is enabled by Phase 3 alone.
+variables instead of silently omitting them.
 
 Template records live in a dedicated GRDB database at
 `~/Library/Application Support/Scribe/Data/templates.sqlite`. This is separate
@@ -223,6 +221,23 @@ from the disposable session search index because edited prompts are durable
 user preferences, not projections that can be rebuilt from session folders.
 Built-ins use stable identities and insert-if-missing seeding: an app update can
 add a new default without replacing edits to an existing one.
+
+Milestone 6 Phase 2 Part 1 makes those templates usable for transcripts that fit
+one model context. The Summary rail loads the configured provider's models,
+selects a template, renders all six session values, and estimates input tokens.
+Loopback providers proceed locally without a disclosure dialog. Every remote
+provider shows an explicit pre-send confirmation naming the provider and token
+estimate; only model/provider pairs with recorded public pricing also show a
+conservative maximum-cost estimate. Unknown pricing is never guessed.
+
+Generation streams into the reading view but does not touch session files until
+the stream finishes. A successful response atomically writes `summary.md` with
+a provider/model/template header, creates an immutable dated revision under
+`Summaries`, and appends matching structured provenance to `session.json`
+through the serialized manifest store. A provider failure, empty response, or
+single-pass context overflow leaves the earlier summary, transcript, notes, and
+recording untouched. Context overflow stops before a completion request; Phase 2
+Part 2 will add map-reduce generation for those long transcripts.
 
 ## Requirements
 
@@ -412,11 +427,14 @@ user-selected folder retained through a security-scoped bookmark:
     transcript.json
     transcript.srt
     Transcriptions/<date — model — revision>/transcript.{md,json,srt}
+    summary.md
+    Summaries/<date — provider-model — revision>/summary.md
 ```
 
 `session.json` contains the stable UUID, title, creation date, source type,
 canonical format, relative track paths, speaker identities, artifact inventory,
-and transcription history. Speaker IDs are stable session metadata independent
+transcription history, and summary history with provider/model/template
+provenance. Speaker IDs are stable session metadata independent
 of any transcript revision. Each legacy or new single-speaker source receives a
 deterministic `source.<source>` identity; the registry also permits multiple
 speakers per source and records whether a display name was machine- or
@@ -733,9 +751,9 @@ seconds wrap naturally and pass through the same paragraphing rules.
 1. Launch Scribe and confirm the sidebar remains present while the detail pane
    switches. Collapse and restore it with the standard sidebar toggle, relaunch,
    and confirm visibility and the selected destination persist.
-2. Confirm **All sessions** and **Imported** counts match the actual session
-   manifests. **Needs summary** remains hidden until summary generation is
-   available in Milestone 6; no unactionable smart category is present.
+2. Confirm **All sessions**, **Needs summary**, and **Imported** counts match the
+   actual session manifests. **Needs summary** is visible because summary
+   generation now has an action and durable artifact lifecycle.
 3. Create a manual folder. Confirm the same directory appears at the root of
    the configured Scribe save location in Finder. A session folder moved into
    it must remain indexed by its embedded UUID.

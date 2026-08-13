@@ -283,6 +283,9 @@ public actor SessionReconciler {
             if name.hasSuffix(".json") { return .transcriptJSON }
             if name.hasSuffix(".srt") { return .subtitles }
         }
+        if relativePath.hasPrefix("Summaries/") && name == "summary.md" {
+            return .summary
+        }
         if SessionArtifactPolicy.shouldSurfaceAdditionalFile(
             url,
             resourceValues: values

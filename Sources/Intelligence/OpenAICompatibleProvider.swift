@@ -82,6 +82,7 @@ public struct OpenAICompatibleProvider: IntelligenceProvider,
                                 system: system,
                                 messages: messages
                             ),
+                            maxTokens: 4_096,
                             stream: true
                         )
                     )
@@ -156,7 +157,15 @@ private struct WireModel: Decodable {
 private struct CompletionRequest: Encodable {
     let model: String
     let messages: [WireMessage]
+    let maxTokens: Int
     let stream: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case maxTokens = "max_tokens"
+        case stream
+    }
 }
 
 private struct WireMessage: Codable {

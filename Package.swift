@@ -72,6 +72,7 @@ let package = Package(
             dependencies: [
                 "AudioCapture",
                 "SpeechPipeline",
+                "Intelligence",
                 .product(name: "GRDB", package: "GRDB.swift")
             ],
             path: "Sources/SessionStore",
@@ -126,7 +127,10 @@ let package = Package(
         ),
         .testTarget(
             name: "SessionStoreTests",
-            dependencies: ["SessionStore", "AudioCapture", "SpeechPipeline"],
+            dependencies: [
+                "SessionStore", "AudioCapture", "SpeechPipeline",
+                "Intelligence"
+            ],
             path: "Tests/SessionStoreTests",
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")

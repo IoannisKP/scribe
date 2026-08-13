@@ -9,12 +9,17 @@ public enum SessionReadingArtifactKind: String, Equatable, Sendable {
     case audio
     case additional
     case transcriptionRevision
+    case summaryRevision
 }
 
-public enum SummaryProvenance: String, Equatable, Sendable {
-    case local = "Local"
-    case claude = "Claude"
-    case gpt = "GPT"
+public struct SummaryProvenance: Equatable, Sendable {
+    public let providerDisplayName: String
+    public let modelIdentifier: String?
+
+    public init(providerDisplayName: String, modelIdentifier: String? = nil) {
+        self.providerDisplayName = providerDisplayName
+        self.modelIdentifier = modelIdentifier
+    }
 }
 
 public struct SessionReadingArtifact: Equatable, Identifiable, Sendable {
@@ -25,6 +30,7 @@ public struct SessionReadingArtifact: Equatable, Identifiable, Sendable {
     public let urls: [URL]
     public let copyText: String?
     public let revision: CaptureSessionManifest.TranscriptionRevision?
+    public let summaryRevision: CaptureSessionManifest.SummaryRevision?
     public let summaryProvenance: SummaryProvenance?
 
     public var isPresent: Bool { !urls.isEmpty }
@@ -38,6 +44,7 @@ public struct SessionReadingArtifact: Equatable, Identifiable, Sendable {
         urls: [URL],
         copyText: String? = nil,
         revision: CaptureSessionManifest.TranscriptionRevision? = nil,
+        summaryRevision: CaptureSessionManifest.SummaryRevision? = nil,
         summaryProvenance: SummaryProvenance? = nil
     ) {
         self.id = id
@@ -47,6 +54,7 @@ public struct SessionReadingArtifact: Equatable, Identifiable, Sendable {
         self.urls = urls
         self.copyText = copyText
         self.revision = revision
+        self.summaryRevision = summaryRevision
         self.summaryProvenance = summaryProvenance
     }
 }
@@ -243,9 +251,12 @@ public struct SessionReadingPresentation: @unchecked Sendable {
                 title: "Summary",
                 urls: summaryURLs,
                 copyText: text(at: summaryURLs.first),
-                summaryProvenance: summaryProvenance(
-                    text(at: summaryURLs.first)
-                )
+                summaryProvenance: manifest.summaryHistory.last.map {
+                    SummaryProvenance(
+                        providerDisplayName: $0.providerDisplayName,
+                        modelIdentifier: $0.modelIdentifier
+                    )
+                } ?? legacySummaryProvenance(text(at: summaryURLs.first))
             ),
             SessionReadingArtifact(
                 id: "audio",
@@ -297,19 +308,42 @@ public struct SessionReadingPresentation: @unchecked Sendable {
             )
         }
         result.append(contentsOf: revisions)
+        let summaryRevisions = manifest.summaryHistory.reversed().map {
+            revision -> SessionReadingArtifact in
+            let urls = existing(revision.artifacts)
+            return SessionReadingArtifact(
+                id: "summary-revision:\(revision.id.uuidString)",
+                kind: .summaryRevision,
+                title: revision.createdAt.formatted(
+                    date: .abbreviated,
+                    time: .shortened
+                ),
+                detail: revision.modelIdentifier,
+                urls: urls,
+                copyText: text(at: urls.first),
+                summaryRevision: revision,
+                summaryProvenance: SummaryProvenance(
+                    providerDisplayName: revision.providerDisplayName,
+                    modelIdentifier: revision.modelIdentifier
+                )
+            )
+        }
+        result.append(contentsOf: summaryRevisions)
         return result
     }
 
-    private func summaryProvenance(_ text: String?) -> SummaryProvenance? {
+    private func legacySummaryProvenance(
+        _ text: String?
+    ) -> SummaryProvenance? {
         guard let text else { return nil }
         let header = text.prefix(1_024).lowercased()
         if header.contains("claude") || header.contains("anthropic") {
-            return .claude
+            return SummaryProvenance(providerDisplayName: "Anthropic")
         }
         if header.contains("gpt") || header.contains("openai") {
-            return .gpt
+            return SummaryProvenance(providerDisplayName: "OpenAI")
         }
-        return .local
+        return SummaryProvenance(providerDisplayName: "Local")
     }
 
     private func makeTimelineLanes(

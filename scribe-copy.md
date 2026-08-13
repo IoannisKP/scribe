@@ -302,11 +302,11 @@ names the file they can go find.
 - Empty audio: **No playable audio is available**
 - Revision section: **Transcriptions**
 
-### Summary before Milestone 6
+### Summary
 
 - Title: **No summary yet**
-- Inert action: **Generate summary**
-- Explanation: **Summary generation arrives in Milestone 6.**
+- Actions: **Generate summary** · **Generate again**
+- Revision section: **Summaries**
 
 ### Reading-view secondary failures
 
@@ -391,13 +391,22 @@ instruction.
 
 - Button: **Generate summary**
 - Template label: **Using**
-- Local generation: **Generating summary on this Mac. About 40 seconds.**
+- Configuration labels: **Provider** · **Model** · **Template**
+- Actions: **Load models** · **Prepare summary** · **Cancel**
+- Loading: **Loading models…**
+- Local disclosure: **This provider runs on this Mac. Nothing leaves the
+  machine.**
+- Cloud disclosure: **The transcript and notes will leave this Mac when you
+  confirm.**
+- Local generation: **Generating summary on this Mac with [provider].**
+- Token estimate: **About [count] tokens**
+- Known-price estimate: **Estimated maximum cost: [amount]**
 
 ### Cloud generation, before sending
 
-- Title: **Send to Claude?**
-- Body: **Your transcript and notes will be sent to Anthropic. About 12,000
-  tokens.**
+- Title: **Send to [provider]?**
+- Body: **Your transcript and notes will be sent to [provider]. About [count]
+  tokens. [Estimated maximum cost: [amount].]**
 - Buttons: **Send** · **Cancel**
 
 Say the destination company by name. “Send to the cloud” is vague where
@@ -405,12 +414,24 @@ vagueness is exactly what erodes trust.
 
 ### Cloud generation running
 
-**Sending to Claude**
+**Sending to [provider]**
 
 ### Failed
 
-- Message: **Claude didn't respond. Your transcript and notes are untouched.**
+- Message: **[Provider] didn't respond. Your transcript, notes, recording, and
+  earlier summary are untouched.**
 - Button: **Try again**
+
+Other failures:
+
+- Missing transcript: **Transcribe this session before generating a summary.
+  The recording and notes are unaffected.**
+- Empty response: **The provider returned an empty summary. Your transcript,
+  notes, recording, and earlier summary are untouched.**
+- Too large for one request: **This transcript needs about [count] input
+  tokens, beyond this model's single-pass allowance of [count] tokens.
+  Long-transcript generation is not available yet. The session files are
+  untouched.**
 
 ### Complete
 
