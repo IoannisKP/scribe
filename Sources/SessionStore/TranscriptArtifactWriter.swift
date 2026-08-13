@@ -39,14 +39,14 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
         modelIdentifier: String,
         to sessionDirectory: URL,
         date: Date = Date()
-    ) throws -> TranscriptArtifactWriteResult {
+    ) async throws -> TranscriptArtifactWriteResult {
         let unfinishedRowCount = liveRows.filter { !$0.isFinal }.count
         guard unfinishedRowCount == 0 else {
             throw TranscriptArtifactWriterError.unfinishedLiveRows(
                 count: unfinishedRowCount
             )
         }
-        return try write(
+        return try await write(
             segments: liveRows.map(\.segment),
             modelIdentifier: modelIdentifier,
             to: sessionDirectory,
@@ -59,8 +59,8 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
         modelIdentifier: String,
         to sessionDirectory: URL,
         date: Date = Date()
-    ) throws -> TranscriptArtifactWriteResult {
-        var manifest = try CaptureSessionManifest.load(from: sessionDirectory)
+    ) async throws -> TranscriptArtifactWriteResult {
+        let manifest = try CaptureSessionManifest.load(from: sessionDirectory)
         let revisionID = UUID()
         let revisionDirectory = sessionDirectory
             .appendingPathComponent("Transcriptions", isDirectory: true)
@@ -122,16 +122,12 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
                     kind: .subtitles
                 )
             ]
-            let currentTranscriptPaths = Set(
-                currentTranscriptArtifacts.map(\.relativePath)
-            )
-            manifest = manifest.replacing(
-                artifacts: manifest.artifacts.filter {
-                    !currentTranscriptPaths.contains($0.relativePath)
-                } + currentTranscriptArtifacts,
-                transcriptionHistory: manifest.transcriptionHistory + [revision]
-            )
-            try manifest.write(to: sessionDirectory)
+            _ = try await CaptureSessionManifestStore.shared
+                .commitTranscriptionRevision(
+                    revision,
+                    currentArtifacts: currentTranscriptArtifacts,
+                    in: sessionDirectory
+                )
             return TranscriptArtifactWriteResult(
                 currentFiles: currentFiles,
                 revisionFiles: revisionFiles,

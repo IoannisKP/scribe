@@ -11,16 +11,12 @@ public struct SpeakerIdentityStore: Sendable {
         assignment: CaptureSessionManifest.SpeakerNameAssignment =
             .userAssigned,
         in sessionDirectory: URL
-    ) throws -> CaptureSessionManifest {
-        let manifest = try CaptureSessionManifest.load(
-            from: sessionDirectory
-        )
-        let updated = try manifest.renamingSpeaker(
+    ) async throws -> CaptureSessionManifest {
+        try await CaptureSessionManifestStore.shared.renameSpeaker(
             identifiedBy: id,
             to: displayName,
-            assignment: assignment
+            assignment: assignment,
+            in: sessionDirectory
         )
-        try updated.write(to: sessionDirectory)
-        return updated
     }
 }

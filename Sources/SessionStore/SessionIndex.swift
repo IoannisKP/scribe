@@ -223,6 +223,10 @@ public actor SessionIndex {
     public func search(_ query: String) throws -> [IndexedSession] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return try sessions() }
+        let terms = trimmed.split(whereSeparator: { $0.isWhitespace }).map {
+            "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\""
+        }
+        let pattern = "{transcript notes} : (\(terms.joined(separator: " ")))"
         return try database.read { db in
             try Row.fetchAll(
                 db,
@@ -234,7 +238,7 @@ public actor SessionIndex {
                     WHERE sessionText MATCH ?
                     ORDER BY bm25(sessionText), s.createdAt DESC
                     """,
-                arguments: [trimmed]
+                arguments: [pattern]
             ).compactMap(Self.session(from:))
         }
     }

@@ -710,10 +710,36 @@ seconds wrap naturally and pass through the same paragraphing rules.
 6. Drag an audio or video file anywhere over the window. Confirm the sidebar
    shows **Drop to import** and the existing importer receives the file.
 7. Press Command-K and confirm focus moves to the search field in the detail
-   header. Search results themselves arrive with Phase C.
+   header. Search results are grouped beneath their session with real transcript
+   timecodes.
 8. Inspect light, dark, Reduce Transparency, narrow sidebar limits, keyboard
    focus, and VoiceOver labels. The content pane must remain a neutral surface;
    glass belongs to sidebar controls.
+
+## Milestone 5B Phase C acceptance check
+
+1. Launch into All sessions. Confirm sessions are grouped by date, newest
+   first, and selection uses only the narrow accent bar rather than a filled
+   row background.
+2. Compare a live session and an import. Live metadata shows duration, start
+   time, and speaker count; imported metadata shows duration and Imported.
+3. Check the notes, transcript, summary, and audio icons against the actual
+   current files. Present icons are full strength and absent icons remain
+   distinct but dimmed; VoiceOver names both artifact and state.
+4. Search for a phrase appearing several times in one transcript. Confirm one
+   session group reports the hit count and each transcript hit shows its actual
+   timecode. A notes hit is labelled Notes because notes have no timestamp.
+5. Rename a session and confirm its title changes in `session.json`, its folder
+   is renamed in Finder, and its pins, speaker names, track offsets, and
+   transcription history remain intact.
+6. Choose Move to Trash. Confirm the dialog states the measured complete-folder
+   size and the folder lands recoverably in Trash with every artifact intact.
+7. Inspect the list and search states in light, dark, Reduce Transparency,
+   narrow and wide windows, keyboard navigation, and VoiceOver.
+
+Selecting a search hit already carries its session UUID and seek time. Phase D
+will consume that navigation target when the reading view and audio timeline
+are added; Phase C does not fabricate a temporary reader.
 
 ## Privacy
 

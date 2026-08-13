@@ -1217,11 +1217,14 @@ feature launch.
 
 ## 2026-08-13 — Reload session metadata inside serialized mutations
 
-**Decision:** Route live pin, final track-offset, reconciled artifact, and
-duplicate-ID mutations through one manifest actor. Reload `session.json` inside
-the serialized operation immediately before applying each field change. Treat
-an unavailable track timestamp as a valid `nil` offset. Show pin success only
-after its atomic write returns and show write failure in the same sidebar slot.
+**Decision:** Route every ordinary in-place mutation—including live pins, final
+track offsets, reconciled artifacts, duplicate IDs, speaker and session names,
+and transcript revision history—through one manifest actor. Reload
+`session.json` inside the serialized operation immediately before applying each
+owned field change. Commit current transcript artifacts and their history entry
+together. Treat an unavailable track timestamp as a valid `nil` offset. Show pin
+success only after its atomic write returns and show write failure in the same
+sidebar slot.
 
 **Alternatives:** Serialize only pins and offsets; let the reconciler write the
 manifest snapshot it scanned earlier; suppress reconciliation while recording;
@@ -1234,3 +1237,23 @@ made that ordering easier to encounter but `system: nil` was not the defect.
 Reload-before-mutate preserves unrelated fields regardless of which operation
 entered the queue first, and post-write feedback describes durability rather
 than intent.
+
+## 2026-08-13 — Make the session library explain files, not invent state
+
+**Decision:** Group authoritative session projections by calendar date and show
+duration, source-appropriate metadata, and four semantic artifact icons. Use
+FTS5 only to select sessions from notes and transcript text, then recover
+segment-level timecodes from `transcript.json` for grouped hits. Rename a
+session by moving its complete folder and updating its manifest title; move
+deletions to macOS Trash after stating the measured folder size.
+
+**Alternatives:** Treat the SQLite index as authoritative UI state; show flat
+search rows; use filled selection backgrounds or presence dots; rename only the
+manifest title; permanently unlink deleted folders.
+
+**Reasoning:** The filesystem remains the user's durable database, and the
+library should continue to make that ownership visible. Icons distinguish four
+artifact meanings for low-vision users where dots do not. Grouped timed hits
+keep repeated matches in one meeting intelligible. Folder and manifest names
+must agree in Finder and Scribe, while Trash preserves the same recovery
+guarantee already used for models.

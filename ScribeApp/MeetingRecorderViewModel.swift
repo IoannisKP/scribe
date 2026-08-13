@@ -126,6 +126,10 @@ final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var notesText = ""
     @Published private(set) var systemTrackHasBeenSilent = false
     @Published private(set) var indexedSessions: [IndexedSession] = []
+    @Published private(set) var sessionLibraryItems:
+        [SessionLibraryItem] = []
+    @Published private(set) var sessionSearchGroups:
+        [SessionSearchGroup] = []
     @Published private(set) var sessionSmartFolderCounts:
         SessionSmartFolderCounts = .zero
     @Published private(set) var manualSessionFolders:
@@ -179,6 +183,8 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let sessionLocationStore: SessionLibraryLocationStore
     private let sessionFolderManager = SessionFolderManager()
     private let sessionManualFolderManager = SessionManualFolderManager()
+    private let sessionLibraryPresentation = SessionLibraryPresentation()
+    private let sessionLibraryOperations = SessionLibraryOperations()
     private let transcriptArtifactWriter = TranscriptArtifactWriter()
     private let sessionMediaImporter = SessionMediaImporter()
     private let legacySessionMigrator = LegacySessionMigrator()
@@ -1352,7 +1358,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                     sessionDirectory: sessionDirectory,
                     selection: selection
                 )
-                _ = try transcriptArtifactWriter.write(
+                _ = try await transcriptArtifactWriter.write(
                     segments: completedSegments,
                     modelIdentifier: selection.id.rawValue,
                     to: sessionDirectory
@@ -1437,7 +1443,7 @@ final class MeetingRecorderViewModel: ObservableObject {
                     selection: selection
                 )
                 do {
-                    _ = try transcriptArtifactWriter.write(
+                    _ = try await transcriptArtifactWriter.write(
                         segments: completedSegments,
                         modelIdentifier: selection.id.rawValue,
                         to: result.directory
@@ -1500,6 +1506,60 @@ final class MeetingRecorderViewModel: ObservableObject {
                     named: name,
                     in: library
                 )
+                await reconcileSessionLibrary()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func searchSessionLibrary(_ query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            sessionSearchGroups = []
+            return
+        }
+        do {
+            try await Task.sleep(for: .milliseconds(150))
+            guard let sessionIndex else { return }
+            let matches = try await sessionIndex.search(trimmed)
+            let presentation = sessionLibraryPresentation
+            let groups = await Task.detached {
+                let items = presentation.items(from: matches)
+                return presentation.searchGroups(
+                    query: trimmed,
+                    sessions: items
+                )
+            }.value
+            try Task.checkCancellation()
+            sessionSearchGroups = groups
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = ScribeCopy.Library.searchFailed(
+                error.localizedDescription
+            )
+        }
+    }
+
+    func renameSession(_ session: SessionLibraryItem, to title: String) {
+        Task {
+            do {
+                _ = try await sessionLibraryOperations.rename(
+                    session: session,
+                    to: title
+                )
+                await reconcileSessionLibrary()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func moveSessionToTrash(_ session: SessionLibraryItem) {
+        Task {
+            do {
+                _ = try sessionLibraryOperations.moveToTrash(session: session)
                 await reconcileSessionLibrary()
             } catch {
                 errorMessage = error.localizedDescription
@@ -2253,6 +2313,11 @@ final class MeetingRecorderViewModel: ObservableObject {
                 availability: availability
             )
             indexedSessions = try await sessionIndex.sessions()
+            let sessions = indexedSessions
+            let presentation = sessionLibraryPresentation
+            sessionLibraryItems = await Task.detached {
+                presentation.items(from: sessions)
+            }.value
             sessionSmartFolderCounts = try await sessionIndex
                 .smartFolderCounts()
             if case let .available(library) = availability {
@@ -2446,7 +2511,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         if let rowsReadyForPersistence {
             if let sessionDirectory = recordingSessionDirectory() {
                 do {
-                    _ = try transcriptArtifactWriter.write(
+                    _ = try await transcriptArtifactWriter.write(
                         liveRows: rowsReadyForPersistence,
                         modelIdentifier:
                             selectedTranscriptionModel.id.rawValue,

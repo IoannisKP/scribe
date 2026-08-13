@@ -56,6 +56,8 @@ struct ScribeShellView: View {
     @State private var isDropTargeted = false
     @State private var showsNewFolderPrompt = false
     @State private var newFolderName = ""
+    @State private var libraryNavigationTarget:
+        SessionLibraryNavigationTarget?
     @FocusState private var searchIsFocused: Bool
 
     var body: some View {
@@ -109,6 +111,9 @@ struct ScribeShellView: View {
             NotificationCenter.default.publisher(for: .scribeFocusSearch)
         ) { _ in
             searchIsFocused = true
+        }
+        .task(id: searchQuery) {
+            await recorder.searchSessionLibrary(searchQuery)
         }
         .alert(
             ScribeCopy.Shell.newFolder,
@@ -357,53 +362,36 @@ struct ScribeShellView: View {
                     .padding(40)
             case .allSessions, .needsSummary, .imported, .manualFolder,
                 .recording:
-                libraryPlaceholder
+                SessionLibraryView(
+                    sessions: visibleLibrarySessions,
+                    searchQuery: searchQuery,
+                    searchGroups: recorder.sessionSearchGroups,
+                    navigationTarget: $libraryNavigationTarget,
+                    emptyDetail: libraryEmptyDetail,
+                    onStartRecording: {
+                        select(.recording)
+                        recorder.startRecording()
+                    },
+                    onRename: recorder.renameSession,
+                    onMoveToTrash: recorder.moveSessionToTrash
+                )
             }
         }
     }
 
-    private var libraryPlaceholder: some View {
-        VStack(spacing: 10) {
-            if libraryCount == 0 {
-                Image(systemName: "tray")
-                    .font(.system(size: 34, weight: .regular))
-                    .foregroundStyle(.secondary)
-                Text(libraryTitle)
-                    .font(.title2.weight(.medium))
-                Text(libraryEmptyDetail)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(libraryTitle)
-                    .font(.title2.weight(.medium))
-                Text(ScribeCopy.Shell.sessionListComing(libraryCount))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var libraryCount: Int {
+    private var visibleLibrarySessions: [SessionLibraryItem] {
         switch selection {
         case .needsSummary:
-            recorder.sessionSmartFolderCounts.needsSummary
+            recorder.sessionLibraryItems.filter { !$0.artifacts.summary }
         case .imported:
-            recorder.sessionSmartFolderCounts.imported
+            recorder.sessionLibraryItems.filter { $0.source == .importedFile }
         case let .manualFolder(path):
-            sessionCount(in: URL(fileURLWithPath: path))
+            recorder.sessionLibraryItems.filter {
+                $0.directory.deletingLastPathComponent().standardizedFileURL
+                    == URL(fileURLWithPath: path).standardizedFileURL
+            }
         case .allSessions, .recording, .settings:
-            recorder.sessionSmartFolderCounts.allSessions
-        }
-    }
-
-    private var libraryTitle: String {
-        switch selection {
-        case .allSessions: ScribeCopy.Shell.allSessions
-        case .needsSummary: ScribeCopy.Shell.needsSummary
-        case .imported: ScribeCopy.Shell.imported
-        case let .manualFolder(path):
-            URL(fileURLWithPath: path).lastPathComponent
-        case .recording: ScribeCopy.Shell.sessions
-        case .settings: ScribeCopy.Shell.settings
+            recorder.sessionLibraryItems
         }
     }
 
@@ -427,7 +415,7 @@ struct ScribeShellView: View {
             )
         case .allSessions, .recording, .settings:
             recorder.sessionSmartFolderCounts.allSessions == 0
-                ? ScribeCopy.Shell.noSessionsDetail
+                ? ScribeCopy.Library.noRecordingsDetail
                 : ScribeCopy.Shell.sessionCount(
                     recorder.sessionSmartFolderCounts.allSessions
                 )
@@ -465,6 +453,335 @@ struct ScribeShellView: View {
             $0.directory.deletingLastPathComponent().standardizedFileURL
                 == folder.standardizedFileURL
         }.count
+    }
+}
+
+private struct SessionLibraryView: View {
+    let sessions: [SessionLibraryItem]
+    let searchQuery: String
+    let searchGroups: [SessionSearchGroup]
+    @Binding var navigationTarget: SessionLibraryNavigationTarget?
+    let emptyDetail: String
+    let onStartRecording: () -> Void
+    let onRename: (SessionLibraryItem, String) -> Void
+    let onMoveToTrash: (SessionLibraryItem) -> Void
+
+    @State private var renamingSession: SessionLibraryItem?
+    @State private var renameTitle = ""
+    @State private var deletingSession: SessionLibraryItem?
+
+    private var trimmedSearch: String {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        Group {
+            if !trimmedSearch.isEmpty {
+                searchResults
+            } else if sessions.isEmpty {
+                emptyState
+            } else {
+                sessionList
+            }
+        }
+        .alert(
+            ScribeCopy.Library.renameSession,
+            isPresented: Binding(
+                get: { renamingSession != nil },
+                set: { if !$0 { renamingSession = nil } }
+            )
+        ) {
+            TextField(ScribeCopy.Library.sessionTitle, text: $renameTitle)
+            Button(ScribeCopy.Library.cancel, role: .cancel) {
+                renamingSession = nil
+            }
+            Button(ScribeCopy.Library.save) {
+                if let renamingSession {
+                    onRename(renamingSession, renameTitle)
+                }
+                renamingSession = nil
+            }
+            .disabled(
+                renameTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty
+            )
+        }
+        .confirmationDialog(
+            deletingSession.map {
+                ScribeCopy.Library.moveToTrashTitle($0.title)
+            } ?? ScribeCopy.Library.moveToTrash,
+            isPresented: Binding(
+                get: { deletingSession != nil },
+                set: { if !$0 { deletingSession = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(
+                ScribeCopy.Library.confirmMoveToTrash,
+                role: .destructive
+            ) {
+                if let deletingSession {
+                    onMoveToTrash(deletingSession)
+                }
+                deletingSession = nil
+            }
+            Button(ScribeCopy.Library.cancel, role: .cancel) {
+                deletingSession = nil
+            }
+        } message: {
+            if let deletingSession {
+                Text(ScribeCopy.Library.moveToTrashBody(
+                    size: ByteCountFormatter.string(
+                        fromByteCount: deletingSession.byteCount,
+                        countStyle: .file
+                    )
+                ))
+            }
+        }
+    }
+
+    private var sessionList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(
+                    SessionLibraryPresentation().dateGroups(from: sessions)
+                ) { group in
+                    Section {
+                        ForEach(group.sessions) { session in
+                            sessionRow(session)
+                            Divider().padding(.leading, 22)
+                        }
+                    } header: {
+                        Text(dateHeading(group.date))
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 20)
+                            .padding(.bottom, 8)
+                            .background(Color(nsColor: .windowBackgroundColor))
+                    }
+                }
+            }
+        }
+    }
+
+    private var searchResults: some View {
+        Group {
+            if searchGroups.isEmpty {
+                VStack(spacing: 8) {
+                    Text(ScribeCopy.Library.noSearchResults)
+                        .font(.title2.weight(.medium))
+                    Text(ScribeCopy.Library.noSearchResultsDetail)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        ForEach(searchGroups) { group in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Rectangle()
+                                        .fill(
+                                            navigationTarget?.sessionID == group.id
+                                                ? Color.accentColor
+                                                : Color.clear
+                                        )
+                                        .frame(width: 3, height: 28)
+                                    Text(group.session.title)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text(ScribeCopy.Library.resultCount(
+                                        group.hits.count
+                                    ))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                }
+                                ForEach(group.hits) { hit in
+                                    Button {
+                                        navigationTarget =
+                                            SessionLibraryNavigationTarget(
+                                                group: group,
+                                                hit: hit
+                                            )
+                                    } label: {
+                                        HStack(alignment: .firstTextBaseline) {
+                                            Text(hitLabel(hit))
+                                                .font(.caption.monospacedDigit())
+                                                .foregroundStyle(.tint)
+                                                .frame(width: 58, alignment: .leading)
+                                            Text(hit.text)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                            Spacer(minLength: 0)
+                                        }
+                                        .padding(.vertical, 5)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                        }
+                    }
+                    .padding(.vertical, 18)
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "waveform")
+                .font(.system(size: 34, weight: .regular))
+                .foregroundStyle(.secondary)
+            Text(ScribeCopy.Library.noRecordings)
+                .font(.title2.weight(.medium))
+            Text(emptyDetail.isEmpty
+                ? ScribeCopy.Library.noRecordingsDetail
+                : emptyDetail)
+                .foregroundStyle(.secondary)
+            Button(ScribeCopy.Library.startRecording, action: onStartRecording)
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func sessionRow(_ session: SessionLibraryItem) -> some View {
+        Button {
+            navigationTarget = SessionLibraryNavigationTarget(
+                sessionID: session.id,
+                startTime: nil
+            )
+        } label: {
+            HStack(spacing: 12) {
+                Rectangle()
+                    .fill(
+                        navigationTarget?.sessionID == session.id
+                            ? Color.accentColor
+                            : Color.clear
+                    )
+                    .frame(width: 3, height: 42)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.title)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                    Text(metadata(for: session))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                artifactIcons(session.artifacts)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!session.isAvailable)
+        .contextMenu {
+            Button(ScribeCopy.Library.rename) {
+                renamingSession = session
+                renameTitle = session.title
+            }
+            Button(ScribeCopy.Library.moveToTrash, role: .destructive) {
+                deletingSession = session
+            }
+        }
+    }
+
+    private func artifactIcons(_ presence: SessionArtifactPresence) -> some View {
+        HStack(spacing: 11) {
+            artifactIcon(
+                "pencil",
+                label: ScribeCopy.Library.notes,
+                isPresent: presence.notes
+            )
+            artifactIcon(
+                "doc.text",
+                label: ScribeCopy.Library.transcript,
+                isPresent: presence.transcript
+            )
+            artifactIcon(
+                "sparkles",
+                label: ScribeCopy.Library.summary,
+                isPresent: presence.summary
+            )
+            artifactIcon(
+                "waveform",
+                label: ScribeCopy.Library.audio,
+                isPresent: presence.audio
+            )
+        }
+    }
+
+    private func artifactIcon(
+        _ name: String,
+        label: String,
+        isPresent: Bool
+    ) -> some View {
+        Image(systemName: name)
+            .frame(width: 16)
+            .foregroundStyle(
+                isPresent ? Color.primary : Color.secondary.opacity(0.28)
+            )
+            .accessibilityLabel(label)
+            .accessibilityValue(
+                isPresent ? ScribeCopy.Library.present : ScribeCopy.Library.absent
+            )
+            .help(label)
+    }
+
+    private func metadata(for session: SessionLibraryItem) -> String {
+        let duration = durationText(session.duration)
+        if session.source == .importedFile {
+            return "\(duration) · \(ScribeCopy.Library.imported)"
+        }
+        let time = session.createdAt.formatted(
+            Date.FormatStyle(date: .omitted, time: .shortened)
+        )
+        return "\(duration) · \(time) · \(ScribeCopy.Library.speakerCount(session.speakerCount))"
+    }
+
+    private func durationText(_ interval: TimeInterval) -> String {
+        let seconds = max(0, Int(interval.rounded()))
+        if seconds >= 3_600 {
+            return String(
+                format: "%d:%02d:%02d",
+                seconds / 3_600,
+                (seconds / 60) % 60,
+                seconds % 60
+            )
+        }
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func hitLabel(_ hit: SessionSearchHit) -> String {
+        guard let startTime = hit.startTime else {
+            switch hit.kind {
+            case .notes: return ScribeCopy.Library.notes
+            case .title: return ScribeCopy.Library.session
+            case .transcript: return ScribeCopy.Library.transcript
+            }
+        }
+        return durationText(startTime)
+    }
+
+    private func dateHeading(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return ScribeCopy.Library.today }
+        if calendar.isDateInYesterday(date) {
+            return ScribeCopy.Library.yesterday
+        }
+        return date.formatted(
+            Date.FormatStyle()
+                .weekday(.wide)
+                .month(.wide)
+                .day()
+                .year()
+        )
     }
 }
 

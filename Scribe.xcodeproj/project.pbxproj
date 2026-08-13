@@ -83,6 +83,7 @@
 		10000000000000000000004A /* SessionManualFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000049 /* SessionManualFolderManager.swift */; };
 		10000000000000000000004B /* ScribeShellPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004A /* ScribeShellPresentation.swift */; };
 		10000000000000000000004C /* GlobalHotKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004B /* GlobalHotKeyMonitor.swift */; };
+		10000000000000000000004D /* SessionLibraryPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004C /* SessionLibraryPresentation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -215,6 +216,7 @@
 		110000000000000000000049 /* SessionManualFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManualFolderManager.swift; sourceTree = "<group>"; };
 		11000000000000000000004A /* ScribeShellPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeShellPresentation.swift; sourceTree = "<group>"; };
 		11000000000000000000004B /* GlobalHotKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKeyMonitor.swift; sourceTree = "<group>"; };
+		11000000000000000000004C /* SessionLibraryPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryPresentation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -401,6 +403,7 @@
 				110000000000000000000046 /* ScribeCopy.swift */,
 				110000000000000000000047 /* RecordingViewPresentation.swift */,
 				11000000000000000000004A /* ScribeShellPresentation.swift */,
+				11000000000000000000004C /* SessionLibraryPresentation.swift */,
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
@@ -595,6 +598,7 @@
 				100000000000000000000047 /* ScribeCopy.swift in Sources */,
 				100000000000000000000048 /* RecordingViewPresentation.swift in Sources */,
 				10000000000000000000004B /* ScribeShellPresentation.swift in Sources */,
+				10000000000000000000004D /* SessionLibraryPresentation.swift in Sources */,
 				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,

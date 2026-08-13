@@ -474,6 +474,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
 
     public func replacing(
         sessionID: UUID? = nil,
+        title: String? = nil,
         tracks: [Track]? = nil,
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact]? = nil,
@@ -486,7 +487,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         CaptureSessionManifest(
             version: Self.currentVersion,
             sessionID: sessionID ?? self.sessionID,
-            title: title,
+            title: title ?? self.title,
             createdAt: createdAt,
             source: source,
             sampleRate: sampleRate,
@@ -767,8 +768,9 @@ public enum CaptureSessionManifestError:
     }
 }
 
-/// Serializes live mutations of session.json so a pin captured while a track
-/// is finalizing cannot overwrite the track offsets written at stop.
+/// Serializes every in-place mutation of session.json. Each operation reloads
+/// the latest durable value before changing only the fields it owns, so a
+/// delayed writer cannot restore a stale snapshot over another feature's data.
 public actor CaptureSessionManifestStore {
     public static let shared = CaptureSessionManifestStore()
 
@@ -814,6 +816,54 @@ public actor CaptureSessionManifestStore {
         let manifest = try CaptureSessionManifest.load(
             from: sessionDirectory
         ).replacing(sessionID: sessionID)
+        try manifest.write(to: sessionDirectory)
+        return manifest
+    }
+
+    public func renameSpeaker(
+        identifiedBy id: String,
+        to displayName: String?,
+        assignment: CaptureSessionManifest.SpeakerNameAssignment,
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        )
+        let updated = try manifest.renamingSpeaker(
+            identifiedBy: id,
+            to: displayName,
+            assignment: assignment
+        )
+        try updated.write(to: sessionDirectory)
+        return updated
+    }
+
+    public func commitTranscriptionRevision(
+        _ revision: CaptureSessionManifest.TranscriptionRevision,
+        currentArtifacts: [CaptureSessionManifest.Artifact],
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        )
+        let currentPaths = Set(currentArtifacts.map(\.relativePath))
+        let updated = manifest.replacing(
+            artifacts: manifest.artifacts.filter {
+                !currentPaths.contains($0.relativePath)
+            } + currentArtifacts,
+            transcriptionHistory: manifest.transcriptionHistory + [revision]
+        )
+        try updated.write(to: sessionDirectory)
+        return updated
+    }
+
+    public func replaceTitle(
+        _ title: String,
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        ).replacing(title: title)
         try manifest.write(to: sessionDirectory)
         return manifest
     }

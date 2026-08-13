@@ -640,13 +640,16 @@ before stopping so it does not consume the shortcut at other times. The key
 event's mach host time is mapped from the earliest first-sample host timestamp
 to a canonical sample offset. `session.json` version 4 stores the pin UUID,
 sample offset, optional label, and creation date. A shared manifest actor
-serializes pin, final track-offset, duplicate-ID, and reconciled-artifact
-mutations. Every such mutation reloads the latest manifest inside the actor
-before writing, so a filesystem reconciliation that began before a pin cannot
-restore its stale snapshot over that pin. A missing first-sample timestamp is a
-valid unavailable track offset and does not block the actor. Pin success appears
-only after the atomic manifest write returns; a write failure appears in the
-same sidebar status position instead of showing a success confirmation.
+serializes every ordinary in-place mutation: pins, final track offsets, artifact
+inventory, duplicate identity repair, speaker and session renames, and the
+compound current-transcript plus revision-history commit. Every operation
+reloads the latest manifest inside the actor before writing only its owned
+fields, so reconciliation cannot restore a stale snapshot over later user data.
+Creation and one-time legacy conversion are the only direct manifest writes
+because no current manifest is being mutated. A missing first-sample timestamp
+is a valid unavailable track offset and does not block the actor. Pin success
+appears only after the atomic manifest write returns; a write failure appears
+in the same sidebar status position instead of showing a success confirmation.
 
 ## Session folders and shell index projections
 
@@ -665,6 +668,26 @@ ready, but the shell capability-gates that destination until summary generation
 exists; a previously persisted selection resolves safely to All sessions while
 the capability is off. Sidebar visibility and selection use stable UserDefaults
 keys; session and folder data remain filesystem-owned.
+
+The library projects each indexed UUID back through its authoritative manifest
+and canonical WAV headers. Sessions are grouped by local calendar day and then
+creation time, newest first. Duration is the maximum track end after applying
+its canonical start-sample offset; speaker count comes from the manifest's
+stable identity registry. Four independent presence flags drive meaningful
+notes, transcript, summary, and audio icons, with immutable transcription
+revisions excluded from the current-transcript flag.
+
+FTS5 selects sessions from notes and current transcript text. Result
+presentation then reads matching transcript segments so hits stay grouped under
+their session and carry real segment timecodes. Notes are searchable but have
+no temporal mapping, so their hits are labelled Notes rather than being given
+an invented timestamp. A search-hit navigation value preserves the session UUID
+and optional seek time for the Phase D reading view.
+
+Renaming moves the complete session folder within its current parent and then
+updates the title through the manifest actor, rolling the move back if metadata
+cannot be committed. Deletion uses the system Trash and confirms the measured
+size of the complete folder; it never unlinks session data directly.
 
 ## Concurrency
 
