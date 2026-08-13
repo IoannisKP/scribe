@@ -177,6 +177,7 @@ public enum ScribeCopy {
         public static let copied = "Copied"
         public static let noNotes = "No notes yet"
         public static let createNotes = "Create notes"
+        public static let notesPlaceholder = "Type notes for this session"
         public static let noTranscript = "No transcript yet"
         public static let noTranscriptDetail =
             "This session was recorded without a model installed."
@@ -199,6 +200,8 @@ public enum ScribeCopy {
             "Couldn't rename the speaker. The transcript and recording are unaffected."
         public static let notesCreateFailed =
             "Couldn't create notes. The recording and transcript are unaffected."
+        public static let notesSaveFailed =
+            "Couldn't save notes. The recording and transcript are unaffected."
         public static let transcriptionFailed =
             "Transcription failed. The recording and earlier transcripts are unaffected."
         public static let sessionReadFailed =

@@ -1455,6 +1455,40 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testCreateNotesActivatesEditorAndPersistsEdits() async throws {
+        try await withTemporaryDirectory { root in
+            let session = try SessionFolderManager().createLiveSession(
+                in: root,
+                title: "Editable notes"
+            )
+            let initial = try SessionReadingPresentation().load(
+                from: session.directory
+            )
+            let initialText = initial.artifacts.first(where: {
+                $0.kind == .notes
+            })?.copyText ?? ""
+            var state = SessionNotesEditingState(text: initialText)
+
+            XCTAssertFalse(state.isEditing)
+            state.beginEditing()
+            XCTAssertTrue(state.isEditing)
+
+            let text = "Follow up with the design team."
+            state.updateText(text)
+            try await SessionNotesFileWriter().write(
+                state.text,
+                to: session.directory.appendingPathComponent("notes.md"),
+                revision: 1
+            )
+
+            XCTAssertEqual(
+                try SessionReadingPresentation().load(from: session.directory)
+                    .artifacts.first(where: { $0.kind == .notes })?.copyText,
+                text
+            )
+        }
+    }
+
     private func libraryItem(title: String, date: Date) -> SessionLibraryItem {
         SessionLibraryItem(
             id: UUID(),

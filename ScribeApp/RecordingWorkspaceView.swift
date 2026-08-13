@@ -316,7 +316,7 @@ private struct RewritingTranscriptText: View {
     }
 }
 
-private struct MarkdownNotesEditor: NSViewRepresentable {
+struct MarkdownNotesEditor: NSViewRepresentable {
     @Binding var text: String
     let isEditable: Bool
 

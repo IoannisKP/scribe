@@ -143,6 +143,11 @@ struct SessionReadingView: View {
     @State private var loadError: String?
     @State private var copiedArtifactID: String?
     @State private var showsSummaryGeneration = false
+    @State private var notesEditingState = SessionNotesEditingState(text: "")
+    @State private var notesSessionID: UUID?
+    @State private var lastSavedNotesText = ""
+    @State private var notesSaveTask: Task<Void, Never>?
+    @State private var notesSaveError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -180,7 +185,10 @@ struct SessionReadingView: View {
         .onChange(of: selectedArtifactID) { _, _ in
             loadRevisionParagraphs()
         }
-        .onDisappear { playback.pause() }
+        .onDisappear {
+            playback.pause()
+            flushNotesIfNeeded()
+        }
         .sheet(isPresented: $showsSummaryGeneration) {
             SummaryGenerationConfigurationView(
                 model: summaryGeneration,
@@ -369,23 +377,116 @@ struct SessionReadingView: View {
 
     private func notesView(_ artifact: SessionReadingArtifact) -> some View {
         Group {
-            if let text = artifact.copyText, !text.isEmpty {
-                ScrollView {
-                    Text(text)
-                        .font(ScribeTypography.notesBody)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(28)
+            if notesEditingState.isEditing {
+                VStack(spacing: 0) {
+                    ZStack(alignment: .topLeading) {
+                        MarkdownNotesEditor(
+                            text: Binding(
+                                get: { notesEditingState.text },
+                                set: { updateNotesDraft($0) }
+                            ),
+                            isEditable: true
+                        )
+
+                        if notesEditingState.text.isEmpty {
+                            Text(ScribeCopy.Reading.notesPlaceholder)
+                                .font(ScribeTypography.notesBody)
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 22)
+                                .padding(.vertical, 18)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
+
+                    if let notesSaveError {
+                        Divider()
+                        Text(notesSaveError)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                    }
                 }
-                .overlay(alignment: .topTrailing) { copyButton(for: artifact) }
+                .overlay(alignment: .topTrailing) {
+                    if !notesEditingState.text.isEmpty {
+                        Button(copiedArtifactID == artifact.id
+                            ? ScribeCopy.Reading.copied
+                            : ScribeCopy.Reading.copyNotes
+                        ) {
+                            copyNotes(artifactID: artifact.id)
+                        }
+                        .buttonStyle(.bordered)
+                        .padding(14)
+                    }
+                }
             } else {
                 missingArtifact(
                     title: ScribeCopy.Reading.noNotes,
                     actionTitle: ScribeCopy.Reading.createNotes
                 ) {
-                    Task { await recorder.createNotes(in: session) }
+                    beginEditingNotes(from: artifact)
                 }
             }
+        }
+    }
+
+    private func beginEditingNotes(from artifact: SessionReadingArtifact) {
+        notesSaveError = nil
+        if notesEditingState.text != (artifact.copyText ?? "") {
+            notesEditingState.updateText(artifact.copyText ?? "")
+        }
+        notesEditingState.beginEditing()
+        scheduleNotesSave(force: true, delay: .zero)
+    }
+
+    private func updateNotesDraft(_ text: String) {
+        guard notesEditingState.text != text else { return }
+        notesEditingState.updateText(text)
+        notesSaveError = nil
+        scheduleNotesSave(force: false, delay: .milliseconds(300))
+    }
+
+    private func scheduleNotesSave(
+        force: Bool,
+        delay: Duration
+    ) {
+        guard force || notesEditingState.text != lastSavedNotesText else {
+            return
+        }
+        notesSaveTask?.cancel()
+        let text = notesEditingState.text
+        notesSaveTask = Task { @MainActor in
+            if delay != .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard !Task.isCancelled else { return }
+            let saved = await recorder.saveNotes(text, in: session)
+            if saved {
+                if notesEditingState.text == text {
+                    lastSavedNotesText = text
+                }
+                notesSaveError = nil
+            } else {
+                notesSaveError = ScribeCopy.Reading.notesSaveFailed
+            }
+        }
+    }
+
+    private func flushNotesIfNeeded() {
+        guard notesEditingState.isEditing else { return }
+        scheduleNotesSave(force: false, delay: .zero)
+    }
+
+    private func copyNotes(artifactID: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(notesEditingState.text, forType: .string)
+        copiedArtifactID = artifactID
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            if copiedArtifactID == artifactID { copiedArtifactID = nil }
         }
     }
 
@@ -754,6 +855,7 @@ struct SessionReadingView: View {
             }.value
             document = loaded
             loadError = nil
+            synchronizeNotesEditor(from: loaded)
             if selectPreferred || !loaded.artifacts.contains(where: {
                 $0.id == selectedArtifactID
             }) {
@@ -767,6 +869,23 @@ struct SessionReadingView: View {
         } catch {
             loadError = error.localizedDescription
             document = nil
+        }
+    }
+
+    private func synchronizeNotesEditor(
+        from document: SessionReadingDocument
+    ) {
+        let text = document.artifacts.first(where: { $0.kind == .notes })?
+            .copyText ?? ""
+        if notesSessionID != session.id {
+            notesSaveTask?.cancel()
+            notesSessionID = session.id
+            notesEditingState = SessionNotesEditingState(text: text)
+            lastSavedNotesText = text
+            notesSaveError = nil
+        } else if !notesEditingState.isEditing {
+            notesEditingState = SessionNotesEditingState(text: text)
+            lastSavedNotesText = text
         }
     }
 

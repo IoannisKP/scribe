@@ -214,7 +214,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let legacySessionMigrator = LegacySessionMigrator()
     private let sessionLibraryMonitor = SessionLibraryMonitor()
     private let systemTapDiagnostic = SystemTapPrewarmDiagnostic()
-    private let notesWriter = NotesDocumentWriter()
+    private let notesWriter = SessionNotesFileWriter()
     private let sessionIndex: SessionIndex?
     private let sessionReconciler: SessionReconciler?
     private let liveTransport: LiveAudioTransport?
@@ -1494,16 +1494,21 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
     }
 
-    func createNotes(in session: SessionLibraryItem) async {
+    @discardableResult
+    func saveNotes(
+        _ text: String,
+        in session: SessionLibraryItem
+    ) async -> Bool {
         let url = session.directory.appendingPathComponent("notes.md")
+        notesRevision &+= 1
+        let revision = notesRevision
         do {
-            if !FileManager.default.fileExists(atPath: url.path) {
-                try Data().write(to: url, options: .atomic)
-            }
+            try await notesWriter.write(text, to: url, revision: revision)
             await reconcileSessionLibrary()
-            sessionContentRevision &+= 1
+            return true
         } catch {
-            errorMessage = ScribeCopy.Reading.notesCreateFailed
+            errorMessage = ScribeCopy.Reading.notesSaveFailed
+            return false
         }
     }
 
@@ -2849,20 +2854,5 @@ private actor RecordingPinWriter {
             pin,
             in: sessionDirectory
         )
-    }
-}
-
-private actor NotesDocumentWriter {
-    private var latestRevisionByURL: [URL: UInt64] = [:]
-
-    func write(
-        _ text: String,
-        to url: URL,
-        revision: UInt64
-    ) throws {
-        let latest = latestRevisionByURL[url] ?? 0
-        guard revision >= latest else { return }
-        try Data(text.utf8).write(to: url, options: .atomic)
-        latestRevisionByURL[url] = revision
     }
 }
