@@ -59,7 +59,7 @@ public enum IntelligenceProviderError: Error, Equatable, LocalizedError,
         case .insecureRemoteBaseURL:
             "Remote providers must use HTTPS. HTTP is allowed only for localhost."
         case let .missingAPIKey(provider):
-            "Add an API key for \(provider)."
+            "No key provided for \(provider)."
         case .invalidHTTPResponse:
             "The provider returned an invalid response."
         case let .requestRejected(statusCode):

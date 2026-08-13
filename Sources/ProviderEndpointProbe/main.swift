@@ -70,7 +70,14 @@ struct ProviderEndpointProbe {
             print("Completion: \(output)")
             print("RESULT: PASS")
         } catch {
-            fputs("RESULT: FAIL — \(error.localizedDescription)\n", stderr)
+            let message: String
+            if case let ProbeError.missingEnvironmentVariable(name) = error {
+                message = "RESULT: FAIL — No key provided (\(name))."
+            } else {
+                message = "RESULT: FAIL — \(error.localizedDescription)"
+            }
+            print(message)
+            fflush(stdout)
             Foundation.exit(EXIT_FAILURE)
         }
     }
@@ -90,7 +97,7 @@ private enum ProbeError: Error, LocalizedError {
         case .unsupportedProvider:
             "Only openai and deepseek are supported by this real-endpoint probe."
         case let .missingEnvironmentVariable(name):
-            "Set \(name) in this process environment."
+            "No key provided (\(name))."
         case let .modelUnavailable(requested, availableSample):
             "Model \(requested) was not returned by the endpoint. Available sample: \(availableSample)"
         case .emptyCompletion:
