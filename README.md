@@ -194,6 +194,18 @@ Missing local models are named and skipped; tests never download implicitly.
 
 ## Build and test
 
+### Local code signing
+
+Copy `Config/LocalSigning.xcconfig.example` to
+`Config/LocalSigning.xcconfig`, then replace `YOUR_TEAM_ID` with the Apple
+Development team selected in your Xcode account. The local file supplies the
+team, identity, signing style, and provisioning override through the tracked
+`Config/Signing.xcconfig` hook.
+
+`LocalSigning.xcconfig` is ignored by Git. Each builder can therefore use a
+different team without modifying `project.pbxproj` or producing a repository
+diff. Automated and unsigned builds do not require the local file.
+
 Open `Scribe.xcworkspace`, select the `Scribe` scheme, and run the app.
 
 On first launch, complete **Set up recording**:
