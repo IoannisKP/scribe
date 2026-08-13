@@ -18,6 +18,23 @@ struct ScribeApp: App {
                 .keyboardShortcut("o", modifiers: [.command])
                 .disabled(!recorder.canImportMedia)
             }
+            CommandMenu("Diagnostics") {
+                Button("Run System Tap Privacy Diagnostic…") {
+                    recorder.runSystemTapPrivacyDiagnostic()
+                }
+                .disabled(!recorder.canRunSystemTapDiagnostic)
+
+                Button("Append System Tap Timing Sample") {
+                    recorder.runSystemTapTimingSample()
+                }
+                .disabled(!recorder.canRunSystemTapDiagnostic)
+
+                Divider()
+
+                Button("Reveal System Tap Diagnostic Log") {
+                    recorder.revealSystemTapDiagnosticLog()
+                }
+            }
         }
     }
 }

@@ -54,6 +54,18 @@ enum MediaImportState: Equatable {
     case failed(filename: String, message: String)
 }
 
+enum SystemTapDiagnosticUIState {
+    case idle
+    case preparing
+    case holding(secondsRemaining: Int, callbackCount: UInt64)
+    case registeringComparison
+    case cleaningUp
+    case completed(SystemTapPrivacyDiagnosticReport)
+    case timingSampleCompleted(SystemTapTimingSample)
+    case cancelled
+    case failed(message: String)
+}
+
 @MainActor
 final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var microphoneAuthorizationStatus:
@@ -103,6 +115,10 @@ final class MeetingRecorderViewModel: ObservableObject {
     @Published private(set) var liveTranscriptRows:
         [LiveTranscriptRow] = []
     @Published private(set) var mediaImportState: MediaImportState = .idle
+    @Published private(set) var systemTapDiagnosticState:
+        SystemTapDiagnosticUIState = .idle
+    @Published private(set) var systemTapDiagnosticLogURL: URL?
+    @Published var showsSystemTapDiagnostic = false
     @Published var selectedTranscriptionModel:
         TranscriptionModelSelection = MeetingRecorderViewModel
             .savedModelSelection()
@@ -148,6 +164,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private let sessionMediaImporter = SessionMediaImporter()
     private let legacySessionMigrator = LegacySessionMigrator()
     private let sessionLibraryMonitor = SessionLibraryMonitor()
+    private let systemTapDiagnostic = SystemTapPrewarmDiagnostic()
     private let sessionIndex: SessionIndex?
     private let sessionReconciler: SessionReconciler?
     private let liveTransport: LiveAudioTransport?
@@ -158,6 +175,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     private var modelDownloadStateMonitorTask: Task<Void, Never>?
     private var handledAutomaticStopSessionDirectory: URL?
     private var libraryAccessURL: URL?
+    private var systemTapDiagnosticTask: Task<Void, Never>?
 
     init() {
         let microphonePermissionAuthorizer =
@@ -239,6 +257,9 @@ final class MeetingRecorderViewModel: ObservableObject {
 
         startStateMonitor()
         Task {
+            await systemAudioCapture.prewarm()
+        }
+        Task {
             await prepareSessionStorage()
             await refreshPermissionStatus()
             await refreshModelAvailability()
@@ -248,6 +269,7 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     deinit {
+        systemTapDiagnosticTask?.cancel()
         stateMonitorTask?.cancel()
         modelDownloadStateMonitorTask?.cancel()
         sessionLibraryMonitor.stop()
@@ -261,6 +283,25 @@ final class MeetingRecorderViewModel: ObservableObject {
             return true
         }
         return false
+    }
+
+    var systemTapDiagnosticIsActive: Bool {
+        switch systemTapDiagnosticState {
+        case .preparing, .holding, .registeringComparison, .cleaningUp:
+            true
+        case .idle, .completed, .timingSampleCompleted, .cancelled, .failed:
+            false
+        }
+    }
+
+    var canRunSystemTapDiagnostic: Bool {
+        !isBusy
+            && !isRecording
+            && !isTranscribing
+            && !isImportingMedia
+            && !isDownloadingModel
+            && !isDownloadingSileroVAD
+            && !systemTapDiagnosticIsActive
     }
 
     var permissionsReady: Bool {
@@ -682,6 +723,115 @@ final class MeetingRecorderViewModel: ObservableObject {
         showsPermissionSetup = true
         Task {
             await refreshPermissionStatus()
+        }
+    }
+
+    func runSystemTapPrivacyDiagnostic() {
+        guard canRunSystemTapDiagnostic else {
+            return
+        }
+        showsSystemTapDiagnostic = true
+        systemTapDiagnosticState = .preparing
+        systemTapDiagnosticLogURL = nil
+        isBusy = true
+        errorMessage = nil
+
+        systemTapDiagnosticTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let report = try await systemTapDiagnostic
+                    .runPrivacyDiagnostic { [weak self] progress in
+                        await MainActor.run {
+                            self?.applySystemTapDiagnosticProgress(progress)
+                        }
+                    }
+                systemTapDiagnosticLogURL = try await systemTapDiagnostic
+                    .logURL()
+                systemTapDiagnosticState = .completed(report)
+            } catch is CancellationError {
+                systemTapDiagnosticState = .cancelled
+            } catch {
+                systemTapDiagnosticState = .failed(
+                    message: error.localizedDescription
+                )
+            }
+            systemTapDiagnosticTask = nil
+            isBusy = false
+        }
+    }
+
+    func runSystemTapTimingSample() {
+        guard canRunSystemTapDiagnostic else {
+            return
+        }
+        showsSystemTapDiagnostic = true
+        systemTapDiagnosticState = .preparing
+        systemTapDiagnosticLogURL = nil
+        isBusy = true
+        errorMessage = nil
+
+        systemTapDiagnosticTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let sample = try await systemTapDiagnostic.runTimingSample()
+                systemTapDiagnosticLogURL = try await systemTapDiagnostic
+                    .logURL()
+                systemTapDiagnosticState = .timingSampleCompleted(sample)
+            } catch is CancellationError {
+                systemTapDiagnosticState = .cancelled
+            } catch {
+                systemTapDiagnosticState = .failed(
+                    message: error.localizedDescription
+                )
+            }
+            systemTapDiagnosticTask = nil
+            isBusy = false
+        }
+    }
+
+    func cancelSystemTapDiagnostic() {
+        guard systemTapDiagnosticIsActive else {
+            return
+        }
+        systemTapDiagnosticState = .cleaningUp
+        systemTapDiagnosticTask?.cancel()
+    }
+
+    func revealSystemTapDiagnosticLog() {
+        Task {
+            do {
+                let url = try await systemTapDiagnostic.logURL()
+                systemTapDiagnosticLogURL = url
+                if FileManager.default.fileExists(atPath: url.path) {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                } else {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    NSWorkspace.shared.open(url.deletingLastPathComponent())
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func applySystemTapDiagnosticProgress(
+        _ progress: SystemTapDiagnosticProgress
+    ) {
+        switch progress {
+        case .preparing:
+            systemTapDiagnosticState = .preparing
+        case let .holding(secondsRemaining, callbackCount):
+            systemTapDiagnosticState = .holding(
+                secondsRemaining: secondsRemaining,
+                callbackCount: callbackCount
+            )
+        case .registeringComparison:
+            systemTapDiagnosticState = .registeringComparison
+        case .cleaningUp:
+            systemTapDiagnosticState = .cleaningUp
         }
     }
 

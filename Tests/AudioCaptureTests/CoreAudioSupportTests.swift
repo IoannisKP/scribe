@@ -3,6 +3,14 @@ import CoreAudio
 import XCTest
 
 final class CoreAudioSupportTests: XCTestCase {
+    func testSystemTapResourceSamplerReadsProcessMetricsWithoutStackCorruption() {
+        let snapshot = SystemTapResourceSampler.snapshot()
+
+        XCTAssertNotNil(snapshot.app)
+        XCTAssertGreaterThan(snapshot.app?.residentBytes ?? 0, 0)
+        XCTAssertGreaterThan(snapshot.app?.physicalFootprintBytes ?? 0, 0)
+    }
+
     func testFormatsPrintableOSStatusAsFourCharacterCode() {
         XCTAssertEqual(
             CoreAudioCallError.describe(kAudioHardwareBadDeviceError),

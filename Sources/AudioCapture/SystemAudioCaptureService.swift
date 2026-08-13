@@ -21,8 +21,17 @@ public enum SystemAudioCaptureState: Equatable, Sendable {
     }
 }
 
+public enum SystemAudioPrewarmState: Equatable, Sendable {
+    case idle
+    case preparing
+    case ready
+    case inUse
+    case failed(message: String)
+}
+
 public actor SystemAudioCaptureService: AudioTrackCapturing {
     public private(set) var state: SystemAudioCaptureState = .idle
+    public private(set) var prewarmState: SystemAudioPrewarmState = .idle
 
     private let listenerQueue = DispatchQueue(
         label: "com.localfirst.Scribe.system-audio-listeners",
@@ -33,10 +42,13 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     private var consumer: CanonicalAudioFileConsumer?
     private var drainTask: Task<Void, Never>?
     private var graph: CoreAudioSystemTapGraph?
+    private var realtimeRouter: SystemAudioRealtimeRouter?
     private var firstSampleTime: FirstSampleHostTime?
+    private var recordedStartupStageTimings: [SystemAudioStartupStageTiming] = []
     private var outputURL: URL?
     private var isRecovering = false
     private var isSleeping = false
+    private var isRebuildingPreparedGraph = false
     private var coreAudioListeners: [CoreAudioListenerRegistration] = []
     private var workspaceObservers: [SystemWorkspaceObserver] = []
     private let permissionRecorder: any SystemAudioPermissionRecording
@@ -51,28 +63,110 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         self.liveSink = liveSink
     }
 
+    /// Prepares the private process tap, aggregate device, and unstarted
+    /// IOProc. Audio storage and writing remain unallocated until recording.
+    public func prewarm() {
+        guard
+            !state.isActive,
+            !isSleeping,
+            graph == nil,
+            realtimeRouter == nil
+        else {
+            if graph != nil, realtimeRouter != nil {
+                prewarmState = .ready
+            }
+            return
+        }
+
+        prewarmState = .preparing
+        do {
+            let realtimeRouter = try SystemAudioRealtimeRouter()
+            let graph = CoreAudioSystemTapGraph(
+                realtimeRouter: realtimeRouter
+            )
+            try graph.prepare()
+            self.realtimeRouter = realtimeRouter
+            self.graph = graph
+            recordedStartupStageTimings = graph.startupStageTimings
+            try registerCoreAudioListeners(for: graph)
+            registerWorkspaceObservers()
+            prewarmState = .ready
+        } catch {
+            let message = error.localizedDescription
+            _ = unregisterCoreAudioListeners()
+            if let graph {
+                try? graph.tearDown()
+            }
+            realtimeRouter?.detach()
+            graph = nil
+            realtimeRouter = nil
+            prewarmState = .failed(message: message)
+        }
+    }
+
     public func startRecording(to outputURL: URL) async throws {
         guard !state.isActive else {
             throw AudioCaptureError.systemCaptureAlreadyRunning
         }
 
         state = .starting
+        recordedStartupStageTimings = []
+        var serviceProfiler = SystemAudioStartupProfiler()
         do {
             // Ten seconds at the highest conventional Core Audio hardware rate.
             let ringBuffer = try FloatRingBuffer(capacity: 1_920_000)
             let firstSampleTime = try FirstSampleHostTime()
-            let graph = CoreAudioSystemTapGraph(
+            let graph: CoreAudioSystemTapGraph
+            let realtimeRouter: SystemAudioRealtimeRouter
+            if
+                let preparedGraph = self.graph,
+                let preparedRouter = self.realtimeRouter,
+                !preparedGraph.isStarted,
+                !preparedRouter.isAttached
+            {
+                graph = preparedGraph
+                realtimeRouter = preparedRouter
+            } else {
+                _ = unregisterCoreAudioListeners()
+                if let staleGraph = self.graph {
+                    try staleGraph.tearDown()
+                }
+                self.realtimeRouter?.detach()
+                self.graph = nil
+                self.realtimeRouter = nil
+                let newRouter = try SystemAudioRealtimeRouter()
+                let newGraph = CoreAudioSystemTapGraph(
+                    realtimeRouter: newRouter
+                )
+                try newGraph.prepare()
+                self.realtimeRouter = newRouter
+                self.graph = newGraph
+                realtimeRouter = newRouter
+                graph = newGraph
+            }
+            realtimeRouter.attach(
                 ringBuffer: ringBuffer,
                 firstSampleTime: firstSampleTime
             )
-            try graph.prepare()
-            self.graph = graph
+            prewarmState = .inUse
+            recordedStartupStageTimings = graph.startupStageTimings.filter {
+                $0.stage != .audioDeviceStart
+            }
 
+            let writer = try serviceProfiler.measure(
+                .wavWriterCreationAndHeaderFlush
+            ) {
+                try Int16WAVWriter(url: outputURL)
+            }
+            recordedStartupStageTimings.append(
+                contentsOf: serviceProfiler.timings
+            )
             let consumer = try CanonicalAudioFileConsumer(
                 source: .system,
                 ringBuffer: ringBuffer,
                 inputSampleRate: graph.sampleRate,
                 outputURL: outputURL,
+                writer: writer,
                 liveSink: liveSink
             )
             self.ringBuffer = ringBuffer
@@ -80,9 +174,20 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             self.consumer = consumer
             self.outputURL = outputURL
             startDrainTask(consumer: consumer)
-            try registerCoreAudioListeners(for: graph)
-            registerWorkspaceObservers()
+            serviceProfiler = SystemAudioStartupProfiler()
+            try serviceProfiler.measure(.listenerRegistration) {
+                try registerCoreAudioListeners(for: graph)
+                registerWorkspaceObservers()
+            }
+            recordedStartupStageTimings.append(
+                contentsOf: serviceProfiler.timings
+            )
             try graph.start()
+            if let startTiming = graph.startupStageTimings.last(where: {
+                $0.stage == .audioDeviceStart
+            }) {
+                recordedStartupStageTimings.append(startTiming)
+            }
             await permissionRecorder.recordAuthorizationStatus(.authorized)
             state = .recording(outputURL: outputURL)
         } catch {
@@ -96,6 +201,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             let combinedMessage = cleanupMessage.map {
                 "\(originalMessage) Cleanup also failed: \($0)"
             } ?? originalMessage
+            prewarmState = .failed(message: combinedMessage)
             state = .failed(message: combinedMessage)
 
             if let captureError = error as? AudioCaptureError {
@@ -116,17 +222,14 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
         state = .stopping
         var failures: [String] = []
-        failures.append(contentsOf: unregisterCoreAudioListeners())
-        unregisterWorkspaceObservers()
-
         if let graph {
             do {
-                try graph.tearDown()
+                try graph.stop()
+                realtimeRouter?.detach()
             } catch {
                 failures.append(error.localizedDescription)
             }
         }
-        self.graph = nil
 
         drainTask?.cancel()
         if let drainTask {
@@ -150,14 +253,30 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             droppedSampleCount: droppedSampleCount,
             firstSampleHostTime: capturedFirstSampleHostTime
         )
-        clearPipelineReferences()
-
         if !failures.isEmpty {
+            failures.append(contentsOf: unregisterCoreAudioListeners())
+            unregisterWorkspaceObservers()
+            if let graph {
+                do {
+                    try graph.tearDown()
+                } catch {
+                    failures.append(error.localizedDescription)
+                }
+            }
+            realtimeRouter?.detach()
+            self.graph = nil
+            realtimeRouter = nil
+            clearRecordingPipelineReferences()
             let message = failures.joined(separator: " ")
+            prewarmState = .failed(message: message)
             state = .failed(message: message)
             throw AudioCaptureError.systemGraphTeardownFailed(message)
         }
 
+        clearRecordingPipelineReferences()
+        prewarmState = graph != nil && realtimeRouter != nil
+            ? .ready
+            : .idle
         state = .stopped(
             outputURL: outputURL,
             droppedSampleCount: droppedSampleCount
@@ -167,6 +286,12 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     public func firstSampleHostTime() async -> UInt64? {
         firstSampleTime?.value
+    }
+
+    public func systemStartupStageTimings() async
+        -> [SystemAudioStartupStageTiming]
+    {
+        recordedStartupStageTimings
     }
 
     private func startDrainTask(consumer: CanonicalAudioFileConsumer) {
@@ -210,6 +335,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 finalMessage += " \(error.localizedDescription)"
             }
         }
+        realtimeRouter?.detach()
         if let consumer {
             do {
                 try await consumer.finalizeAfterBackgroundFailure()
@@ -218,7 +344,8 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             }
         }
 
-        clearPipelineReferences()
+        clearAllPipelineReferences()
+        prewarmState = .failed(message: finalMessage)
         state = .failed(
             message: AudioCaptureError
                 .audioConsumerFailed(finalMessage)
@@ -374,22 +501,34 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     }
 
     private func handleCoreAudioChange(reason: String) async {
-        guard state.isActive, !isRecovering, !isSleeping else {
+        guard !isRecovering, !isSleeping else {
             return
         }
-        await recoverGraph(reason: reason)
+        if state.isActive {
+            await recoverGraph(reason: reason)
+        } else {
+            await rebuildPreparedGraph(reason: reason)
+        }
     }
 
     private func handleWillSleep() async {
-        guard
-            state.isActive,
-            !isSleeping,
-            let outputURL
-        else {
+        guard !isSleeping else {
             return
         }
 
         isSleeping = true
+        guard state.isActive, let outputURL else {
+            _ = unregisterCoreAudioListeners()
+            if let graph {
+                try? graph.tearDown()
+            }
+            realtimeRouter?.detach()
+            graph = nil
+            realtimeRouter = nil
+            prewarmState = .idle
+            return
+        }
+
         isRecovering = true
         state = .recovering(
             reason: "System audio is paused while this Mac sleeps.",
@@ -407,6 +546,8 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             do {
                 try graph.tearDown()
                 self.graph = nil
+                realtimeRouter?.detach()
+                realtimeRouter = nil
             } catch {
                 await failRecovery(message: error.localizedDescription)
             }
@@ -414,12 +555,38 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
     }
 
     private func handleDidWake() async {
-        guard state.isActive, isSleeping else {
+        guard isSleeping else {
             return
         }
         isSleeping = false
-        isRecovering = false
-        await recoverGraph(reason: "The Mac woke from sleep.")
+        if state.isActive {
+            isRecovering = false
+            await recoverGraph(reason: "The Mac woke from sleep.")
+        } else {
+            prewarm()
+        }
+    }
+
+    private func rebuildPreparedGraph(reason: String) async {
+        guard
+            !state.isActive,
+            !isRebuildingPreparedGraph,
+            graph != nil || realtimeRouter != nil
+        else {
+            return
+        }
+
+        isRebuildingPreparedGraph = true
+        prewarmState = .preparing
+        _ = unregisterCoreAudioListeners()
+        if let graph {
+            try? graph.tearDown()
+        }
+        realtimeRouter?.detach()
+        graph = nil
+        realtimeRouter = nil
+        isRebuildingPreparedGraph = false
+        prewarm()
     }
 
     private func recoverGraph(reason: String) async {
@@ -446,19 +613,27 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 try graph.tearDown()
                 self.graph = nil
             }
+            realtimeRouter?.detach()
+            realtimeRouter = nil
             try await waitUntilDrained(ringBuffer)
 
-            let replacementGraph = CoreAudioSystemTapGraph(
+            let replacementRouter = try SystemAudioRealtimeRouter()
+            replacementRouter.attach(
                 ringBuffer: ringBuffer,
                 firstSampleTime: firstSampleTime
+            )
+            let replacementGraph = CoreAudioSystemTapGraph(
+                realtimeRouter: replacementRouter
             )
             try replacementGraph.prepare()
             try await consumer.reconfigure(
                 inputSampleRate: replacementGraph.sampleRate
             )
+            self.realtimeRouter = replacementRouter
             self.graph = replacementGraph
             try registerCoreAudioListeners(for: replacementGraph)
             try replacementGraph.start()
+            prewarmState = .inUse
             isRecovering = false
             state = .recording(outputURL: outputURL)
         } catch {
@@ -491,6 +666,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 finalMessage += " \(error.localizedDescription)"
             }
         }
+        realtimeRouter?.detach()
         drainTask?.cancel()
         if let drainTask {
             await drainTask.value
@@ -503,7 +679,8 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             }
         }
 
-        clearPipelineReferences()
+        clearAllPipelineReferences()
+        prewarmState = .failed(message: finalMessage)
         state = .failed(
             message: AudioCaptureError
                 .systemRecoveryFailed(finalMessage)
@@ -523,6 +700,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 failures.append(error.localizedDescription)
             }
         }
+        realtimeRouter?.detach()
 
         drainTask?.cancel()
         if let drainTask {
@@ -536,19 +714,25 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             }
         }
 
-        clearPipelineReferences()
+        clearAllPipelineReferences()
         return failures.isEmpty ? nil : failures.joined(separator: " ")
     }
 
-    private func clearPipelineReferences() {
+    private func clearRecordingPipelineReferences() {
         ringBuffer = nil
         firstSampleTime = nil
         consumer = nil
         drainTask = nil
-        graph = nil
         outputURL = nil
         isRecovering = false
+    }
+
+    private func clearAllPipelineReferences() {
+        clearRecordingPipelineReferences()
+        graph = nil
+        realtimeRouter = nil
         isSleeping = false
+        isRebuildingPreparedGraph = false
     }
 }
 

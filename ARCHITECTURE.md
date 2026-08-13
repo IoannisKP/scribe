@@ -77,9 +77,8 @@ source; parameter-count estimates are not accepted as operational safety data.
 The planned two-source path keeps microphone and system audio isolated:
 
 ```text
-Microphone AVAudioEngine tap ─┐
-                             ├─ dedicated preallocated ring buffer
-Core Audio process-tap IOProc ┘
+Microphone AVAudioEngine tap ── dedicated preallocated ring buffer
+Core Audio process-tap IOProc ─ attachable ring allocated at Record
                                       │
                                       ▼
                            non-realtime consumer
@@ -278,7 +277,8 @@ surface this count instead of silently hiding an overrun.
 ## Core Audio system capture
 
 The system track deliberately does not use `AVAudioEngine` or
-ScreenCaptureKit:
+ScreenCaptureKit. At launch, concurrently with ordinary app initialization,
+Scribe prewarms the non-recording portion of the graph:
 
 1. Resolve the default output device and Scribe's Core Audio process object.
 2. Create a private mono global `CATapDescription` excluding that process.
@@ -292,16 +292,26 @@ ScreenCaptureKit:
    - drift compensation and tap autostart enabled.
 6. Register `AudioDeviceCreateIOProcIDWithBlock` directly on the aggregate,
    passing a `nil` queue so Core Audio invokes it directly.
-7. Start the aggregate with `AudioDeviceStart`.
+7. Hold the registered IOProc without calling `AudioDeviceStart`.
+
+The prepared IOProc points at a lock-free atomic routing slot. While idle the
+slot is empty: no 7.32 MiB ring, first-sample latch, consumer, or WAV writer
+exists. Pressing Record allocates those recording resources, publishes the
+realtime sink into the slot, and then calls `AudioDeviceStart`. A clean stop
+calls `AudioDeviceStop`, clears and releases the sink, and retains the unstarted
+graph for the next recording.
 
 The IOProc passes its `AudioBufferList` to a C17 mixer that handles interleaved
 or noninterleaved Float32 buffers and writes mono samples directly into the
 system ring. It does not construct `AVAudioPCMBuffer`, allocate, resample, log,
 lock, or write to disk.
 
-Teardown always attempts, in order: device stop, IOProc destruction, aggregate
-destruction, and process-tap destruction. Every failing `OSStatus` is retained
-and surfaced rather than hiding later cleanup failures.
+Full invalidation always attempts, in order: device stop, IOProc destruction,
+aggregate destruction, and process-tap destruction. It occurs before sleep, on
+default-output or tap-format change, aggregate death, and after a Core Audio
+service restart. Wake and live route recovery construct a fresh graph. Every
+failing `OSStatus` is retained and surfaced rather than hiding later cleanup
+failures.
 
 System recovery listens for default output changes, aggregate liveness, tap
 format changes, Core Audio service restarts, sleep, and wake. It removes the
@@ -315,11 +325,11 @@ the current output, replaces the resampler, and continues the same
 protocol, allowing deterministic mocks without requesting TCC permission or
 touching hardware.
 
-It starts the microphone first so Scribe is registered as a Core Audio process
-before the global tap resolves and excludes it. The system track starts second.
-If system capture fails, the already-running microphone is stopped and
-finalized. Stop always attempts both sources even if the first reports an
-error.
+The self-excluding system graph is already prepared before Record. The
+coordinator starts its device first, then starts the microphone, so slow graph
+preparation costs launch latency instead of missing remote speech. If system
+capture fails, microphone capture never starts. Stop always attempts both
+sources even if the first reports an error.
 
 ## Permission model
 
@@ -348,9 +358,9 @@ though capture and recovery remain off the main actor.
 
 ## Capture session timeline
 
-The microphone must start before the system tap so Core Audio can resolve and
-exclude Scribe's process. As a result, the two WAV files do not begin at exactly
-the same wall-clock instant.
+The prepared tap already excludes Scribe's resolved Core Audio process. After
+`AudioDeviceStart`, the system and microphone callbacks can arrive in either
+order, so the two WAV files do not begin at exactly the same wall-clock instant.
 
 Each realtime callback latches its first successfully accepted frame exactly
 once through a lock-free C atomic. The microphone uses the tap's valid

@@ -156,6 +156,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let transcriptionHistory: [TranscriptionRevision]
     public let originalFilename: String?
     public let originalFormat: String?
+    public let systemAudioStartupStageTimings:
+        [SystemAudioStartupStageTiming]?
 
     public init(
         version: Int = Self.currentVersion,
@@ -169,7 +171,9 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         artifacts: [Artifact] = [],
         transcriptionHistory: [TranscriptionRevision] = [],
         originalFilename: String? = nil,
-        originalFormat: String? = nil
+        originalFormat: String? = nil,
+        systemAudioStartupStageTimings:
+            [SystemAudioStartupStageTiming]? = nil
     ) {
         self.version = version
         self.sessionID = sessionID
@@ -183,6 +187,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         self.transcriptionHistory = transcriptionHistory
         self.originalFilename = originalFilename
         self.originalFormat = originalFormat
+        self.systemAudioStartupStageTimings = systemAudioStartupStageTimings
     }
 
     public static func dualTrack(
@@ -305,11 +310,19 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         )
     }
 
+    public func replacingSystemAudioStartupStageTimings(
+        _ timings: [SystemAudioStartupStageTiming]
+    ) -> CaptureSessionManifest {
+        replacing(systemAudioStartupStageTimings: timings)
+    }
+
     public func replacing(
         sessionID: UUID? = nil,
         tracks: [Track]? = nil,
         artifacts: [Artifact]? = nil,
-        transcriptionHistory: [TranscriptionRevision]? = nil
+        transcriptionHistory: [TranscriptionRevision]? = nil,
+        systemAudioStartupStageTimings:
+            [SystemAudioStartupStageTiming]? = nil
     ) -> CaptureSessionManifest {
         CaptureSessionManifest(
             version: Self.currentVersion,
@@ -324,7 +337,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             transcriptionHistory:
                 transcriptionHistory ?? self.transcriptionHistory,
             originalFilename: originalFilename,
-            originalFormat: originalFormat
+            originalFormat: originalFormat,
+            systemAudioStartupStageTimings:
+                systemAudioStartupStageTimings
+                ?? self.systemAudioStartupStageTimings
         )
     }
 
@@ -442,6 +458,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case transcriptionHistory
         case originalFilename
         case originalFormat
+        case systemAudioStartupStageTimings
     }
 
     public init(from decoder: any Decoder) throws {
@@ -473,6 +490,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         originalFormat = try container.decodeIfPresent(
             String.self,
             forKey: .originalFormat
+        )
+        systemAudioStartupStageTimings = try container.decodeIfPresent(
+            [SystemAudioStartupStageTiming].self,
+            forKey: .systemAudioStartupStageTimings
         )
     }
 }
