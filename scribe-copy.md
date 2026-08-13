@@ -458,16 +458,41 @@ No message. The summary appearing in the rail is the confirmation.
   be recovered. Recordings and transcripts are unaffected.**
 - Buttons: **Move to Trash** · **Cancel**
 
-## API keys
+## Summary providers and API keys
 
-- Label: **Anthropic API key**
-- Placeholder: **sk-ant-...**
+- Section: **Summary providers**
+- Provider label: **Provider**
+- Presets: **Anthropic** · **OpenAI** · **DeepSeek** · **Groq** · **Ollama** ·
+  **LM Studio**
+- API key label: **API key**
+- Placeholder: **Paste API key**
 - Helper: **Stored in your Keychain. Never written to disk or logs.**
-- Button: **Test key**
+- Stored state: **A key is stored in your Keychain.**
+- Actions: **Test key** · **Remove key**
+- Testing: **Testing…**
 - Valid: **Key works**
-- Invalid message: **That key was rejected. Check it hasn't expired.**
-- No key set: **Add an API key to use Claude or GPT. Local summaries work
-  without one.**
+- Invalid: **That key was rejected. Check it hasn't expired.**
+- Local keyless preset: **No API key needed. Requests stay on this Mac.**
+- Keyless custom provider: **This provider does not require an API key.**
+- Local connection action: **Test connection**
+- Local connection valid: **Connection works**
+- Local connection failure: **Scribe couldn't reach this provider. Check its
+  address and that it is running.**
+
+### Custom summary provider
+
+- Actions: **Add custom provider** · **Custom provider**
+- Fields: **Display name** · **Base URL** · **Model identifier**
+- Toggle: **This provider uses an API key**
+- Actions: **Save provider** · **Remove provider** · **Cancel**
+- Saved: **Provider saved**
+- Missing fields: **Enter a display name, base URL, and model identifier.**
+- Invalid address: **Enter a valid provider base URL without credentials, a
+  query, or a fragment.**
+- Insecure address: **Remote providers must use HTTPS. HTTP is allowed only for
+  localhost.**
+- Save failure: **Scribe couldn't save this provider configuration. No API key
+  was written to a settings file.**
 
 ## Settings
 

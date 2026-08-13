@@ -11,7 +11,12 @@ let package = Package(
         .library(name: "AudioCapture", targets: ["AudioCapture"]),
         .library(name: "ModelManager", targets: ["ModelManager"]),
         .library(name: "SpeechPipeline", targets: ["SpeechPipeline"]),
-        .library(name: "SessionStore", targets: ["SessionStore"])
+        .library(name: "SessionStore", targets: ["SessionStore"]),
+        .library(name: "Intelligence", targets: ["Intelligence"]),
+        .executable(
+            name: "ProviderEndpointProbe",
+            targets: ["ProviderEndpointProbe"]
+        )
     ],
     dependencies: [
         .package(
@@ -74,6 +79,24 @@ let package = Package(
                 .enableUpcomingFeature("ExistentialAny")
             ]
         ),
+        .target(
+            name: "Intelligence",
+            path: "Sources/Intelligence",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ],
+            linkerSettings: [
+                .linkedFramework("Security")
+            ]
+        ),
+        .executableTarget(
+            name: "ProviderEndpointProbe",
+            dependencies: ["Intelligence"],
+            path: "Sources/ProviderEndpointProbe",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
         .testTarget(
             name: "AudioCaptureTests",
             dependencies: ["AudioCapture"],
@@ -105,6 +128,14 @@ let package = Package(
             name: "SessionStoreTests",
             dependencies: ["SessionStore", "AudioCapture", "SpeechPipeline"],
             path: "Tests/SessionStoreTests",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
+        .testTarget(
+            name: "IntelligenceTests",
+            dependencies: ["Intelligence"],
+            path: "Tests/IntelligenceTests",
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")
             ]

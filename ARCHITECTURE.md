@@ -58,6 +58,26 @@ below Hugging Face's 10 MiB large-file boundary to calculate their SHA-256. A
 source change between manifest resolution and transfer fails verification
 rather than promoting mismatched files.
 
+`Intelligence` owns the provider boundary for summary generation. Phase 1
+contains no session, transcript, or summary-writing behavior. Its public
+`IntelligenceProvider` contract exposes model discovery and streamed text
+completion. `OpenAICompatibleProvider` implements the configurable
+`/models` plus `/chat/completions` convention used by OpenAI, DeepSeek, Groq,
+Ollama, LM Studio, and custom compatible endpoints. `AnthropicProvider`
+separately implements Anthropic's `/models` and Messages streaming shapes.
+Adding another compatible vendor is therefore configuration, not another HTTP
+client.
+
+Provider presets and custom entries contain only non-secret configuration.
+Remote custom URLs require HTTPS, loopback URLs may use HTTP, and embedded URL
+credentials, queries, and fragments are rejected. Keys are generic-password
+Keychain items indexed by provider ID. `ProviderCredential` is deliberately not
+Codable and prints only a redacted marker; the HTTP layer discards failure
+bodies and reports status-only errors so a provider cannot reflect a secret
+into app diagnostics. UserDefaults persists selection and custom endpoint
+metadata, never credentials. The connection test performs model discovery,
+which validates endpoint and authentication without sending meeting content.
+
 `ModelDiskAccounting` recursively measures actual installed logical and
 allocated bytes while refusing to follow symbolic links.
 `ManagedModelRegistry` also scans direct child folders that match neither a
