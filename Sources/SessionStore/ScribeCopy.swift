@@ -285,4 +285,126 @@ public enum ScribeCopy {
         public static let insecureProviderURL =
             "Remote providers must use HTTPS. HTTP is allowed only for localhost."
     }
+
+    public enum SummaryTemplates {
+        public static let title = "Summary templates"
+        public static let template = "Template"
+        public static let name = "Name"
+        public static let instructions = "Instructions"
+        public static let newTemplate = "New template"
+        public static let duplicate = "Duplicate"
+        public static let save = "Save template"
+        public static let remove = "Remove template"
+        public static let untitled = "Untitled template"
+        public static let newTemplateBody = "{{transcript}}"
+        public static let saved = "Template saved"
+        public static let created = "Template created"
+        public static let duplicated = "Template duplicated"
+        public static let removed = "Template removed"
+        public static let cancel = "Cancel"
+        public static let loadFailed =
+            "Scribe couldn't load summary templates. Sessions and their files are unaffected."
+        public static let saveFailed =
+            "Scribe couldn't save this template. Sessions and their files are unaffected."
+        public static let removeFailed =
+            "Scribe couldn't remove this template. Sessions and their files are unaffected."
+        public static let variables =
+            "Variables: {{notes}}, {{transcript}}, {{title}}, {{date}}, {{participants}}, {{pins}}"
+
+        public static func duplicateName(_ name: String) -> String {
+            "\(name) copy"
+        }
+
+        public static func removeTitle(_ name: String) -> String {
+            "Remove “\(name)” template?"
+        }
+
+        public static let removeBody =
+            "This removes the custom template. Sessions, transcripts, notes, and summaries are unaffected."
+        public static let missingName = "A template name is required."
+        public static let missingBody = "Template instructions are required."
+        public static let notFound = "The template no longer exists."
+        public static let builtInCannotBeDeleted =
+            "Built-in templates cannot be deleted."
+        public static let malformedVariable =
+            "A template variable is incomplete or malformed."
+
+        public static func unknownVariable(_ variable: String) -> String {
+            "Unknown template variable: {{\(variable)}}."
+        }
+
+        public static let meetingSummary = "Meeting summary"
+        public static let meetingSummaryBody = """
+            Write a concise meeting summary for “{{title}}” on {{date}}.
+
+            Participants:
+            {{participants}}
+
+            Notes:
+            {{notes}}
+
+            Transcript:
+            {{transcript}}
+
+            Important moments marked during the meeting:
+            {{pins}}
+
+            Explain what was discussed, what was decided, and what remains outstanding. Do not invent facts, owners, or dates.
+            """
+
+        public static let decisionsAndActions = "Decisions and actions"
+        public static let decisionsAndActionsBody = """
+            Extract decisions and action items from this meeting. For each decision, include its stated rationale. For each action, include its owner and date only when explicitly stated. Give marked moments extra attention, but do not invent missing information.
+
+            Meeting: {{title}}
+            Date: {{date}}
+            Participants: {{participants}}
+            Notes: {{notes}}
+            Marked moments: {{pins}}
+            Transcript: {{transcript}}
+            """
+
+        public static let interviewNotes = "Interview notes"
+        public static let interviewNotesBody = """
+            Produce interview notes organised by themes. Include notable quotations with their transcript timestamps when available, and finish with open questions. Treat marked moments as the interviewer's signals of importance.
+
+            Interview: {{title}}
+            Date: {{date}}
+            Participants: {{participants}}
+            Notes: {{notes}}
+            Marked moments: {{pins}}
+            Transcript: {{transcript}}
+            """
+
+        public static let oneToOne = "One-to-one"
+        public static let oneToOneBody = """
+            Summarise this one-to-one by topics raised, commitments made by each person, and follow-ups. Keep sensitive statements factual and do not infer motives.
+
+            Meeting: {{title}}
+            Date: {{date}}
+            Participants: {{participants}}
+            Notes: {{notes}}
+            Marked moments: {{pins}}
+            Transcript: {{transcript}}
+            """
+
+        public static let lectureOrTalk = "Lecture or talk"
+        public static let lectureOrTalkBody = """
+            Summarise this lecture or talk in presentation order. Capture key points, terminology introduced, examples, and references mentioned. Do not add outside information.
+
+            Title: {{title}}
+            Date: {{date}}
+            Notes: {{notes}}
+            Marked moments: {{pins}}
+            Transcript: {{transcript}}
+            """
+
+        public static let rawCleanup = "Raw cleanup"
+        public static let rawCleanupBody = """
+            Clean up the transcript without interpreting or summarising it. Remove disfluencies and obvious false starts, retain every substantive statement, preserve speaker attribution, and arrange the result into readable paragraphs. Do not add facts or conclusions.
+
+            Participants: {{participants}}
+            Transcript: {{transcript}}
+            """
+    }
 }

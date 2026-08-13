@@ -416,6 +416,119 @@ vagueness is exactly what erodes trust.
 
 No message. The summary appearing in the rail is the confirmation.
 
+## Summary templates
+
+- Section: **Summary templates**
+- Picker label: **Template**
+- Fields: **Name** · **Instructions**
+- Actions: **New template** · **Duplicate** · **Save template** · **Remove
+  template**
+- New template name: **Untitled template**
+- New template instructions: **{{transcript}}**
+- Duplicate name pattern: **[original name] copy**
+- Saved: **Template saved**
+- Created: **Template created**
+- Duplicated: **Template duplicated**
+- Removed: **Template removed**
+- Variables helper: **Variables: {{notes}}, {{transcript}}, {{title}}, {{date}},
+  {{participants}}, {{pins}}**
+- Load failure: **Scribe couldn't load summary templates. Sessions and their
+  files are unaffected.**
+- Save failure: **Scribe couldn't save this template. Sessions and their files
+  are unaffected.**
+- Remove failure: **Scribe couldn't remove this template. Sessions and their
+  files are unaffected.**
+- Remove title: **Remove “[template name]” template?**
+- Remove body: **This removes the custom template. Sessions, transcripts,
+  notes, and summaries are unaffected.**
+- Buttons: **Remove template** · **Cancel**
+- Missing name: **A template name is required.**
+- Missing instructions: **Template instructions are required.**
+- Missing template: **The template no longer exists.**
+- Protected default: **Built-in templates cannot be deleted.**
+- Unknown variable: **Unknown template variable: {{[variable]}}.**
+- Malformed variable: **A template variable is incomplete or malformed.**
+
+### Meeting summary
+
+```text
+Write a concise meeting summary for “{{title}}” on {{date}}.
+
+Participants:
+{{participants}}
+
+Notes:
+{{notes}}
+
+Transcript:
+{{transcript}}
+
+Important moments marked during the meeting:
+{{pins}}
+
+Explain what was discussed, what was decided, and what remains outstanding. Do not invent facts, owners, or dates.
+```
+
+### Decisions and actions
+
+```text
+Extract decisions and action items from this meeting. For each decision, include its stated rationale. For each action, include its owner and date only when explicitly stated. Give marked moments extra attention, but do not invent missing information.
+
+Meeting: {{title}}
+Date: {{date}}
+Participants: {{participants}}
+Notes: {{notes}}
+Marked moments: {{pins}}
+Transcript: {{transcript}}
+```
+
+### Interview notes
+
+```text
+Produce interview notes organised by themes. Include notable quotations with their transcript timestamps when available, and finish with open questions. Treat marked moments as the interviewer's signals of importance.
+
+Interview: {{title}}
+Date: {{date}}
+Participants: {{participants}}
+Notes: {{notes}}
+Marked moments: {{pins}}
+Transcript: {{transcript}}
+```
+
+### One-to-one
+
+```text
+Summarise this one-to-one by topics raised, commitments made by each person, and follow-ups. Keep sensitive statements factual and do not infer motives.
+
+Meeting: {{title}}
+Date: {{date}}
+Participants: {{participants}}
+Notes: {{notes}}
+Marked moments: {{pins}}
+Transcript: {{transcript}}
+```
+
+### Lecture or talk
+
+```text
+Summarise this lecture or talk in presentation order. Capture key points, terminology introduced, examples, and references mentioned. Do not add outside information.
+
+Title: {{title}}
+Date: {{date}}
+Notes: {{notes}}
+Marked moments: {{pins}}
+Transcript: {{transcript}}
+```
+
+### Raw cleanup
+
+```text
+Clean up the transcript without interpreting or summarising it. Remove disfluencies and obvious false starts, retain every substantive statement, preserve speaker attribution, and arrange the result into readable paragraphs. Do not add facts or conclusions.
+
+Participants: {{participants}}
+Transcript: {{transcript}}
+```
+
 ## Models screen
 
 - Title: **Models**

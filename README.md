@@ -204,6 +204,26 @@ real OpenAI or DeepSeek endpoint; it reads the key from its process environment
 and never prints it. Summary generation, transcript transmission, and template
 management remain outside Phase 1.
 
+Milestone 6 Phase 3 was implemented ahead of Phase 2 so summary generation can
+consume durable templates rather than a temporary hardcoded prompt. Six
+editable built-ins cover meeting summaries, decisions and actions, interviews,
+one-to-ones, lectures or talks, and non-interpretive transcript cleanup. Users
+can create, duplicate, edit, and remove custom templates from Settings.
+
+Templates support `{{notes}}`, `{{transcript}}`, `{{title}}`, `{{date}}`,
+`{{participants}}`, and `{{pins}}`. Rendering rejects unknown or malformed
+variables instead of silently omitting them. Phase 2 will prepare the actual
+context values—including pinned timestamps with surrounding transcript—and
+stream the selected rendered template to a provider. No generation or
+transcript transmission is enabled by Phase 3 alone.
+
+Template records live in a dedicated GRDB database at
+`~/Library/Application Support/Scribe/Data/templates.sqlite`. This is separate
+from the disposable session search index because edited prompts are durable
+user preferences, not projections that can be rebuilt from session folders.
+Built-ins use stable identities and insert-if-missing seeding: an app update can
+add a new default without replacing edits to an existing one.
+
 ## Requirements
 
 - Apple Silicon Mac
