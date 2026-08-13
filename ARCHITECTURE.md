@@ -78,6 +78,22 @@ into app diagnostics. UserDefaults persists selection and custom endpoint
 metadata, never credentials. The connection test performs model discovery,
 which validates endpoint and authentication without sending meeting content.
 
+Summary templates are owned by `SessionStore` because GRDB and application
+data persistence already terminate at that module. They deliberately do not
+share `sessions.sqlite`: the session index is a rebuildable filesystem
+projection, while template edits are original user data. A dedicated
+`Data/templates.sqlite` database stores stable IDs, names, instruction bodies,
+built-in identity, ordering, and timestamps.
+
+On every open, the template store inserts missing built-ins without updating
+existing rows. This lets releases add defaults while preserving any edit to a
+shipped template. Custom templates are independently creatable, duplicable,
+editable, and removable; built-ins are editable and duplicable but protected
+from deletion. `SummaryTemplateRenderer` substitutes only the six declared
+context variables and rejects unknown or malformed placeholders. Phase 3 does
+not build template context from a session or call an intelligence provider;
+those remain Phase 2 responsibilities.
+
 `ModelDiskAccounting` recursively measures actual installed logical and
 allocated bytes while refusing to follow symbolic links.
 `ManagedModelRegistry` also scans direct child folders that match neither a

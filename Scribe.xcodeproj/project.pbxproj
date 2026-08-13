@@ -94,6 +94,9 @@
 		100000000000000000000055 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000054 /* OpenAICompatibleProvider.swift */; };
 		100000000000000000000056 /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000055 /* AnthropicProvider.swift */; };
 		100000000000000000000057 /* KeychainAPIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000056 /* KeychainAPIKeyStore.swift */; };
+		100000000000000000000058 /* SummaryTemplateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000057 /* SummaryTemplateSettingsView.swift */; };
+		100000000000000000000059 /* SummaryTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000058 /* SummaryTemplate.swift */; };
+		10000000000000000000005A /* SummaryTemplateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000059 /* SummaryTemplateStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -237,6 +240,9 @@
 		110000000000000000000054 /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
 		110000000000000000000055 /* AnthropicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
 		110000000000000000000056 /* KeychainAPIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainAPIKeyStore.swift; sourceTree = "<group>"; };
+		110000000000000000000057 /* SummaryTemplateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplateSettingsView.swift; sourceTree = "<group>"; };
+		110000000000000000000058 /* SummaryTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplate.swift; sourceTree = "<group>"; };
+		110000000000000000000059 /* SummaryTemplateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryTemplateStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -298,6 +304,7 @@
 				11000000000000000000004E /* SessionReadingView.swift */,
 				11000000000000000000004F /* ScribeInterfaceStyle.swift */,
 				110000000000000000000050 /* ProviderSettingsView.swift */,
+				110000000000000000000057 /* SummaryTemplateSettingsView.swift */,
 				11000000000000000000004B /* GlobalHotKeyMonitor.swift */,
 				110000000000000000000045 /* RecordingWorkspaceView.swift */,
 				110000000000000000000010 /* MeetingRecorderViewModel.swift */,
@@ -429,6 +436,8 @@
 				11000000000000000000004A /* ScribeShellPresentation.swift */,
 				11000000000000000000004C /* SessionLibraryPresentation.swift */,
 				11000000000000000000004D /* SessionReadingPresentation.swift */,
+				110000000000000000000058 /* SummaryTemplate.swift */,
+				110000000000000000000059 /* SummaryTemplateStore.swift */,
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
@@ -625,6 +634,7 @@
 				10000000000000000000004F /* SessionReadingView.swift in Sources */,
 				100000000000000000000050 /* ScribeInterfaceStyle.swift in Sources */,
 				100000000000000000000051 /* ProviderSettingsView.swift in Sources */,
+				100000000000000000000058 /* SummaryTemplateSettingsView.swift in Sources */,
 				10000000000000000000004C /* GlobalHotKeyMonitor.swift in Sources */,
 				100000000000000000000046 /* RecordingWorkspaceView.swift in Sources */,
 				10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */,
@@ -651,6 +661,8 @@
 				100000000000000000000055 /* OpenAICompatibleProvider.swift in Sources */,
 				100000000000000000000056 /* AnthropicProvider.swift in Sources */,
 				100000000000000000000057 /* KeychainAPIKeyStore.swift in Sources */,
+				100000000000000000000059 /* SummaryTemplate.swift in Sources */,
+				10000000000000000000005A /* SummaryTemplateStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

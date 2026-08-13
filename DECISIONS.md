@@ -1315,3 +1315,23 @@ credentials and sanitized errors prevent ordinary serialization, logs, and
 crash diagnostics from copying secrets. Model discovery validates the endpoint
 and authorization without sending transcript content or consuming completion
 tokens.
+
+## 2026-08-13 — Keep templates outside the rebuildable session index
+
+**Decision:** Store summary templates in a dedicated GRDB database under
+Application Support. Seed six built-ins with stable IDs using insert-if-missing
+semantics. Let users edit and duplicate built-ins, create and remove custom
+templates, and reject unknown or malformed variables during rendering. Build
+this template layer before summary generation.
+
+**Alternatives:** Put templates in the rebuildable `sessions.sqlite`; keep them
+in UserDefaults or files; overwrite built-in rows when their shipped text
+changes; hardcode prompts inside Phase 2 and replace them later; silently leave
+unknown placeholders in generated prompts.
+
+**Reasoning:** Deleting the search index is a supported repair operation, so it
+cannot own original user-written prompts. Stable insert-only defaults preserve
+edits and still let an update add a newly shipped template. Strict substitution
+makes prompt mistakes visible before any paid provider call. Implementing the
+smaller durable layer first means Phase 2 has one real prompt source and avoids
+a temporary generation path that would immediately be discarded.
