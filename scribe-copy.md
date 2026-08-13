@@ -255,6 +255,11 @@ unaffected.**
 **Couldn't save transcript files for “interview.mov”. The imported original and
 audio.wav are unaffected.**
 
+### Live transcript files couldn't be saved
+
+**Live transcript files couldn't be saved. The recording is unaffected and can
+be transcribed again.**
+
 The designed sessions-library drop target and its drag hint belong to the views
 order. Phase 2 may accept a file dropped anywhere on the placeholder window,
 but that temporary target must not determine the later library layout.

@@ -135,6 +135,9 @@ Milestone 3C completes local live transcription:
 - integration tests exercise raw transport → per-source VAD → disk window
   spool → live ASR, plus a virtual one-hour/two-source run whose peak in-flight
   audio is one bounded window.
+- successful live completion writes the same current Markdown, JSON, and SRT
+  exports and immutable transcription-history revision as batch transcription;
+  captured audio remains intact if those exports cannot be saved.
 
 FluidAudio's existing Parakeet adapter is window-based rather than token
 streaming. Consequently, short phrases finalize after their speech boundary,

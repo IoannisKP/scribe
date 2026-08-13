@@ -1069,3 +1069,20 @@ to reach the capture actor. A cold recording could therefore repeat the costly
 IOProc registration instead of waiting. Single-flight preparation removes that
 race without making the interface unresponsive, and explicit manifest data is
 stable enough for users, diagnostics, and future regression tests.
+
+## 2026-08-13 — Persist completed live transcription through the batch writer
+
+**Decision:** On successful live-pipeline drain, require every row to be final
+and pass its segments to `TranscriptArtifactWriter`. Live and batch therefore
+replace the same three current exports, create the same immutable history
+revision, and register the same manifest artifacts. A successful zero-row run
+is still written; failed or partial output is not recorded as completed.
+
+**Alternatives:** Keep live rows only in the view model; add a separate live
+exporter; automatically run batch transcription after every live recording.
+
+**Reasoning:** In-memory rows vanished when recording cleanup discarded the
+Milestone 3 pipeline, because that pipeline predated session-folder storage.
+One writer prevents the durable batch and live formats from drifting. Rejecting
+partial rows avoids presenting an interrupted transcript as complete, while the
+unchanged WAV tracks preserve a safe re-transcription path.

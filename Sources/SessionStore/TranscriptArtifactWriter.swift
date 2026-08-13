@@ -8,11 +8,50 @@ public struct TranscriptArtifactWriteResult: Equatable, Sendable {
     public let revision: CaptureSessionManifest.TranscriptionRevision
 }
 
+public enum TranscriptArtifactWriterError:
+    Error,
+    Equatable,
+    LocalizedError,
+    Sendable
+{
+    case unfinishedLiveRows(count: Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .unfinishedLiveRows(count):
+            "Live transcription still has \(count) unfinished row(s), so its durable transcript was not written."
+        }
+    }
+}
+
 public struct TranscriptArtifactWriter: @unchecked Sendable {
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
+    }
+
+    /// Writes a successfully completed live transcript through the same export
+    /// path as batch transcription. Partial rows are never represented as a
+    /// completed durable revision.
+    public func write(
+        liveRows: [LiveTranscriptRow],
+        modelIdentifier: String,
+        to sessionDirectory: URL,
+        date: Date = Date()
+    ) throws -> TranscriptArtifactWriteResult {
+        let unfinishedRowCount = liveRows.filter { !$0.isFinal }.count
+        guard unfinishedRowCount == 0 else {
+            throw TranscriptArtifactWriterError.unfinishedLiveRows(
+                count: unfinishedRowCount
+            )
+        }
+        return try write(
+            segments: liveRows.map(\.segment),
+            modelIdentifier: modelIdentifier,
+            to: sessionDirectory,
+            date: date
+        )
     }
 
     public func write(
@@ -63,7 +102,27 @@ public struct TranscriptArtifactWriter: @unchecked Sendable {
                 ),
                 artifacts: relativeRevisionFiles
             )
+            let currentTranscriptArtifacts = [
+                CaptureSessionManifest.Artifact(
+                    relativePath: "transcript.md",
+                    kind: .transcriptMarkdown
+                ),
+                CaptureSessionManifest.Artifact(
+                    relativePath: "transcript.json",
+                    kind: .transcriptJSON
+                ),
+                CaptureSessionManifest.Artifact(
+                    relativePath: "transcript.srt",
+                    kind: .subtitles
+                )
+            ]
+            let currentTranscriptPaths = Set(
+                currentTranscriptArtifacts.map(\.relativePath)
+            )
             manifest = manifest.replacing(
+                artifacts: manifest.artifacts.filter {
+                    !currentTranscriptPaths.contains($0.relativePath)
+                } + currentTranscriptArtifacts,
                 transcriptionHistory: manifest.transcriptionHistory + [revision]
             )
             try manifest.write(to: sessionDirectory)
