@@ -1279,3 +1279,39 @@ session timeline preserve reading and seeking across either pipeline. Restrained
 semantic color keeps source attribution legible without turning the interface
 decorative, while appearance-specific colors retain contrast. Suspending the
 only animation prevents an idle meeting window from consuming work.
+
+## 2026-08-13 — Configure compatible intelligence providers behind two clients
+
+**Decision:** Define one streamed `IntelligenceProvider` boundary, implement one
+base-URL-configured OpenAI-compatible client and one Anthropic Messages client,
+and express Anthropic, OpenAI, DeepSeek, Groq, Ollama, and LM Studio as presets.
+Allow validated custom compatible endpoints. Keep Phase 1 independent of
+session content and summary artifacts.
+
+**Alternatives:** Implement a client per vendor; support only a fixed provider
+list; add summary generation while establishing the transport layer; route
+transcription through the cloud providers.
+
+**Reasoning:** The compatible providers share request and SSE response shapes,
+so vendor-specific clients would duplicate security and streaming behavior.
+Custom configuration prevents a provider release from becoming an app release.
+Keeping this phase content-free gives the network boundary a focused test and
+review surface; transcription remains strictly local by product decision.
+
+## 2026-08-13 — Keep provider secrets out of configuration and diagnostics
+
+**Decision:** Store every provider key as a generic-password item in the macOS
+Keychain, keyed by provider ID. Persist only endpoint metadata and selection in
+UserDefaults. Resolve a credential while constructing a request, redact its
+description, never log requests or response bodies, and expose only sanitized
+status-based failures. Test credentials with a minimal model-list request.
+
+**Alternatives:** Store keys beside provider presets; place keys in plist or
+UserDefaults; include response bodies in failures; ask for a key on every use.
+
+**Reasoning:** A custom provider must remain portable without making its secret
+portable. Keychain provides the platform security boundary, while non-Codable
+credentials and sanitized errors prevent ordinary serialization, logs, and
+crash diagnostics from copying secrets. Model discovery validates the endpoint
+and authorization without sending transcript content or consuming completion
+tokens.

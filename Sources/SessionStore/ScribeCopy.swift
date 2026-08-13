@@ -236,4 +236,52 @@ public enum ScribeCopy {
             count == 1 ? "1 file" : "\(count) files"
         }
     }
+
+    public enum IntelligenceSettings {
+        public static let title = "Summary providers"
+        public static let provider = "Provider"
+        public static let anthropic = "Anthropic"
+        public static let openAI = "OpenAI"
+        public static let deepSeek = "DeepSeek"
+        public static let groq = "Groq"
+        public static let ollama = "Ollama"
+        public static let lmStudio = "LM Studio"
+        public static let apiKey = "API key"
+        public static let apiKeyPlaceholder = "Paste API key"
+        public static let keychainHelper =
+            "Stored in your Keychain. Never written to disk or logs."
+        public static let testKey = "Test key"
+        public static let testConnection = "Test connection"
+        public static let testing = "Testing…"
+        public static let keyWorks = "Key works"
+        public static let connectionWorks = "Connection works"
+        public static let keyRejected =
+            "That key was rejected. Check it hasn't expired."
+        public static let connectionFailed =
+            "Scribe couldn't reach this provider. Check its address and that it is running."
+        public static let noKeyRequired =
+            "No API key needed. Requests stay on this Mac."
+        public static let customNoKeyRequired =
+            "This provider does not require an API key."
+        public static let keyStored = "A key is stored in your Keychain."
+        public static let removeKey = "Remove key"
+        public static let addCustomProvider = "Add custom provider"
+        public static let customProvider = "Custom provider"
+        public static let displayName = "Display name"
+        public static let baseURL = "Base URL"
+        public static let modelIdentifier = "Model identifier"
+        public static let usesAPIKey = "This provider uses an API key"
+        public static let saveProvider = "Save provider"
+        public static let removeProvider = "Remove provider"
+        public static let cancel = "Cancel"
+        public static let customProviderSaved = "Provider saved"
+        public static let configurationFailed =
+            "Scribe couldn't save this provider configuration. No API key was written to a settings file."
+        public static let missingCustomFields =
+            "Enter a display name, base URL, and model identifier."
+        public static let invalidProviderURL =
+            "Enter a valid provider base URL without credentials, a query, or a fragment."
+        public static let insecureProviderURL =
+            "Remote providers must use HTTPS. HTTP is allowed only for localhost."
+    }
 }

@@ -186,6 +186,24 @@ and Medium through one resident coordinator and transcribes the same fixture
 with each. Measured WERs are 0.0000, 0.0588, 0.0000, and 0.0000 respectively.
 Missing local models are named and skipped; tests never download implicitly.
 
+Milestone 6 Phase 1 adds summary-provider infrastructure without yet sending a
+transcript or generating a summary. `IntelligenceProvider` has two wire
+implementations: one OpenAI-compatible client configured by base URL, and one
+Anthropic Messages client. Anthropic, OpenAI, DeepSeek, Groq, Ollama, and LM
+Studio are data presets; custom entries supply a display name, base URL, model
+identifier, and optional API-key requirement. Remote custom endpoints must use
+HTTPS, while HTTP is allowed for loopback services.
+
+Provider configuration is stored separately from credentials. API keys use
+generic-password items in the macOS Keychain and are resolved only when a
+request is built. They are not Codable, never enter UserDefaults, and are
+redacted from descriptions and provider errors. Settings offers a minimal
+model-list key or connection test. A separate `ProviderEndpointProbe`
+executable exercises model listing and a tiny streaming completion against a
+real OpenAI or DeepSeek endpoint; it reads the key from its process environment
+and never prints it. Summary generation, transcript transmission, and template
+management remain outside Phase 1.
+
 ## Requirements
 
 - Apple Silicon Mac
@@ -765,5 +783,9 @@ are added; Phase C does not fabricate a temporary reader.
 ## Privacy
 
 The project contains no telemetry, analytics, crash reporter, or cloud
-transcription client. Recording and inference do not use the network. The only
-network paths are the user-initiated Parakeet and Silero model downloads.
+transcription client. Recording and transcription inference do not use the
+network. Network paths are user-initiated model downloads and explicit summary
+provider connection tests. Milestone 6 Phase 1 does not send transcript text;
+the real-endpoint probe sends only its fixed three-word test prompt. API keys
+stay in the macOS Keychain and transient authenticated request headers, never
+in settings, logs, serialized provider configuration, or error descriptions.

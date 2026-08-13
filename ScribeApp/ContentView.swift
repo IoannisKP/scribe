@@ -583,6 +583,8 @@ struct RecordingView: View {
 
                 transcriptionBox
 
+                ProviderSettingsView()
+
                 Label(
                     "Two isolated \(Int(CanonicalAudioFormat.sampleRate / 1_000)) kHz mono Int16 WAVs · Float32 processing · stored locally",
                     systemImage: "internaldrive"

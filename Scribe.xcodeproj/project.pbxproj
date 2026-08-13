@@ -87,6 +87,13 @@
 		10000000000000000000004E /* SessionReadingPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004D /* SessionReadingPresentation.swift */; };
 		10000000000000000000004F /* SessionReadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004E /* SessionReadingView.swift */; };
 		100000000000000000000050 /* ScribeInterfaceStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004F /* ScribeInterfaceStyle.swift */; };
+		100000000000000000000051 /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000050 /* ProviderSettingsView.swift */; };
+		100000000000000000000052 /* IntelligenceTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000051 /* IntelligenceTypes.swift */; };
+		100000000000000000000053 /* ProviderConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000052 /* ProviderConfiguration.swift */; };
+		100000000000000000000054 /* IntelligenceHTTPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000053 /* IntelligenceHTTPTransport.swift */; };
+		100000000000000000000055 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000054 /* OpenAICompatibleProvider.swift */; };
+		100000000000000000000056 /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000055 /* AnthropicProvider.swift */; };
+		100000000000000000000057 /* KeychainAPIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000056 /* KeychainAPIKeyStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -223,6 +230,13 @@
 		11000000000000000000004D /* SessionReadingPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReadingPresentation.swift; sourceTree = "<group>"; };
 		11000000000000000000004E /* SessionReadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReadingView.swift; sourceTree = "<group>"; };
 		11000000000000000000004F /* ScribeInterfaceStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeInterfaceStyle.swift; sourceTree = "<group>"; };
+		110000000000000000000050 /* ProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsView.swift; sourceTree = "<group>"; };
+		110000000000000000000051 /* IntelligenceTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelligenceTypes.swift; sourceTree = "<group>"; };
+		110000000000000000000052 /* ProviderConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfiguration.swift; sourceTree = "<group>"; };
+		110000000000000000000053 /* IntelligenceHTTPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelligenceHTTPTransport.swift; sourceTree = "<group>"; };
+		110000000000000000000054 /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
+		110000000000000000000055 /* AnthropicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
+		110000000000000000000056 /* KeychainAPIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainAPIKeyStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -283,6 +297,7 @@
 				110000000000000000000048 /* ScribeShellView.swift */,
 				11000000000000000000004E /* SessionReadingView.swift */,
 				11000000000000000000004F /* ScribeInterfaceStyle.swift */,
+				110000000000000000000050 /* ProviderSettingsView.swift */,
 				11000000000000000000004B /* GlobalHotKeyMonitor.swift */,
 				110000000000000000000045 /* RecordingWorkspaceView.swift */,
 				110000000000000000000010 /* MeetingRecorderViewModel.swift */,
@@ -299,6 +314,7 @@
 				150000000000000000000009 /* ModelManager */,
 				150000000000000000000008 /* SpeechPipeline */,
 				15000000000000000000000A /* SessionStore */,
+				15000000000000000000000C /* Intelligence */,
 				150000000000000000000005 /* CAudioRingBuffer */,
 			);
 			path = Sources;
@@ -428,6 +444,19 @@
 				110000000000000000000042 /* LocalSigning.xcconfig.example */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		15000000000000000000000C /* Intelligence */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000051 /* IntelligenceTypes.swift */,
+				110000000000000000000052 /* ProviderConfiguration.swift */,
+				110000000000000000000053 /* IntelligenceHTTPTransport.swift */,
+				110000000000000000000054 /* OpenAICompatibleProvider.swift */,
+				110000000000000000000055 /* AnthropicProvider.swift */,
+				110000000000000000000056 /* KeychainAPIKeyStore.swift */,
+			);
+			path = Intelligence;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -595,6 +624,7 @@
 				100000000000000000000049 /* ScribeShellView.swift in Sources */,
 				10000000000000000000004F /* SessionReadingView.swift in Sources */,
 				100000000000000000000050 /* ScribeInterfaceStyle.swift in Sources */,
+				100000000000000000000051 /* ProviderSettingsView.swift in Sources */,
 				10000000000000000000004C /* GlobalHotKeyMonitor.swift in Sources */,
 				100000000000000000000046 /* RecordingWorkspaceView.swift in Sources */,
 				10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */,
@@ -615,6 +645,12 @@
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
 				100000000000000000000043 /* SessionMediaImporter.swift in Sources */,
+				100000000000000000000052 /* IntelligenceTypes.swift in Sources */,
+				100000000000000000000053 /* ProviderConfiguration.swift in Sources */,
+				100000000000000000000054 /* IntelligenceHTTPTransport.swift in Sources */,
+				100000000000000000000055 /* OpenAICompatibleProvider.swift in Sources */,
+				100000000000000000000056 /* AnthropicProvider.swift in Sources */,
+				100000000000000000000057 /* KeychainAPIKeyStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
