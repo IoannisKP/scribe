@@ -640,8 +640,13 @@ before stopping so it does not consume the shortcut at other times. The key
 event's mach host time is mapped from the earliest first-sample host timestamp
 to a canonical sample offset. `session.json` version 4 stores the pin UUID,
 sample offset, optional label, and creation date. A shared manifest actor
-serializes pin and final track-offset mutations so an end-of-recording race
-cannot overwrite either value.
+serializes pin, final track-offset, duplicate-ID, and reconciled-artifact
+mutations. Every such mutation reloads the latest manifest inside the actor
+before writing, so a filesystem reconciliation that began before a pin cannot
+restore its stale snapshot over that pin. A missing first-sample timestamp is a
+valid unavailable track offset and does not block the actor. Pin success appears
+only after the atomic manifest write returns; a write failure appears in the
+same sidebar status position instead of showing a success confirmation.
 
 ## Session folders and shell index projections
 

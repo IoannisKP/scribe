@@ -795,4 +795,26 @@ public actor CaptureSessionManifestStore {
         )
         try manifest.write(to: sessionDirectory)
     }
+
+    public func replaceArtifacts(
+        _ artifacts: [CaptureSessionManifest.Artifact],
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        ).replacing(artifacts: artifacts)
+        try manifest.write(to: sessionDirectory)
+        return manifest
+    }
+
+    public func replaceSessionID(
+        _ sessionID: UUID,
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest {
+        let manifest = try CaptureSessionManifest.load(
+            from: sessionDirectory
+        ).replacing(sessionID: sessionID)
+        try manifest.write(to: sessionDirectory)
+        return manifest
+    }
 }

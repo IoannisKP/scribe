@@ -1,4 +1,3 @@
-import AudioCapture
 import SwiftUI
 
 extension Notification.Name {
@@ -517,14 +516,12 @@ private struct SidebarRecordingControl: View {
                     color: .purple
                 )
 
-                if let pin = recorder.recentRecordingPin {
-                    Text(
-                        ScribeCopy.Recording.pinAdded(
-                            timecode: pinTimecode(pin.sampleOffset)
-                        )
-                    )
+                if let status = recorder.recordingPinStatus {
+                    Text(status.message)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(
+                        status.isFailure ? Color.red : Color.accentColor
+                    )
                     .transition(.opacity)
                 } else if let notice = recorder.sidebarRecordingNotice {
                     Text(notice.message)
@@ -575,16 +572,6 @@ private struct SidebarRecordingControl: View {
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 
-    private func pinTimecode(_ sampleOffset: Int64) -> String {
-        let seconds = max(
-            0,
-            Int(
-                Double(sampleOffset)
-                    / CanonicalAudioFormat.sampleRate
-            )
-        )
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-    }
 }
 
 private struct SidebarSpeechLevelMeter: View {

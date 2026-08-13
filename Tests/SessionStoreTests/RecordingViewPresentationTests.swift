@@ -266,6 +266,25 @@ final class RecordingViewPresentationTests: XCTestCase {
         )
     }
 
+    func testPinFeedbackDistinguishesDurableSuccessFromFailure() {
+        XCTAssertEqual(
+            RecordingPinFeedback.saved(sampleOffset: 202_080).message,
+            ScribeCopy.Recording.pinAdded(timecode: "00:12")
+        )
+        XCTAssertFalse(
+            RecordingPinFeedback.saved(sampleOffset: 202_080).isFailure
+        )
+        XCTAssertEqual(
+            RecordingPinFeedback.failed(
+                message: ScribeCopy.Recording.pinSaveFailed
+            ).message,
+            ScribeCopy.Recording.pinSaveFailed
+        )
+        XCTAssertTrue(
+            RecordingPinFeedback.failed(message: "failed").isFailure
+        )
+    }
+
     func testTranscriptPresentationCacheDoesNotRecomputeForNotesRedraws() {
         let liveRows = (0..<120).map { index in
             liveRow(

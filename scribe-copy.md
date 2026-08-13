@@ -138,7 +138,10 @@ One session is rendered as **1 session**.
   still works.**
 
 The pin action has no prompt and no generated label. A label remains optional
-data that can be added later without changing the captured sample offset.
+data that can be added later without changing the captured sample offset. Show
+**Pin added** only after the atomic `session.json` write succeeds. A failed
+write uses the failure copy above in the same sidebar status position; never
+acknowledge the keypress itself as a saved pin.
 
 ### Preparing system audio
 

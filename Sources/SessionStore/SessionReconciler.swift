@@ -105,8 +105,11 @@ public actor SessionReconciler {
             var manifest = candidate.manifest
             if claimedIDs.contains(manifest.sessionID) {
                 let oldID = manifest.sessionID
-                manifest = manifest.replacing(sessionID: UUID())
-                try manifest.write(to: candidate.directory)
+                manifest = try await CaptureSessionManifestStore.shared
+                    .replaceSessionID(
+                        UUID(),
+                        in: candidate.directory
+                    )
                 notices.append(.init(
                     kind: .duplicateCopied,
                     directory: candidate.directory,
@@ -121,10 +124,11 @@ public actor SessionReconciler {
                 manifest: manifest
             )
             if inventory.manifestArtifacts != manifest.artifacts {
-                manifest = manifest.replacing(
-                    artifacts: inventory.manifestArtifacts
-                )
-                try manifest.write(to: candidate.directory)
+                manifest = try await CaptureSessionManifestStore.shared
+                    .replaceArtifacts(
+                        inventory.manifestArtifacts,
+                        in: candidate.directory
+                    )
             }
             try await index.replace(
                 session: IndexedSession(

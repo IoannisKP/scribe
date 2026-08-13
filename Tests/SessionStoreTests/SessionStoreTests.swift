@@ -55,6 +55,94 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testHeaderOnlySystemTrackKeepsPinsThroughOffsetAndReconciliation()
+        async throws
+    {
+        try await withTemporaryDirectory { root in
+            let library = root.appendingPathComponent(
+                "Library",
+                isDirectory: true
+            )
+            let created = try SessionFolderManager().createLiveSession(
+                in: library,
+                title: "Silent remote"
+            )
+            let microphoneURL = created.directory.appendingPathComponent(
+                "microphone.wav"
+            )
+            let systemURL = created.directory.appendingPathComponent(
+                "system.wav"
+            )
+            let microphoneWriter = try Int16WAVWriter(url: microphoneURL)
+            try await microphoneWriter.append(
+                Array(repeating: 0.25, count: 16_000)
+            )
+            try await microphoneWriter.finish()
+            let systemWriter = try Int16WAVWriter(url: systemURL)
+            try await systemWriter.finish()
+            XCTAssertEqual(
+                try systemURL.resourceValues(forKeys: [.fileSizeKey])
+                    .fileSize,
+                44
+            )
+
+            // Reproduce the old race: reconciliation held this snapshot while
+            // pins and final offsets were committed by the recording path.
+            let staleReconciliationSnapshot = try CaptureSessionManifest.load(
+                from: created.directory
+            )
+            let pins = [
+                CaptureSessionManifest.Pin(sampleOffset: 3_180),
+                CaptureSessionManifest.Pin(sampleOffset: 5_760),
+                CaptureSessionManifest.Pin(sampleOffset: 9_410)
+            ]
+            for pin in pins {
+                try await CaptureSessionManifestStore.shared.appendPin(
+                    pin,
+                    in: created.directory
+                )
+            }
+            try await CaptureSessionManifestStore.shared.replaceTrackOffsets(
+                microphone: 602,
+                system: nil,
+                in: created.directory
+            )
+            let staleArtifacts = staleReconciliationSnapshot.artifacts + [
+                CaptureSessionManifest.Artifact(
+                    relativePath: "notes.md",
+                    kind: .notes
+                )
+            ]
+            _ = try await CaptureSessionManifestStore.shared.replaceArtifacts(
+                staleArtifacts,
+                in: created.directory
+            )
+
+            let index = try SessionIndex(
+                databaseURL: root.appendingPathComponent("Index/index.sqlite")
+            )
+            _ = try await SessionReconciler(index: index).reconcile(
+                availability: .available(library)
+            )
+            let manifest = try CaptureSessionManifest.load(
+                from: created.directory
+            )
+
+            XCTAssertEqual(manifest.pins.map(\.id), pins.map(\.id))
+            XCTAssertEqual(
+                manifest.track(for: .microphone)?.startSampleOffset,
+                602
+            )
+            XCTAssertNil(
+                manifest.track(for: .system)?.startSampleOffset
+            )
+            XCTAssertEqual(
+                manifest.track(for: .system)?.timingPrecision,
+                .unavailable
+            )
+        }
+    }
+
     func testManualFoldersMapToDirectoriesAndNestedSessionsReconcile()
         async throws
     {
