@@ -1,0 +1,3 @@
+// Shared signing hook. Developer-specific values belong in the optional,
+// gitignored file beside this one.
+#include? "LocalSigning.xcconfig"

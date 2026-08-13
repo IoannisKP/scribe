@@ -195,6 +195,8 @@
 		11000000000000000000003E /* SessionLibraryMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryMonitor.swift; sourceTree = "<group>"; };
 		11000000000000000000003F /* ImportedMediaConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedMediaConverter.swift; sourceTree = "<group>"; };
 		110000000000000000000040 /* SessionMediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMediaImporter.swift; sourceTree = "<group>"; };
+		110000000000000000000041 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		110000000000000000000042 /* LocalSigning.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = LocalSigning.xcconfig.example; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -240,6 +242,7 @@
 		150000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				15000000000000000000000B /* Config */,
 				150000000000000000000002 /* ScribeApp */,
 				150000000000000000000003 /* Sources */,
 				150000000000000000000007 /* Products */,
@@ -377,6 +380,15 @@
 				110000000000000000000040 /* SessionMediaImporter.swift */,
 			);
 			path = SessionStore;
+			sourceTree = "<group>";
+		};
+		15000000000000000000000B /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000041 /* Signing.xcconfig */,
+				110000000000000000000042 /* LocalSigning.xcconfig.example */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -626,6 +638,7 @@
 /* Begin XCBuildConfiguration section */
 		240000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 110000000000000000000041 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ARCHS = arm64;
@@ -684,6 +697,7 @@
 		};
 		240000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 110000000000000000000041 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ARCHS = arm64;
