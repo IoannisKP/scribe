@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -144,6 +144,45 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         }
     }
 
+    public enum SpeakerNameAssignment: String, Codable, Sendable {
+        case machineAssigned
+        case userAssigned
+    }
+
+    public struct SpeakerIdentity: Codable, Equatable, Identifiable, Sendable {
+        public let id: String
+        public let displayName: String?
+        public let source: AudioSource
+        public let nameAssignment: SpeakerNameAssignment?
+
+        public init(
+            id: String,
+            displayName: String? = nil,
+            source: AudioSource,
+            nameAssignment: SpeakerNameAssignment? = nil
+        ) {
+            self.id = id
+            self.displayName = displayName
+            self.source = source
+            self.nameAssignment = nameAssignment
+        }
+
+        public func renaming(
+            to displayName: String?,
+            assignment: SpeakerNameAssignment
+        ) -> SpeakerIdentity {
+            let cleanName = displayName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedName = cleanName?.isEmpty == false ? cleanName : nil
+            return SpeakerIdentity(
+                id: id,
+                displayName: resolvedName,
+                source: source,
+                nameAssignment: resolvedName == nil ? nil : assignment
+            )
+        }
+    }
+
     public let version: Int
     public let sessionID: UUID
     public let title: String
@@ -152,6 +191,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let sampleRate: Double
     public let channelCount: UInt32
     public let tracks: [Track]
+    public let speakerIdentities: [SpeakerIdentity]
     public let artifacts: [Artifact]
     public let transcriptionHistory: [TranscriptionRevision]
     public let originalFilename: String?
@@ -169,6 +209,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         sampleRate: Double = CanonicalAudioFormat.sampleRate,
         channelCount: UInt32 = CanonicalAudioFormat.channelCount,
         tracks: [Track],
+        speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact] = [],
         transcriptionHistory: [TranscriptionRevision] = [],
         originalFilename: String? = nil,
@@ -185,6 +226,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         self.sampleRate = sampleRate
         self.channelCount = channelCount
         self.tracks = tracks
+        self.speakerIdentities = speakerIdentities
+            ?? Self.defaultSpeakerIdentities(for: tracks)
         self.artifacts = artifacts
         self.transcriptionHistory = transcriptionHistory
         self.originalFilename = originalFilename
@@ -289,6 +332,44 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         tracks.first { $0.source == source }
     }
 
+    public func speakerIdentity(
+        identifiedBy id: String
+    ) -> SpeakerIdentity? {
+        speakerIdentities.first { $0.id == id }
+    }
+
+    public func speakerIdentities(
+        for source: AudioSource
+    ) -> [SpeakerIdentity] {
+        speakerIdentities.filter { $0.source == source }
+    }
+
+    public func soleSpeakerIdentity(
+        for source: AudioSource
+    ) -> SpeakerIdentity? {
+        let matches = speakerIdentities(for: source)
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    public func renamingSpeaker(
+        identifiedBy id: String,
+        to displayName: String?,
+        assignment: SpeakerNameAssignment = .userAssigned
+    ) throws -> CaptureSessionManifest {
+        guard let index = speakerIdentities.firstIndex(where: { $0.id == id })
+        else {
+            throw CaptureSessionManifestError.speakerNotFound(id)
+        }
+        var updated = speakerIdentities
+        updated[index] = updated[index].renaming(
+            to: displayName,
+            assignment: assignment
+        )
+        let manifest = replacing(speakerIdentities: updated)
+        try manifest.validate()
+        return manifest
+    }
+
     public func replacingTrackOffsets(
         microphone: Int64?,
         system: Int64?
@@ -328,6 +409,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public func replacing(
         sessionID: UUID? = nil,
         tracks: [Track]? = nil,
+        speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact]? = nil,
         transcriptionHistory: [TranscriptionRevision]? = nil,
         systemAudioStartupStageTimings:
@@ -343,6 +425,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             sampleRate: sampleRate,
             channelCount: channelCount,
             tracks: tracks ?? self.tracks,
+            speakerIdentities:
+                speakerIdentities ?? self.speakerIdentities,
             artifacts: artifacts ?? self.artifacts,
             transcriptionHistory:
                 transcriptionHistory ?? self.transcriptionHistory,
@@ -358,7 +442,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard version == 1 || version == Self.currentVersion else {
+        guard (1...Self.currentVersion).contains(version) else {
             throw CaptureSessionManifestError.unsupportedVersion(version)
         }
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -388,6 +472,32 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         else {
             throw CaptureSessionManifestError.invalidTrackSet
         }
+        let speakerIDs = speakerIdentities.map(\.id)
+        guard
+            !speakerIdentities.isEmpty,
+            Set(speakerIDs).count == speakerIDs.count,
+            speakerIdentities.allSatisfy({
+                !$0.id.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            }),
+            Set(speakerIdentities.map(\.source)) == expectedSources
+        else {
+            throw CaptureSessionManifestError.invalidSpeakerSet
+        }
+        for speaker in speakerIdentities {
+            let cleanName = speaker.displayName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard
+                (cleanName == nil && speaker.nameAssignment == nil)
+                    || (cleanName?.isEmpty == false
+                        && speaker.nameAssignment != nil)
+            else {
+                throw CaptureSessionManifestError.invalidSpeakerName(
+                    speaker.id
+                )
+            }
+        }
 
         for track in tracks {
             if let offset = track.startSampleOffset, offset < 0 {
@@ -416,6 +526,17 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             !relativePath.isEmpty
         else {
             throw CaptureSessionManifestError.invalidRelativePath(relativePath)
+        }
+    }
+
+    private static func defaultSpeakerIdentities(
+        for tracks: [Track]
+    ) -> [SpeakerIdentity] {
+        tracks.map { track in
+            SpeakerIdentity(
+                id: "source.\(track.source.rawValue)",
+                source: track.source
+            )
         }
     }
 
@@ -467,6 +588,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case sampleRate
         case channelCount
         case tracks
+        case speakerIdentities
         case artifacts
         case transcriptionHistory
         case originalFilename
@@ -489,6 +611,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         sampleRate = try container.decode(Double.self, forKey: .sampleRate)
         channelCount = try container.decode(UInt32.self, forKey: .channelCount)
         tracks = try container.decode([Track].self, forKey: .tracks)
+        speakerIdentities = try container.decodeIfPresent(
+            [SpeakerIdentity].self,
+            forKey: .speakerIdentities
+        ) ?? Self.defaultSpeakerIdentities(for: tracks)
         artifacts = try container.decodeIfPresent(
             [Artifact].self,
             forKey: .artifacts
@@ -525,6 +651,9 @@ public enum CaptureSessionManifestError:
     case unsupportedVersion(Int)
     case unsupportedFormat(sampleRate: Double, channelCount: UInt32)
     case invalidTrackSet
+    case invalidSpeakerSet
+    case invalidSpeakerName(String)
+    case speakerNotFound(String)
     case invalidTitle
     case invalidStartTime(source: AudioSource, startTime: TimeInterval)
     case invalidRelativePath(String)
@@ -537,6 +666,12 @@ public enum CaptureSessionManifestError:
             "Session metadata describes unsupported audio: \(sampleRate) Hz, \(channelCount) channels."
         case .invalidTrackSet:
             "Live sessions need microphone and system tracks; imported sessions need one imported-audio track."
+        case .invalidSpeakerSet:
+            "Session metadata needs unique speaker identities covering every audio source."
+        case let .invalidSpeakerName(id):
+            "Speaker \(id) has an invalid display-name assignment."
+        case let .speakerNotFound(id):
+            "Session metadata does not contain speaker \(id)."
         case .invalidTitle:
             "Session metadata must contain a title."
         case let .invalidStartTime(source, startTime):

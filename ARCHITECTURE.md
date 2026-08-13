@@ -235,6 +235,26 @@ revision under `Transcriptions`, and updates both the manifest artifact list and
 revision; failed or partial live output is not presented as a completed durable
 transcript, and the captured audio remains available for batch re-transcription.
 
+## Speaker identity and paragraph boundaries
+
+Speaker identity belongs to `session.json`, not to a particular transcription
+revision. A stable string ID, source, optional display name, and name-assignment
+provenance form the registry. Old manifests derive deterministic source IDs while
+loading, and the registry permits more than one identity per source so later
+diarization does not require a storage migration. A rename atomically changes
+only session metadata; subsequent renders resolve the same transcript speaker ID
+through the updated registry.
+
+`TranscriptParagrapher` is the single paragraph-boundary implementation for
+`transcript.md` and the live and reading views. It first sorts segments and word
+timings on the absolute session timeline. A sentence ending followed by a pause
+greater than 400 ms ends a paragraph. If a paragraph would exceed 45 seconds, it
+ends at the latest sentence ending in that span, or at the largest word gap when
+no sentence ending exists. Source and speaker changes always flush the current
+paragraph. Untimed segments, or timed words that cannot faithfully reconstruct
+the engine's text, pass through unchanged; display structure must never alter
+the durable transcript wording.
+
 ## Realtime ring buffer
 
 Swift does not yet provide a deployment-compatible standard atomic primitive

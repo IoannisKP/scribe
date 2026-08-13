@@ -377,8 +377,15 @@ user-selected folder retained through a security-scoped bookmark:
 ```
 
 `session.json` contains the stable UUID, title, creation date, source type,
-canonical format, relative track paths, artifact inventory, and transcription
-history. New live tracks store their relative starts as integer 16 kHz sample
+canonical format, relative track paths, speaker identities, artifact inventory,
+and transcription history. Speaker IDs are stable session metadata independent
+of any transcript revision. Each legacy or new single-speaker source receives a
+deterministic `source.<source>` identity; the registry also permits multiple
+speakers per source and records whether a display name was machine- or
+user-assigned. Renaming a speaker updates the manifest without rewriting audio
+or immutable transcript history.
+
+New live tracks store their relative starts as integer 16 kHz sample
 offsets derived from their first captured audio timestamps. The microphone uses
 `AVAudioTime.hostTime`; the system IOProc uses `inInputTime.mHostTime`, which
 describes the first acquired frame rather than the IO thread's wake time. The
@@ -412,6 +419,14 @@ bounds, overlap trimming, row ordering, or future seek positions are derived.
 Every successful transcription writes the current Markdown, JSON, and SRT
 artifacts and an immutable model/date revision under `Transcriptions`, so
 re-transcription never destroys the earlier durable transcript.
+
+The shared transcript paragrapher powers durable Markdown now and both transcript
+views in Milestone 5B. It breaks after sentence-ending words followed by a pause
+strictly longer than 400 ms, forces a boundary at the latest sentence ending once
+a paragraph would exceed 45 seconds, and otherwise uses the largest word gap in
+that span. A source or speaker change is always a hard boundary. If word timings
+are absent or cannot reproduce the provider text safely, the original segment is
+kept intact so paragraphing cannot lose or rewrite transcript content.
 
 Audio and video files can be imported through **File → Import audio or video…**
 or Command-O. The placeholder window also accepts a file drop through one root

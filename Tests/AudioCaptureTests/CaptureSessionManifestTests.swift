@@ -88,6 +88,110 @@ final class CaptureSessionManifestTests: XCTestCase {
         XCTAssertEqual(manifest.originalFilename, "Interview.mov")
         XCTAssertEqual(manifest.originalFormat, "mov")
         XCTAssertEqual(manifest.artifacts.map(\.kind), [.originalImport, .audio])
+        XCTAssertEqual(manifest.speakerIdentities.count, 1)
+        XCTAssertEqual(manifest.speakerIdentities[0].id, "source.imported")
+        XCTAssertEqual(manifest.speakerIdentities[0].source, .imported)
+        XCTAssertNil(manifest.speakerIdentities[0].displayName)
+        XCTAssertNil(manifest.speakerIdentities[0].nameAssignment)
+    }
+
+    func testLiveManifestStartsWithOneUnnamedSpeakerPerSource() {
+        let manifest = CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Meeting",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+
+        XCTAssertEqual(
+            manifest.speakerIdentities.map(\.id),
+            ["source.microphone", "source.system"]
+        )
+        XCTAssertEqual(
+            manifest.speakerIdentities.map(\.source),
+            [.microphone, .system]
+        )
+        XCTAssertTrue(manifest.speakerIdentities.allSatisfy {
+            $0.displayName == nil && $0.nameAssignment == nil
+        })
+    }
+
+    func testArbitrarySpeakerCountRoundTripsWithAssignmentProvenance()
+        throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let base = CaptureSessionManifest.pendingDualTrack(
+            sessionID: UUID(),
+            title: "Group",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+        let speakers = [
+            CaptureSessionManifest.SpeakerIdentity(
+                id: "local",
+                displayName: "Ioannis",
+                source: .microphone,
+                nameAssignment: .userAssigned
+            ),
+            CaptureSessionManifest.SpeakerIdentity(
+                id: "remote-1",
+                displayName: "Speaker 1",
+                source: .system,
+                nameAssignment: .machineAssigned
+            ),
+            CaptureSessionManifest.SpeakerIdentity(
+                id: "remote-2",
+                displayName: "Maria",
+                source: .system,
+                nameAssignment: .userAssigned
+            )
+        ]
+        let manifest = base.replacing(speakerIdentities: speakers)
+
+        try manifest.write(to: directory)
+        let decoded = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(decoded.speakerIdentities, speakers)
+        XCTAssertEqual(decoded.version, CaptureSessionManifest.currentVersion)
+    }
+
+    func testVersionTwoManifestDerivesStableSourceSpeakers() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let json = """
+            {
+              "version": 2,
+              "title": "Existing",
+              "createdAt": "2026-08-13T07:00:00Z",
+              "source": "liveCapture",
+              "sampleRate": 16000,
+              "channelCount": 1,
+              "tracks": [
+                {"source":"microphone","relativePath":"microphone.wav","startSampleOffset":0,"timingPrecision":"sampleAccurate"},
+                {"source":"system","relativePath":"system.wav","startSampleOffset":0,"timingPrecision":"sampleAccurate"}
+              ]
+            }
+            """
+        try Data(json.utf8).write(
+            to: directory.appendingPathComponent(
+                CaptureSessionManifest.fileName
+            )
+        )
+
+        let first = try CaptureSessionManifest.load(from: directory)
+        let second = try CaptureSessionManifest.load(from: directory)
+
+        XCTAssertEqual(first.version, 2)
+        XCTAssertEqual(
+            first.speakerIdentities.map(\.id),
+            ["source.microphone", "source.system"]
+        )
+        XCTAssertEqual(first.speakerIdentities, second.speakerIdentities)
     }
 
     func testReadsLegacyStartTimeAsEstimatedCanonicalSamples() throws {

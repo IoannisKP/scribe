@@ -74,6 +74,8 @@
 		100000000000000000000041 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 510000000000000000000003 /* GRDB */; };
 		100000000000000000000042 /* ImportedMediaConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000003F /* ImportedMediaConverter.swift */; };
 		100000000000000000000043 /* SessionMediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000040 /* SessionMediaImporter.swift */; };
+		100000000000000000000044 /* SpeakerIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000043 /* SpeakerIdentityStore.swift */; };
+		100000000000000000000045 /* TranscriptParagrapher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000044 /* TranscriptParagrapher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -197,6 +199,8 @@
 		110000000000000000000040 /* SessionMediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMediaImporter.swift; sourceTree = "<group>"; };
 		110000000000000000000041 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		110000000000000000000042 /* LocalSigning.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = LocalSigning.xcconfig.example; sourceTree = "<group>"; };
+		110000000000000000000043 /* SpeakerIdentityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerIdentityStore.swift; sourceTree = "<group>"; };
+		110000000000000000000044 /* TranscriptParagrapher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptParagrapher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -374,6 +378,8 @@
 				110000000000000000000039 /* SessionArtifactPolicy.swift */,
 				11000000000000000000003A /* SessionIndex.swift */,
 				11000000000000000000003B /* SessionReconciler.swift */,
+				110000000000000000000043 /* SpeakerIdentityStore.swift */,
+				110000000000000000000044 /* TranscriptParagrapher.swift */,
 				11000000000000000000003C /* TranscriptArtifactWriter.swift */,
 				11000000000000000000003D /* LegacySessionMigrator.swift */,
 				11000000000000000000003E /* SessionLibraryMonitor.swift */,
@@ -559,6 +565,8 @@
 				10000000000000000000003B /* SessionArtifactPolicy.swift in Sources */,
 				10000000000000000000003C /* SessionIndex.swift in Sources */,
 				10000000000000000000003D /* SessionReconciler.swift in Sources */,
+				100000000000000000000044 /* SpeakerIdentityStore.swift in Sources */,
+				100000000000000000000045 /* TranscriptParagrapher.swift in Sources */,
 				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
