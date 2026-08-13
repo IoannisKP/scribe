@@ -2125,6 +2125,7 @@ final class MeetingRecorderViewModel: ObservableObject {
         }
 
         var failures: [String] = []
+        var rowsReadyForPersistence: [LiveTranscriptRow]?
         let stateBeforeFinish = await liveTransport.state
         do {
             try await liveTransport.finishProducing()
@@ -2140,10 +2141,12 @@ final class MeetingRecorderViewModel: ObservableObject {
             }
 
             if let liveTranscriptionPipeline {
+                var finishFailureMessage: String?
                 do {
                     try await liveTranscriptionPipeline
                         .waitUntilFinished()
                 } catch {
+                    finishFailureMessage = error.localizedDescription
                     failures.append(error.localizedDescription)
                 }
                 liveTranscriptRows =
@@ -2154,7 +2157,10 @@ final class MeetingRecorderViewModel: ObservableObject {
                     LiveTranscriptionPipelineState
                 if case let .failed(message) = stateBeforeShutdown {
                     finalState = .failed(message: message)
+                } else if let finishFailureMessage {
+                    finalState = .failed(message: finishFailureMessage)
                 } else {
+                    rowsReadyForPersistence = liveTranscriptRows
                     finalState = .completed(
                         finalRowCount:
                             liveTranscriptRows.filter(\.isFinal).count
@@ -2193,6 +2199,29 @@ final class MeetingRecorderViewModel: ObservableObject {
             await discardLiveTransport(finalState: finalState)
         {
             failures.append(discardFailure)
+        }
+
+        if let rowsReadyForPersistence {
+            if let sessionDirectory = recordingSessionDirectory() {
+                do {
+                    _ = try transcriptArtifactWriter.write(
+                        liveRows: rowsReadyForPersistence,
+                        modelIdentifier:
+                            selectedTranscriptionModel.id.rawValue,
+                        to: sessionDirectory
+                    )
+                    transcriptSegments = rowsReadyForPersistence.map(\.segment)
+                    await reconcileSessionLibrary()
+                } catch {
+                    failures.append(
+                        "Live transcript files couldn't be saved. The recording is unaffected and can be transcribed again: \(error.localizedDescription)"
+                    )
+                }
+            } else {
+                failures.append(
+                    "Live transcript files couldn't be saved because Scribe could not locate the recording session. The recording is unaffected and can be transcribed again."
+                )
+            }
         }
         return failures.isEmpty ? nil : failures.joined(separator: " ")
     }

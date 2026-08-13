@@ -227,6 +227,14 @@ Scribe deliberately does not substitute a smaller model silently; if the
 selected model is absent or fails, capture and VAD continue and the UI states
 that live transcription is unavailable.
 
+After successful drain, final live rows pass through the same
+`TranscriptArtifactWriter` as batch results. It replaces the current
+`transcript.md`, `transcript.json`, and `transcript.srt`, creates an immutable
+revision under `Transcriptions`, and updates both the manifest artifact list and
+`transcriptionHistory`. A successful zero-row run still records that empty
+revision; failed or partial live output is not presented as a completed durable
+transcript, and the captured audio remains available for batch re-transcription.
+
 ## Realtime ring buffer
 
 Swift does not yet provide a deployment-compatible standard atomic primitive

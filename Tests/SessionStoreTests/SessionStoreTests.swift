@@ -177,6 +177,93 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testLiveTranscriptionWritesSameArtifactSetAsBatch() throws {
+        try withTemporaryDirectory { root in
+            let folderManager = SessionFolderManager()
+            let batchSession = try folderManager.createLiveSession(
+                in: root,
+                title: "Batch",
+                date: Date(timeIntervalSince1970: 1_000)
+            )
+            let liveSession = try folderManager.createLiveSession(
+                in: root,
+                title: "Live",
+                date: Date(timeIntervalSince1970: 2_000)
+            )
+            let segments = [
+                TranscriptSegment(
+                    text: "Local words",
+                    startTime: 1,
+                    endTime: 2,
+                    source: .microphone
+                ),
+                TranscriptSegment(
+                    text: "Remote words",
+                    startTime: 2.5,
+                    endTime: 3.5,
+                    source: .system
+                )
+            ]
+            let liveRows = segments.enumerated().map { index, segment in
+                LiveTranscriptRow(
+                    source: segment.source,
+                    speechSegmentIndex: UInt64(index),
+                    segment: segment,
+                    isFinal: true
+                )
+            }
+            let writer = TranscriptArtifactWriter()
+
+            let batchResult = try writer.write(
+                segments: segments,
+                modelIdentifier: "parakeet-v3",
+                to: batchSession.directory
+            )
+            let liveResult = try writer.write(
+                liveRows: liveRows,
+                modelIdentifier: "parakeet-v3",
+                to: liveSession.directory
+            )
+
+            let batchManifest = try CaptureSessionManifest.load(
+                from: batchSession.directory
+            )
+            let liveManifest = try CaptureSessionManifest.load(
+                from: liveSession.directory
+            )
+            let artifactDescription:
+                (CaptureSessionManifest.Artifact) -> String = {
+                    "\($0.relativePath):\($0.kind.rawValue)"
+                }
+            let liveArtifactDescriptions = Set(
+                liveManifest.artifacts.map(artifactDescription)
+            )
+            XCTAssertEqual(
+                Set(batchManifest.artifacts.map(artifactDescription)),
+                liveArtifactDescriptions
+            )
+            XCTAssertTrue(liveArtifactDescriptions.contains(
+                "transcript.md:transcriptMarkdown"
+            ))
+            XCTAssertTrue(liveArtifactDescriptions.contains(
+                "transcript.json:transcriptJSON"
+            ))
+            XCTAssertTrue(liveArtifactDescriptions.contains(
+                "transcript.srt:subtitles"
+            ))
+            XCTAssertEqual(batchManifest.transcriptionHistory.count, 1)
+            XCTAssertEqual(liveManifest.transcriptionHistory.count, 1)
+            XCTAssertEqual(
+                Set(liveResult.currentFiles.map(\.lastPathComponent)),
+                ["transcript.md", "transcript.json", "transcript.srt"]
+            )
+            XCTAssertEqual(
+                try batchResult.currentFiles.map { try Data(contentsOf: $0) },
+                try liveResult.currentFiles.map { try Data(contentsOf: $0) }
+            )
+        }
+    }
+
     func testImportedTranscriptOmitsLiveSourceLabels() throws {
         try withTemporaryDirectory { root in
             let created = try SessionFolderManager().createImportedSession(
