@@ -18,6 +18,7 @@
 		100000000000000000000009 /* AudioCapture.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000C /* AudioCapture.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		10000000000000000000000A /* MicrophonePermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000E /* MicrophonePermission.swift */; };
 		10000000000000000000000B /* MicrophoneCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000F /* MicrophoneCaptureService.swift */; };
+		10000000000000000000005F /* MicrophoneCaptureLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000005E /* MicrophoneCaptureLiveness.swift */; };
 		10000000000000000000000C /* MeetingRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000010 /* MeetingRecorderViewModel.swift */; };
 		10000000000000000000000D /* CanonicalAudioFileConsumer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000011 /* CanonicalAudioFileConsumer.swift */; };
 		10000000000000000000000E /* CoreAudioSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000012 /* CoreAudioSupport.swift */; };
@@ -173,6 +174,7 @@
 		11000000000000000000000D /* Scribe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scribe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		11000000000000000000000E /* MicrophonePermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophonePermission.swift; sourceTree = "<group>"; };
 		11000000000000000000000F /* MicrophoneCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneCaptureService.swift; sourceTree = "<group>"; };
+		11000000000000000000005E /* MicrophoneCaptureLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneCaptureLiveness.swift; sourceTree = "<group>"; };
 		110000000000000000000010 /* MeetingRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecorderViewModel.swift; sourceTree = "<group>"; };
 		110000000000000000000011 /* CanonicalAudioFileConsumer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonicalAudioFileConsumer.swift; sourceTree = "<group>"; };
 		110000000000000000000012 /* CoreAudioSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioSupport.swift; sourceTree = "<group>"; };
@@ -355,6 +357,7 @@
 				11000000000000000000000E /* MicrophonePermission.swift */,
 				110000000000000000000016 /* SystemAudioPermission.swift */,
 				11000000000000000000000F /* MicrophoneCaptureService.swift */,
+				11000000000000000000005E /* MicrophoneCaptureLiveness.swift */,
 				110000000000000000000014 /* SystemAudioCaptureService.swift */,
 				110000000000000000000015 /* DualTrackRecordingCoordinator.swift */,
 				110000000000000000000009 /* AudioCapture-Bridging-Header.h */,
@@ -630,6 +633,7 @@
 				10000000000000000000000A /* MicrophonePermission.swift in Sources */,
 				100000000000000000000012 /* SystemAudioPermission.swift in Sources */,
 				10000000000000000000000B /* MicrophoneCaptureService.swift in Sources */,
+				10000000000000000000005F /* MicrophoneCaptureLiveness.swift in Sources */,
 				100000000000000000000010 /* SystemAudioCaptureService.swift in Sources */,
 				100000000000000000000011 /* DualTrackRecordingCoordinator.swift in Sources */,
 				100000000000000000000007 /* CAudioRingBuffer.c in Sources */,
