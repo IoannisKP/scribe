@@ -258,6 +258,15 @@ struct SummaryGenerationConfigurationView: View {
 
     @State private var confirmation: Confirmation?
 
+    private var isConfirmingSend: Binding<Bool> {
+        Binding(
+            get: { confirmation != nil },
+            set: { isPresented in
+                if !isPresented { confirmation = nil }
+            }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(ScribeCopy.Reading.generateSummary)
@@ -289,23 +298,36 @@ struct SummaryGenerationConfigurationView: View {
         .padding(24)
         .frame(width: 520)
         .task { await model.prepare(sessionDirectory: session.directory) }
-        .alert(item: $confirmation) { confirmation in
-            Alert(
-                title: Text(ScribeCopy.SummaryGeneration.confirmTitle(
-                    provider: confirmation.plan.providerDisplayName
-                )),
-                message: Text(ScribeCopy.SummaryGeneration.confirmBody(
-                    provider: confirmation.plan.providerDisplayName,
-                    tokens: confirmation.plan.estimatedInputTokens,
-                    cost: confirmation.cost
-                )),
-                primaryButton: .default(Text(ScribeCopy.SummaryGeneration.send)) {
-                    start(confirmation.plan)
-                },
-                secondaryButton: .cancel(
-                    Text(ScribeCopy.SummaryGeneration.cancel)
+        // The deprecated Alert(primaryButton:secondaryButton:) API rendered
+        // buttons that answered the keyboard but not the mouse when presented
+        // from inside this sheet, so Send could only be triggered by Return.
+        .alert(
+            confirmation.map {
+                ScribeCopy.SummaryGeneration.confirmTitle(
+                    provider: $0.plan.providerDisplayName
                 )
-            )
+            } ?? "",
+            isPresented: isConfirmingSend,
+            presenting: confirmation
+        ) { pending in
+            Button(ScribeCopy.SummaryGeneration.send) {
+                start(pending.plan)
+                confirmation = nil
+            }
+            .keyboardShortcut(.defaultAction)
+
+            Button(
+                ScribeCopy.SummaryGeneration.cancel,
+                role: .cancel
+            ) {
+                confirmation = nil
+            }
+        } message: { pending in
+            Text(ScribeCopy.SummaryGeneration.confirmBody(
+                provider: pending.plan.providerDisplayName,
+                tokens: pending.plan.estimatedInputTokens,
+                cost: pending.cost
+            ))
         }
     }
 
