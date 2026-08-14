@@ -897,7 +897,10 @@ private struct SidebarRecordingControl: View {
                     )
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                // The one call to action while live, so it is prominent and
+                // carries the same red as the status dot and label.
+                .buttonStyle(.borderedProminent)
+                .tint(ScribePalette.recordingActive)
                 .disabled(!recorder.isRecording || recorder.isBusy)
             }
             .padding(11)
