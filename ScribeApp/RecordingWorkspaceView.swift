@@ -177,8 +177,23 @@ struct RecordingWorkspaceView: View {
 private struct RecordingNoticeView: View {
     let notice: RecordingStatusNotice
 
+    private var showsWaveform: Bool {
+        if case .waiting = notice { return true }
+        return false
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // The wait for the first text is the app's worst latency moment
+            // and the point the user most needs evidence that something is
+            // being captured. The notice disappears as soon as a row arrives,
+            // so this never competes with the transcript.
+            if showsWaveform {
+                AsciiWaveformView(columns: 72, rows: 11)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 2)
+            }
+
             Text(notice.message)
                 .font(.callout)
                 .frame(maxWidth: .infinity, alignment: .leading)

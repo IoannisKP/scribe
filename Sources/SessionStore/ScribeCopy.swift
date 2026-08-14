@@ -133,6 +133,12 @@ public enum ScribeCopy {
         public static let confirmMoveToTrash = "Move to Trash"
         public static let cancel = "Cancel"
         public static let imported = "Imported"
+
+        /// Labels a duration so a metadata row cannot read as two clock times.
+        public static func durationLabel(_ duration: String) -> String {
+            "\(duration) long"
+        }
+
         public static let notes = "Notes"
         public static let transcript = "Transcript"
         public static let summary = "Summary"
@@ -179,6 +185,14 @@ public enum ScribeCopy {
         public static let createNotes = "Create notes"
         public static let notesPlaceholder = "Type notes for this session"
         public static let noTranscript = "No transcript yet"
+
+        /// Shown when the session has a transcription revision but no
+        /// readable paragraphs. Claiming no transcript exists would
+        /// contradict the revision listed in the rail.
+        public static let unreadableTranscript = "Transcript couldn't be read"
+        public static let unreadableTranscriptDetail =
+            "This session has a transcription, but its file couldn't be read. Transcribing again rebuilds it."
+
         public static let noTranscriptDetail =
             "This session was recorded without a model installed."
         public static let transcribeNow = "Transcribe now"

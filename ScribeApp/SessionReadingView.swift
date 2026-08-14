@@ -532,9 +532,18 @@ struct SessionReadingView: View {
     ) -> some View {
         Group {
             if paragraphs.isEmpty {
+                // A session that lists a transcription revision does have a
+                // transcript, so saying it was recorded without a model
+                // contradicts the rail directly below this message.
+                let hasRevision = !document.manifest
+                    .transcriptionHistory.isEmpty
                 missingArtifact(
-                    title: ScribeCopy.Reading.noTranscript,
-                    detail: ScribeCopy.Reading.noTranscriptDetail,
+                    title: hasRevision
+                        ? ScribeCopy.Reading.unreadableTranscript
+                        : ScribeCopy.Reading.noTranscript,
+                    detail: hasRevision
+                        ? ScribeCopy.Reading.unreadableTranscriptDetail
+                        : ScribeCopy.Reading.noTranscriptDetail,
                     actionTitle: ScribeCopy.Reading.transcribeNow
                 ) {
                     recorder.retranscribeSession(session)
@@ -864,10 +873,15 @@ struct SessionReadingView: View {
 
     private var sessionMetadata: String {
         let date = session.createdAt.formatted(date: .abbreviated, time: .shortened)
-        let source = session.source == .importedFile
-            ? ScribeCopy.Library.imported
-            : ScribeCopy.Library.speakerCount(session.speakerCount)
-        return "\(date) · \(source) · \(timecode(session.duration))"
+        let duration = ScribeCopy.Library.durationLabel(
+            timecode(session.duration)
+        )
+        // The speaker count is omitted until diarization exists: it reported
+        // 2 on every live session regardless of who actually spoke.
+        guard session.source == .importedFile else {
+            return "\(date) · \(duration)"
+        }
+        return "\(date) · \(ScribeCopy.Library.imported) · \(duration)"
     }
 
     private func timecode(_ interval: TimeInterval) -> String {

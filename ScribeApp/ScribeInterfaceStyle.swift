@@ -70,53 +70,46 @@ enum ScribePalette {
     }
 }
 
-struct EmptyLibraryWaveformView: View {
-    let sessionCount: Int
+/// The drifting two-wave ASCII field, without any surrounding copy.
+///
+/// Lives on its own so it can appear both in the empty library and in the
+/// transcript rail while the first text is still being produced.
+struct AsciiWaveformView: View {
+    var columns = 104
+    var rows = 17
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.controlActiveState) private var controlActiveState
 
-    private let columns = 104
-    private let rows = 17
-
     var body: some View {
-        VStack(spacing: 18) {
-            GeometryReader { geometry in
-                TimelineView(.animation(
-                    minimumInterval: 1.0 / 30.0,
-                    paused: reduceMotion || controlActiveState != .key
-                )) { context in
-                    let time = reduceMotion
-                        ? 0
-                        : context.date.timeIntervalSinceReferenceDate * 0.3
-                    ZStack {
-                        wave(
-                            time: time,
-                            seed: 0.8,
-                            scale: 0.88,
-                            color: ScribePalette.accent,
-                            size: geometry.size
-                        )
-                        wave(
-                            time: time,
-                            seed: 4.2,
-                            scale: 0.62,
-                            color: ScribePalette.others,
-                            size: geometry.size
-                        )
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { geometry in
+            TimelineView(.animation(
+                minimumInterval: 1.0 / 30.0,
+                paused: reduceMotion || controlActiveState != .key
+            )) { context in
+                let time = reduceMotion
+                    ? 0
+                    : context.date.timeIntervalSinceReferenceDate * 0.3
+                ZStack {
+                    wave(
+                        time: time,
+                        seed: 0.8,
+                        scale: 0.88,
+                        color: ScribePalette.accent,
+                        size: geometry.size
+                    )
+                    wave(
+                        time: time,
+                        seed: 4.2,
+                        scale: 0.62,
+                        color: ScribePalette.others,
+                        size: geometry.size
+                    )
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: 820)
-            .aspectRatio(104.0 / 17.0, contentMode: .fit)
-
-            Text(ScribeCopy.Shell.sessionCount(sessionCount))
-                .font(ScribeTypography.sessionMetadata)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ScribeCopy.Shell.sessionCount(sessionCount))
+        .aspectRatio(Double(columns) / Double(rows), contentMode: .fit)
+        .accessibilityHidden(true)
     }
 
     private func wave(
@@ -172,5 +165,23 @@ struct EmptyLibraryWaveformView: View {
             lines.append(line)
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+struct EmptyLibraryWaveformView: View {
+    let sessionCount: Int
+
+    var body: some View {
+        VStack(spacing: 18) {
+            AsciiWaveformView()
+                .frame(maxWidth: 820)
+
+            Text(ScribeCopy.Shell.sessionCount(sessionCount))
+                .font(ScribeTypography.sessionMetadata)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ScribeCopy.Shell.sessionCount(sessionCount))
     }
 }

@@ -195,7 +195,6 @@ struct ScribeShellView: View {
                             ScribeCopy.Shell.newRecording,
                             systemImage: "record.circle"
                         )
-                        .foregroundStyle(ScribePalette.readyToRecord)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
@@ -222,11 +221,10 @@ struct ScribeShellView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .glassEffect(
-                    .regular
-                        .tint(ScribePalette.readyToRecord.opacity(0.16))
-                        .interactive()
-                )
+                // Neutral on purpose. Purple marks the active item and the
+                // You track, red means a recording is running; a third accent
+                // here would make the least important control the loudest.
+                .glassEffect(.regular.interactive())
             }
         }
     }
@@ -763,7 +761,10 @@ private struct SessionLibraryView: View {
         let time = session.createdAt.formatted(
             Date.FormatStyle(date: .omitted, time: .shortened)
         )
-        return "\(duration) · \(time) · \(ScribeCopy.Library.speakerCount(session.speakerCount))"
+        // Clock time first, and the duration labelled, because "0:06 · 9:26"
+        // read as two durations. The speaker count is omitted until
+        // diarization exists: it reported 2 on every live session.
+        return "\(time) · \(ScribeCopy.Library.durationLabel(duration))"
     }
 
     private func durationText(_ interval: TimeInterval) -> String {
