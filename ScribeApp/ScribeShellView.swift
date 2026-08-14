@@ -195,6 +195,7 @@ struct ScribeShellView: View {
                             ScribeCopy.Shell.newRecording,
                             systemImage: "record.circle"
                         )
+                        .foregroundStyle(ScribePalette.readyToRecord)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
@@ -221,7 +222,11 @@ struct ScribeShellView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .glassEffect(.regular.interactive())
+                .glassEffect(
+                    .regular
+                        .tint(ScribePalette.readyToRecord.opacity(0.16))
+                        .interactive()
+                )
             }
         }
     }
@@ -813,13 +818,18 @@ private struct SidebarRecordingControl: View {
                         Circle()
                             .fill(
                                 recorder.isRecording
-                                    ? Color.primary
+                                    ? ScribePalette.recordingActive
                                     : Color.secondary
                             )
                             .frame(width: 9, height: 9)
                             .accessibilityHidden(true)
                         Text(ScribeCopy.Shell.recording)
                             .font(.callout.weight(.medium))
+                            .foregroundStyle(
+                                recorder.isRecording
+                                    ? ScribePalette.recordingActive
+                                    : Color.primary
+                            )
                         Spacer()
                         TimelineView(.periodic(from: .now, by: 1)) {
                             context in
@@ -894,7 +904,11 @@ private struct SidebarRecordingControl: View {
             // glassEffect defaults to a capsule, which on this tall control
             // renders as a circular blob spilling outside the sidebar.
             .glassEffect(
-                .regular.interactive(),
+                recorder.isRecording
+                    ? .regular
+                        .tint(ScribePalette.recordingActive.opacity(0.14))
+                        .interactive()
+                    : .regular.interactive(),
                 in: .rect(cornerRadius: 12)
             )
         }

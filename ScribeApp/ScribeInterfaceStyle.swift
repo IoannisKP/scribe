@@ -21,6 +21,13 @@ enum ScribePalette {
     static let accent = adaptive(light: 0x7C5CE0, dark: 0x9A7FE8)
     static let others = adaptive(light: 0x14919B, dark: 0x32AAB2)
 
+    /// Idle: the control is ready to start a recording.
+    static let readyToRecord = adaptive(light: 0x1E8E3E, dark: 0x37C464)
+
+    /// Live: a recording is running. Deliberately the one red in the app, so
+    /// it never competes with a speaker colour for meaning.
+    static let recordingActive = adaptive(light: 0xD93025, dark: 0xF2544B)
+
     static let speakers: [Color] = [
         accent,
         others,
