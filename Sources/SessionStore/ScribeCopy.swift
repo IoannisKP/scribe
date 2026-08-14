@@ -192,6 +192,16 @@ public enum ScribeCopy {
         public static let noAudio = "No playable audio is available"
         public static let play = "Play"
         public static let pause = "Pause"
+        public static let playAll = "Play all"
+        public static let pauseAll = "Pause all"
+
+        public static func playTrack(_ name: String) -> String {
+            "Play \(name) only"
+        }
+
+        public static func pauseTrack(_ name: String) -> String {
+            "Pause \(name)"
+        }
         public static let timeline = "Timeline"
         public static let talkTime = "Talk time"
         public static let renameSpeaker = "Rename speaker"

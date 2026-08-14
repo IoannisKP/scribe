@@ -891,7 +891,12 @@ private struct SidebarRecordingControl: View {
                 .disabled(!recorder.isRecording || recorder.isBusy)
             }
             .padding(11)
-            .glassEffect(.regular.interactive())
+            // glassEffect defaults to a capsule, which on this tall control
+            // renders as a circular blob spilling outside the sidebar.
+            .glassEffect(
+                .regular.interactive(),
+                in: .rect(cornerRadius: 12)
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(ScribeCopy.Recording.recordingControls)

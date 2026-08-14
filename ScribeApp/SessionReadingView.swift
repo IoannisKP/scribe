@@ -10,9 +10,14 @@ private final class SessionPlaybackController: ObservableObject {
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var isPlaying = false
 
+    /// Which single track is being auditioned, or nil to play every track
+    /// together on the shared session timeline.
+    @Published private(set) var soloSource: AudioSource?
+
     private struct TrackPlayer {
         let player: AVAudioPlayer
         let startTime: TimeInterval
+        let source: AudioSource
     }
 
     private var tracks: [TrackPlayer] = []
@@ -33,19 +38,43 @@ private final class SessionPlaybackController: ObservableObject {
                 return nil
             }
             player.prepareToPlay()
-            return TrackPlayer(player: player, startTime: track.startTime)
+            return TrackPlayer(
+                player: player,
+                startTime: track.startTime,
+                source: track.source
+            )
         }
         duration = document.duration
         currentTime = min(currentTime, duration)
         isPlaying = false
+        soloSource = nil
+    }
+
+    /// True when playback is running in exactly the requested mode, so a
+    /// per-track button does not light up while everything is playing.
+    func isPlaying(solo source: AudioSource?) -> Bool {
+        isPlaying && soloSource == source
+    }
+
+    func toggle(solo source: AudioSource? = nil) {
+        if isPlaying, soloSource == source {
+            pause()
+            return
+        }
+        let wasPlaying = isPlaying
+        if wasPlaying {
+            pause()
+        }
+        soloSource = source
+        play()
     }
 
     func toggle() {
-        isPlaying ? pause() : play()
+        toggle(solo: nil)
     }
 
     func play() {
-        guard !tracks.isEmpty, duration > 0 else { return }
+        guard !audibleTracks.isEmpty, duration > 0 else { return }
         if currentTime >= duration { currentTime = 0 }
         stopTasks()
         isPlaying = true
@@ -54,7 +83,7 @@ private final class SessionPlaybackController: ObservableObject {
         generation &+= 1
         let activeGeneration = generation
 
-        for track in tracks {
+        for track in audibleTracks {
             let local = currentTime - track.startTime
             if local >= 0, local < track.player.duration {
                 track.player.currentTime = local
@@ -88,6 +117,13 @@ private final class SessionPlaybackController: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(50))
             }
         }
+    }
+
+    private var audibleTracks: [TrackPlayer] {
+        guard let soloSource else {
+            return tracks
+        }
+        return tracks.filter { $0.source == soloSource }
     }
 
     func pause() {
@@ -1045,13 +1081,15 @@ private struct SessionTimelineView: View {
         VStack(spacing: 8) {
             HStack {
                 Button {
-                    playback.toggle()
+                    playback.toggle(solo: nil)
                 } label: {
                     Label(
-                        playback.isPlaying
-                            ? ScribeCopy.Reading.pause
-                            : ScribeCopy.Reading.play,
-                        systemImage: playback.isPlaying ? "pause.fill" : "play.fill"
+                        playback.isPlaying(solo: nil)
+                            ? ScribeCopy.Reading.pauseAll
+                            : ScribeCopy.Reading.playAll,
+                        systemImage: playback.isPlaying(solo: nil)
+                            ? "pause.fill"
+                            : "play.fill"
                     )
                 }
                 .buttonStyle(.bordered)
@@ -1078,7 +1116,31 @@ private struct SessionTimelineView: View {
 
             ForEach(document.timelineLanes) { lane in
                 HStack(spacing: 10) {
-                    Text(lane.displayName ?? ScribeCopy.Library.audio)
+                    Button {
+                        playback.toggle(solo: lane.source)
+                    } label: {
+                        Image(
+                            systemName: playback.isPlaying(solo: lane.source)
+                                ? "pause.fill"
+                                : "play.fill"
+                        )
+                        .font(.system(size: 9))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .help(
+                        playback.isPlaying(solo: lane.source)
+                            ? ScribeCopy.Reading.pauseTrack(laneName(lane))
+                            : ScribeCopy.Reading.playTrack(laneName(lane))
+                    )
+                    .accessibilityLabel(
+                        playback.isPlaying(solo: lane.source)
+                            ? ScribeCopy.Reading.pauseTrack(laneName(lane))
+                            : ScribeCopy.Reading.playTrack(laneName(lane))
+                    )
+
+                    Text(laneName(lane))
                         .font(.system(size: 11, weight: .medium))
                         .frame(width: 72, alignment: .leading)
                         .foregroundStyle(
@@ -1103,6 +1165,10 @@ private struct SessionTimelineView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func laneName(_ lane: SessionTimelineLane) -> String {
+        lane.displayName ?? ScribeCopy.Library.audio
     }
 
     private func timelineLane(
