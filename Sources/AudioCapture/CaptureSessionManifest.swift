@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 6
+    public static let currentVersion = 7
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -268,6 +268,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         [SystemAudioStartupStageTiming]?
     public let systemAudioGraphPreparation: SystemAudioGraphPreparation?
     public let microphoneInputDevice: MicrophoneInputDeviceIdentity?
+    public let microphoneInputRouteChanges: [MicrophoneInputRouteChange]
 
     public init(
         version: Int = Self.currentVersion,
@@ -288,7 +289,8 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
         systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil,
-        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil
+        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil,
+        microphoneInputRouteChanges: [MicrophoneInputRouteChange] = []
     ) {
         self.version = version
         self.sessionID = sessionID
@@ -309,6 +311,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         self.systemAudioStartupStageTimings = systemAudioStartupStageTimings
         self.systemAudioGraphPreparation = systemAudioGraphPreparation
         self.microphoneInputDevice = microphoneInputDevice
+        self.microphoneInputRouteChanges = microphoneInputRouteChanges
     }
 
     public static func dualTrack(
@@ -487,6 +490,16 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         replacing(microphoneInputDevice: identity)
     }
 
+    public func replacingMicrophoneInputRouteChanges(
+        _ changes: [MicrophoneInputRouteChange]
+    ) -> CaptureSessionManifest {
+        replacing(
+            microphoneInputDevice:
+                changes.last?.device ?? microphoneInputDevice,
+            microphoneInputRouteChanges: changes
+        )
+    }
+
     public func appendingPin(_ pin: Pin) throws -> CaptureSessionManifest {
         var updated = pins.filter { $0.id != pin.id }
         updated.append(pin)
@@ -527,7 +540,9 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         systemAudioStartupStageTimings:
             [SystemAudioStartupStageTiming]? = nil,
         systemAudioGraphPreparation: SystemAudioGraphPreparation? = nil,
-        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil
+        microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil,
+        microphoneInputRouteChanges:
+            [MicrophoneInputRouteChange]? = nil
     ) -> CaptureSessionManifest {
         CaptureSessionManifest(
             version: Self.currentVersion,
@@ -554,7 +569,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
                 systemAudioGraphPreparation
                 ?? self.systemAudioGraphPreparation,
             microphoneInputDevice:
-                microphoneInputDevice ?? self.microphoneInputDevice
+                microphoneInputDevice ?? self.microphoneInputDevice,
+            microphoneInputRouteChanges:
+                microphoneInputRouteChanges
+                ?? self.microphoneInputRouteChanges
         )
     }
 
@@ -644,6 +662,13 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         else {
             throw CaptureSessionManifestError.invalidPins
         }
+        guard microphoneInputRouteChanges.allSatisfy({ change in
+            change.inputSampleRate.isFinite
+                && change.inputSampleRate > 0
+                && change.inputChannelCount > 0
+        }) else {
+            throw CaptureSessionManifestError.invalidMicrophoneInputRoutes
+        }
     }
 
     private static func validate(relativePath: String) throws {
@@ -726,6 +751,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case systemAudioStartupStageTimings
         case systemAudioGraphPreparation
         case microphoneInputDevice
+        case microphoneInputRouteChanges
     }
 
     public init(from decoder: any Decoder) throws {
@@ -782,6 +808,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             MicrophoneInputDeviceIdentity.self,
             forKey: .microphoneInputDevice
         )
+        microphoneInputRouteChanges = try container.decodeIfPresent(
+            [MicrophoneInputRouteChange].self,
+            forKey: .microphoneInputRouteChanges
+        ) ?? []
     }
 }
 
@@ -799,6 +829,7 @@ public enum CaptureSessionManifestError:
     case speakerNotFound(String)
     case pinNotFound(UUID)
     case invalidPins
+    case invalidMicrophoneInputRoutes
     case invalidTitle
     case invalidStartTime(source: AudioSource, startTime: TimeInterval)
     case invalidRelativePath(String)
@@ -821,6 +852,8 @@ public enum CaptureSessionManifestError:
             "Session metadata does not contain pin \(id.uuidString)."
         case .invalidPins:
             "Session metadata contains duplicate pins or a negative pin offset."
+        case .invalidMicrophoneInputRoutes:
+            "Session metadata contains an invalid microphone input route."
         case .invalidTitle:
             "Session metadata must contain a title."
         case let .invalidStartTime(source, startTime):
@@ -850,14 +883,21 @@ public actor CaptureSessionManifestStore {
     public func replaceTrackOffsets(
         microphone: Int64?,
         system: Int64?,
+        microphoneInputRouteChanges:
+            [MicrophoneInputRouteChange]? = nil,
         in sessionDirectory: URL
     ) throws {
-        let manifest = try CaptureSessionManifest.load(
+        var manifest = try CaptureSessionManifest.load(
             from: sessionDirectory
         ).replacingTrackOffsets(
             microphone: microphone,
             system: system
         )
+        if let microphoneInputRouteChanges {
+            manifest = manifest.replacingMicrophoneInputRouteChanges(
+                microphoneInputRouteChanges
+            )
+        }
         try manifest.write(to: sessionDirectory)
     }
 

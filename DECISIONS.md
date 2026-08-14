@@ -1074,9 +1074,11 @@ stable enough for users, diagnostics, and future regression tests.
 
 **Decision:** Resolve the default input `AudioDeviceID` at each microphone
 start or recovery, explicitly bind the AVAudioEngine input AUHAL to that device,
-verify the binding by reading it back, and fail closed if it does not match or
-resolves to Scribe's private system-tap aggregate. Persist the bound device ID,
-UID, and name in `session.json`.
+verify the binding by reading it back, and only then read
+`inputNode.inputFormat(forBus:)` for the tap. Fail closed if the binding does
+not match or resolves to Scribe's private system-tap aggregate. Persist every
+successful route's device ID, UID, name, sample rate, channel count, timestamp,
+and change reason in `session.json`.
 
 **Alternatives:** Continue relying on AVAudioEngine's implicit default-device
 aggregate; force the built-in Mac microphone; treat highly correlated tracks as
@@ -1092,6 +1094,14 @@ binding preserves the user's selected input, blocks accidental reuse of
 Scribe's system graph, and leaves durable evidence of the route. Correlation is
 useful evidence but is not a safe automatic failure rule because acoustic echo
 can legitimately correlate two sources.
+
+**Amendment, 2026-08-14:** The first implementation read
+`outputFormat(forBus:)` after binding. With AirPods, that value could retain the
+previous 48 kHz graph format while the newly bound headset input ran at a lower
+rate, causing tap installation to fail. The tap now uses the post-binding input
+format, recovery rebuilds the converter and tap after rate/device changes, and
+transient Bluetooth route settling is retried rather than treated as an
+immediate terminal failure.
 
 ## 2026-08-13 — Persist completed live transcription through the batch writer
 
