@@ -217,6 +217,39 @@ final class CoreAudioSystemTapGraph: @unchecked Sendable {
         )
     }
 
+    /// Re-reads `kAudioTapPropertyFormat` and returns the tap's current rate.
+    ///
+    /// `prepare()` runs at launch, so the rate it captured describes whichever
+    /// output device was default then, at whichever rate that device was
+    /// running. A Bluetooth output that switches into headset mode between
+    /// launch and Record changes rate without changing which device is default,
+    /// so nothing in the prepared graph is stale except this number, and a
+    /// resampler configured from it decimates by the wrong factor for the whole
+    /// session. Recording reads the live value instead of trusting the
+    /// prewarmed one.
+    @discardableResult
+    func refreshTapFormat() throws -> Double {
+        guard tapID != kAudioObjectUnknown else {
+            throw AudioCaptureError.systemCaptureNotRunning
+        }
+        var streamDescription = try CoreAudioProperties.tapFormat(tapID)
+        guard
+            streamDescription.mFormatID == kAudioFormatLinearPCM,
+            streamDescription.mFormatFlags & kAudioFormatFlagIsFloat != 0,
+            streamDescription.mBitsPerChannel == 32,
+            streamDescription.mSampleRate.isFinite,
+            streamDescription.mSampleRate > 0,
+            streamDescription.mChannelsPerFrame == 1,
+            withUnsafePointer(to: &streamDescription, {
+                AVAudioFormat(streamDescription: $0)
+            }) != nil
+        else {
+            throw AudioCaptureError.systemTapFormatUnsupported
+        }
+        sampleRate = streamDescription.mSampleRate
+        return sampleRate
+    }
+
     func start() throws {
         guard
             aggregateDeviceID != kAudioObjectUnknown,

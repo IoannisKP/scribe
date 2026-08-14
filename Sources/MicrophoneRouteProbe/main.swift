@@ -593,6 +593,132 @@ func observe(seconds: Int, label: String) {
     }
 }
 
+// MARK: - System tap rate observation
+
+func defaultOutputDeviceID() -> AudioDeviceID? {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var deviceID = AudioDeviceID(kAudioObjectUnknown)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    let status = AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID
+    )
+    guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+    return deviceID
+}
+
+func processTapFormat(_ tapID: AudioObjectID) -> AudioStreamBasicDescription? {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioTapPropertyFormat,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var format = AudioStreamBasicDescription()
+    var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+    let status = AudioObjectGetPropertyData(
+        tapID, &address, 0, nil, &size, &format
+    )
+    return status == noErr ? format : nil
+}
+
+/// Answers whether the system tap's format, which the production resampler is
+/// configured from, tracks a Bluetooth output device switching into headset
+/// mode. If it does not change, no tap-format listener can fire and a rate
+/// captured at prewarm stays stale for the whole session.
+@MainActor
+func runSystemTapMode() async {
+    let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+    description.isPrivate = true
+    description.muteBehavior = .unmuted
+    var tapID = AudioObjectID(kAudioObjectUnknown)
+    let status = AudioHardwareCreateProcessTap(description, &tapID)
+    guard status == noErr, tapID != kAudioObjectUnknown else {
+        timeline.log("TAP creation failed \(describe(status))")
+        return
+    }
+    defer { AudioHardwareDestroyProcessTap(tapID) }
+    timeline.log("TAP created, id \(tapID)")
+
+    var sawTapFormatChange = false
+    var tapAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioTapPropertyFormat,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    _ = AudioObjectAddPropertyListenerBlock(tapID, &tapAddress, nil) { @Sendable _, _ in
+        timeline.log("LISTENER kAudioTapPropertyFormat fired")
+    }
+
+    func snapshot(_ label: String) {
+        var parts: [String] = []
+        if let format = processTapFormat(tapID) {
+            parts.append("tap \(describe(format))")
+        } else {
+            parts.append("tap <unreadable>")
+        }
+        if let outputID = defaultOutputDeviceID() {
+            let rate = nominalSampleRate(of: outputID)
+                .map { String(format: "%.0f Hz", $0) } ?? "?"
+            parts.append("output [\(outputID)] \(stringProperty(kAudioObjectPropertyName, of: outputID)) \(rate)")
+        }
+        if let inputID = defaultInputDeviceID() {
+            let rate = nominalSampleRate(of: inputID)
+                .map { String(format: "%.0f Hz", $0) } ?? "?"
+            parts.append("input \(rate)")
+        }
+        timeline.log("\(label) \(parts.joined(separator: " | "))")
+    }
+
+    snapshot("BEFORE ")
+
+    // Force the headset-mode switch exactly as recording does.
+    timeline.log("binding the microphone input to force headset mode")
+    guard bindDefaultInput() != nil else { return }
+    let tapFormat = engine.inputNode.inputFormat(forBus: 0)
+    engine.inputNode.installTap(onBus: 0, bufferSize: 1_024, format: tapFormat) { @Sendable buffer, _ in
+        counters.record(buffer)
+    }
+    engine.prepare()
+    try? engine.start()
+
+    var lastLine = ""
+    for _ in 0..<(watchSeconds * 4) {
+        try? await Task.sleep(for: .milliseconds(250))
+        var line = ""
+        if let format = processTapFormat(tapID) {
+            line = String(format: "%.0f", format.mSampleRate)
+        }
+        if let outputID = defaultOutputDeviceID() {
+            line += "/" + (nominalSampleRate(of: outputID).map { String(format: "%.0f", $0) } ?? "?")
+        }
+        if line != lastLine {
+            snapshot("CHANGE ")
+            if !lastLine.isEmpty { sawTapFormatChange = true }
+            lastLine = line
+        }
+    }
+
+    engine.stop()
+    engine.inputNode.removeTap(onBus: 0)
+    snapshot("AFTER  ")
+    timeline.log(
+        sawTapFormatChange
+            ? "RESULT tap/output rate DID change during the session"
+            : "RESULT tap/output rate never changed during the session"
+    )
+}
+
+if arguments.contains("--system-tap") {
+    await runSystemTapMode()
+    print("")
+    print("Probe complete.")
+    print("")
+    exit(0)
+}
+
 // MARK: - Service mode
 
 /// Drives the real MicrophoneCaptureService end to end, so the shipped code

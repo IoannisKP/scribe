@@ -139,10 +139,14 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             recordedStartupStageTimings.append(
                 contentsOf: serviceProfiler.timings
             )
+            // prepare() ran at launch; the tap's rate may have moved since,
+            // notably when a Bluetooth output switches into headset mode
+            // without changing which device is default.
+            let tapSampleRate = try graph.refreshTapFormat()
             let consumer = try CanonicalAudioFileConsumer(
                 source: .system,
                 ringBuffer: ringBuffer,
-                inputSampleRate: graph.sampleRate,
+                inputSampleRate: tapSampleRate,
                 outputURL: outputURL,
                 writer: writer,
                 liveSink: liveSink
