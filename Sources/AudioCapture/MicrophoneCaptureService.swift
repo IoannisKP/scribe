@@ -1,5 +1,6 @@
 @preconcurrency import AppKit
 @preconcurrency import AVFoundation
+@preconcurrency import CoreAudio
 import Foundation
 
 public enum MicrophoneCaptureState: Equatable, Sendable {
@@ -39,6 +40,7 @@ public actor MicrophoneCaptureService {
     private var isRecovering = false
     private var isSleeping = false
     private var selectedInputDevice: MicrophoneInputDeviceIdentity?
+    private var inputRouteChanges: [MicrophoneInputRouteChange] = []
     private var observerRegistrations: [ObserverRegistration] = []
 
     public init(
@@ -86,8 +88,14 @@ public actor MicrophoneCaptureService {
 
         state = .starting
         selectedInputDevice = nil
+        inputRouteChanges = []
         do {
-            let captureFormat = try currentCaptureFormat()
+            let resolvedRoute = try currentCaptureRoute(
+                reason: .recordingStarted
+            )
+            let captureFormat = resolvedRoute.tapFormat
+            selectedInputDevice = resolvedRoute.change.device
+            inputRouteChanges = [resolvedRoute.change]
             let capacity = try ringCapacity(sampleRate: captureFormat.sampleRate)
             let ringBuffer = try FloatRingBuffer(capacity: capacity)
             let consumer = try CanonicalAudioFileConsumer(
@@ -165,36 +173,27 @@ public actor MicrophoneCaptureService {
         return outputURL
     }
 
-    private func currentCaptureFormat() throws -> AVAudioFormat {
+    private func currentCaptureRoute(
+        reason: MicrophoneInputRouteChangeReason
+    ) throws -> ResolvedMicrophoneCaptureRoute {
         let inputNode = engine.inputNode
-        let deviceID = try CoreAudioProperties.defaultInputDevice()
-        let identity = try CoreAudioProperties.inputDeviceIdentity(deviceID)
-        guard !identity.uid.hasPrefix("com.localfirst.Scribe.SystemTap.") else {
-            throw AudioCaptureError.microphoneInputResolvedToSystemTap
-        }
-        guard let audioUnit = inputNode.audioUnit else {
-            throw AudioCaptureError.microphoneInputUnavailable
-        }
-        try CoreAudioProperties.bindInputDevice(deviceID, to: audioUnit)
-        selectedInputDevice = identity
-
-        let hardwareFormat = inputNode.outputFormat(forBus: 0)
-        guard
-            hardwareFormat.sampleRate.isFinite,
-            hardwareFormat.sampleRate > 0,
-            hardwareFormat.channelCount > 0
-        else {
-            throw AudioCaptureError.microphoneInputUnavailable
-        }
-        guard let captureFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: hardwareFormat.sampleRate,
-            channels: hardwareFormat.channelCount,
-            interleaved: false
-        ) else {
-            throw AudioCaptureError.microphoneFormatUnsupported
-        }
-        return captureFormat
+        let resolver = MicrophoneInputRouteResolver(
+            defaultInputDevice: CoreAudioProperties.defaultInputDevice,
+            inputDeviceIdentity: CoreAudioProperties.inputDeviceIdentity,
+            bindAndVerify: { deviceID in
+                guard let audioUnit = inputNode.audioUnit else {
+                    throw AudioCaptureError.microphoneInputUnavailable
+                }
+                try CoreAudioProperties.bindInputDevice(
+                    deviceID,
+                    to: audioUnit
+                )
+            },
+            boundInputFormat: {
+                inputNode.inputFormat(forBus: 0)
+            }
+        )
+        return try resolver.resolve(reason: reason)
     }
 
     private func ringCapacity(sampleRate: Double) throws -> Int {
@@ -346,7 +345,10 @@ public actor MicrophoneCaptureService {
         guard state.isActive, !isRecovering, !isSleeping else {
             return
         }
-        await recoverAfterInterruption(reason: "The audio input device changed.")
+        await recoverAfterInterruption(
+            reason: "The audio input device changed.",
+            routeReason: .inputConfigurationChanged
+        )
     }
 
     private func handleWillSleep() {
@@ -368,10 +370,16 @@ public actor MicrophoneCaptureService {
         }
         isSleeping = false
         isRecovering = false
-        await recoverAfterInterruption(reason: "The Mac woke from sleep.")
+        await recoverAfterInterruption(
+            reason: "The Mac woke from sleep.",
+            routeReason: .wakeRecovery
+        )
     }
 
-    private func recoverAfterInterruption(reason: String) async {
+    private func recoverAfterInterruption(
+        reason: String,
+        routeReason: MicrophoneInputRouteChangeReason
+    ) async {
         guard
             let ringBuffer,
             let consumer,
@@ -387,19 +395,80 @@ public actor MicrophoneCaptureService {
 
         do {
             try await waitUntilDrained(ringBuffer)
-            let captureFormat = try currentCaptureFormat()
-            try await consumer.reconfigure(
-                inputSampleRate: captureFormat.sampleRate
+            let resolvedRoute = try await restartAfterInputRouteChange(
+                reason: routeReason,
+                consumer: consumer,
+                realtimeSink: realtimeSink
             )
-            try installTap(format: captureFormat, sink: realtimeSink)
-            engine.prepare()
-            try engine.start()
+            recordInputRouteChangeIfNeeded(resolvedRoute.change)
             isRecovering = false
             state = .recording(outputURL: outputURL)
         } catch {
             let message = error.localizedDescription
             await failAfterRecovery(message: message)
         }
+    }
+
+    private func restartAfterInputRouteChange(
+        reason: MicrophoneInputRouteChangeReason,
+        consumer: CanonicalAudioFileConsumer,
+        realtimeSink: MicrophoneRealtimeSink
+    ) async throws -> ResolvedMicrophoneCaptureRoute {
+        let maximumAttemptCount = 30
+        var mostRecentError: (any Error)?
+
+        for attempt in 0..<maximumAttemptCount {
+            stopEngineAndRemoveTap()
+            do {
+                let resolvedRoute = try currentCaptureRoute(reason: reason)
+                let captureFormat = resolvedRoute.tapFormat
+                try await consumer.reconfigure(
+                    inputSampleRate: captureFormat.sampleRate
+                )
+                try installTap(format: captureFormat, sink: realtimeSink)
+                engine.prepare()
+                try engine.start()
+                return resolvedRoute
+            } catch {
+                mostRecentError = error
+                stopEngineAndRemoveTap()
+                guard
+                    attempt + 1 < maximumAttemptCount,
+                    shouldRetryInputRouteRecovery(after: error)
+                else {
+                    throw error
+                }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
+        throw mostRecentError ?? AudioCaptureError.microphoneInputUnavailable
+    }
+
+    private func shouldRetryInputRouteRecovery(after error: any Error) -> Bool {
+        guard let captureError = error as? AudioCaptureError else {
+            return true
+        }
+        switch captureError {
+        case .microphoneInputResolvedToSystemTap,
+            .microphoneInputDeviceBindingMismatch,
+            .microphoneFormatUnsupported:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func recordInputRouteChangeIfNeeded(
+        _ change: MicrophoneInputRouteChange
+    ) {
+        selectedInputDevice = change.device
+        guard
+            inputRouteChanges.last?.hasSameCaptureRoute(as: change) != true
+        else {
+            return
+        }
+        inputRouteChanges.append(change)
     }
 
     private func waitUntilDrained(_ ringBuffer: FloatRingBuffer) async throws {
@@ -470,6 +539,72 @@ public actor MicrophoneCaptureService {
     }
 }
 
+struct ResolvedMicrophoneCaptureRoute {
+    let tapFormat: AVAudioFormat
+    let change: MicrophoneInputRouteChange
+}
+
+struct MicrophoneInputRouteResolver {
+    let defaultInputDevice: () throws -> AudioDeviceID
+    let inputDeviceIdentity:
+        (AudioDeviceID) throws -> MicrophoneInputDeviceIdentity
+    let bindAndVerify: (AudioDeviceID) throws -> Void
+    let boundInputFormat: () -> AVAudioFormat
+    let now: () -> Date
+
+    init(
+        defaultInputDevice: @escaping () throws -> AudioDeviceID,
+        inputDeviceIdentity: @escaping (AudioDeviceID) throws
+            -> MicrophoneInputDeviceIdentity,
+        bindAndVerify: @escaping (AudioDeviceID) throws -> Void,
+        boundInputFormat: @escaping () -> AVAudioFormat,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.defaultInputDevice = defaultInputDevice
+        self.inputDeviceIdentity = inputDeviceIdentity
+        self.bindAndVerify = bindAndVerify
+        self.boundInputFormat = boundInputFormat
+        self.now = now
+    }
+
+    func resolve(
+        reason: MicrophoneInputRouteChangeReason
+    ) throws -> ResolvedMicrophoneCaptureRoute {
+        let deviceID = try defaultInputDevice()
+        let identity = try inputDeviceIdentity(deviceID)
+        guard !identity.uid.hasPrefix("com.localfirst.Scribe.SystemTap.") else {
+            throw AudioCaptureError.microphoneInputResolvedToSystemTap
+        }
+
+        try bindAndVerify(deviceID)
+        let format = boundInputFormat()
+        guard
+            format.sampleRate.isFinite,
+            format.sampleRate > 0,
+            format.channelCount > 0
+        else {
+            throw AudioCaptureError.microphoneInputUnavailable
+        }
+        guard
+            format.commonFormat == .pcmFormatFloat32,
+            !format.isInterleaved
+        else {
+            throw AudioCaptureError.microphoneFormatUnsupported
+        }
+
+        return ResolvedMicrophoneCaptureRoute(
+            tapFormat: format,
+            change: MicrophoneInputRouteChange(
+                recordedAt: now(),
+                reason: reason,
+                device: identity,
+                inputSampleRate: format.sampleRate,
+                inputChannelCount: format.channelCount
+            )
+        )
+    }
+}
+
 private final class MicrophoneRealtimeSink: @unchecked Sendable {
     private let ringBuffer: FloatRingBuffer
     private let firstSampleTime: FirstSampleHostTime
@@ -512,6 +647,12 @@ extension MicrophoneCaptureService: AudioTrackCapturing {
         -> MicrophoneInputDeviceIdentity?
     {
         selectedInputDevice
+    }
+
+    public func microphoneInputRouteChanges() async
+        -> [MicrophoneInputRouteChange]
+    {
+        inputRouteChanges
     }
 
     public func firstSampleHostTime() async -> UInt64? {

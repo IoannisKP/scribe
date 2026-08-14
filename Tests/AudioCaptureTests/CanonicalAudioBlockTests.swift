@@ -185,6 +185,66 @@ final class CanonicalAudioBlockTests: XCTestCase {
         )
     }
 
+    func testTwentyFourKilohertzInputProducesCanonicalOutput()
+        async throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "ScribeAirPodsRateTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let outputURL = directory.appendingPathComponent("microphone.wav")
+        addTeardownBlock {
+            try FileManager.default.removeItem(at: directory)
+        }
+        let inputSampleRate = 24_000.0
+        let duration = 0.5
+        let inputFrameCount = Int(inputSampleRate * duration)
+        let input = (0..<inputFrameCount).map { frame -> Float in
+            let time = Double(frame) / inputSampleRate
+            return Float(0.6 * sin(2 * Double.pi * 440 * time))
+        }
+        let ringBuffer = try FloatRingBuffer(capacity: inputFrameCount)
+        let sink = CanonicalBlockCollector()
+        let consumer = try CanonicalAudioFileConsumer(
+            source: .microphone,
+            ringBuffer: ringBuffer,
+            inputSampleRate: inputSampleRate,
+            outputURL: outputURL,
+            liveSink: sink
+        )
+
+        XCTAssertEqual(write(input, to: ringBuffer), input.count)
+        try await consumer.finish()
+
+        let blocks = await sink.snapshot()
+        let canonicalSamples = blocks.flatMap(\.samples)
+        XCTAssertEqual(Set(blocks.map(\.source)), [.microphone])
+        XCTAssertLessThanOrEqual(
+            abs(
+                canonicalSamples.count
+                    - Int(CanonicalAudioFormat.sampleRate * duration)
+            ),
+            64
+        )
+        XCTAssertTrue(
+            canonicalSamples.allSatisfy {
+                $0.isFinite && (-1...1).contains($0)
+            }
+        )
+        let rootMeanSquare = sqrt(
+            canonicalSamples.reduce(0.0) { $0 + Double($1 * $1) }
+                / Double(canonicalSamples.count)
+        )
+        XCTAssertGreaterThan(rootMeanSquare, 0.35)
+        XCTAssertLessThan(rootMeanSquare, 0.50)
+
+        let wavData = try Data(contentsOf: outputURL)
+        XCTAssertEqual(wavData.uint32LE(at: 24), 16_000)
+        XCTAssertEqual(wavData.uint32LE(at: 40), UInt32(wavData.count - 44))
+        XCTAssertEqual(wavData.count, 44 + canonicalSamples.count * 2)
+    }
+
     private func write(
         _ samples: [Float],
         to ringBuffer: FloatRingBuffer

@@ -28,6 +28,42 @@ public struct MicrophoneInputDeviceIdentity:
     }
 }
 
+public enum MicrophoneInputRouteChangeReason: String, Codable, Sendable {
+    case recordingStarted
+    case inputConfigurationChanged
+    case wakeRecovery
+}
+
+public struct MicrophoneInputRouteChange: Codable, Equatable, Sendable {
+    public let recordedAt: Date
+    public let reason: MicrophoneInputRouteChangeReason
+    public let device: MicrophoneInputDeviceIdentity
+    public let inputSampleRate: Double
+    public let inputChannelCount: UInt32
+
+    public init(
+        recordedAt: Date = Date(),
+        reason: MicrophoneInputRouteChangeReason,
+        device: MicrophoneInputDeviceIdentity,
+        inputSampleRate: Double,
+        inputChannelCount: UInt32
+    ) {
+        self.recordedAt = recordedAt
+        self.reason = reason
+        self.device = device
+        self.inputSampleRate = inputSampleRate
+        self.inputChannelCount = inputChannelCount
+    }
+
+    public func hasSameCaptureRoute(
+        as other: MicrophoneInputRouteChange
+    ) -> Bool {
+        device == other.device
+            && inputSampleRate == other.inputSampleRate
+            && inputChannelCount == other.inputChannelCount
+    }
+}
+
 public struct AudioTrackCaptureResult: Equatable, Sendable {
     public let source: AudioSource
     public let outputURL: URL
@@ -174,6 +210,8 @@ public protocol AudioTrackCapturing: Sendable {
     func systemAudioGraphPreparation() async -> SystemAudioGraphPreparation?
     func microphoneInputDeviceIdentity() async
         -> MicrophoneInputDeviceIdentity?
+    func microphoneInputRouteChanges() async
+        -> [MicrophoneInputRouteChange]
 }
 
 public extension AudioTrackCapturing {
@@ -188,6 +226,11 @@ public extension AudioTrackCapturing {
         -> MicrophoneInputDeviceIdentity?
     {
         nil
+    }
+    func microphoneInputRouteChanges() async
+        -> [MicrophoneInputRouteChange]
+    {
+        []
     }
 }
 

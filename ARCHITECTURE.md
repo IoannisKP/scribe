@@ -339,8 +339,12 @@ Before reading the input format or installing the tap, the service resolves
 input node's AUHAL with `kAudioOutputUnitProperty_CurrentDevice`, and reads the
 property back. A mismatched binding or a route resolving to Scribe's private
 system-tap aggregate fails closed instead of risking two copies of system audio.
-The bound device's Core Audio object ID, persistent UID, and name are stored in
-`session.json` as `microphoneInputDevice` for route-level diagnostics.
+Only after the verified binding does it read `inputNode.inputFormat(forBus:)`;
+that exact format is installed on the tap, including Bluetooth headset rates
+below 48 kHz. The bound device, sample rate, channel count, timestamp, and
+change reason are stored in `session.json` as
+`microphoneInputRouteChanges`, while `microphoneInputDevice` remains the latest
+device for compatibility.
 
 The realtime tap retains only a small sink containing the ring buffer. A
 detached high-priority consumer drains that ring through actor-isolated
@@ -353,10 +357,12 @@ The service observes:
 - `NSWorkspace.didWakeNotification`.
 
 Recovery stops and removes the old tap, lets already captured frames drain,
-creates a converter for the new hardware rate, then reinstalls and restarts the
-tap. The canonical WAV remains 16 kHz, so the same file continues across the
-transition. A failed recovery finalizes all audio already written and moves the
-service to an actionable failed state.
+binds the current concrete device, reads its new input format, creates a
+converter for that rate, then reinstalls and restarts the tap. Transient route
+settling after a Bluetooth rate switch or disconnect is retried for up to three
+seconds. The canonical WAV remains 16 kHz, so the same file continues across
+the transition. A failed recovery finalizes all audio already written and moves
+the service to an actionable failed state.
 
 The ring counts every frame rejected because of capacity pressure. Stop results
 surface this count instead of silently hiding an overrun.

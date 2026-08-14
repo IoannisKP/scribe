@@ -256,6 +256,74 @@ final class DualTrackRecordingCoordinatorTests: XCTestCase {
         _ = try await coordinator.stopRecording()
     }
 
+    func testPersistsMicrophoneRouteChangeCapturedDuringRecording()
+        async throws
+    {
+        let airPodsDevice = MicrophoneInputDeviceIdentity(
+            audioDeviceID: 52,
+            uid: "test.airpods-microphone",
+            name: "AirPods Microphone"
+        )
+        let airPodsInitialRate = MicrophoneInputRouteChange(
+            recordedAt: Date(timeIntervalSince1970: 100),
+            reason: .recordingStarted,
+            device: airPodsDevice,
+            inputSampleRate: 48_000,
+            inputChannelCount: 1
+        )
+        let airPodsHeadsetRate = MicrophoneInputRouteChange(
+            recordedAt: Date(timeIntervalSince1970: 120),
+            reason: .inputConfigurationChanged,
+            device: airPodsDevice,
+            inputSampleRate: 24_000,
+            inputChannelCount: 1
+        )
+        let builtInAfterDisconnect = MicrophoneInputRouteChange(
+            recordedAt: Date(timeIntervalSince1970: 140),
+            reason: .inputConfigurationChanged,
+            device: MicrophoneInputDeviceIdentity(
+                audioDeviceID: 41,
+                uid: "test.built-in-microphone",
+                name: "Built-in Microphone"
+            ),
+            inputSampleRate: 48_000,
+            inputChannelCount: 1
+        )
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            microphoneInputDevice: airPodsDevice,
+            microphoneInputRouteChanges: [airPodsInitialRate]
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: FakeTrackCapture(source: .system),
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer { removeTestDirectory(directory) }
+
+        _ = try await coordinator.startRecording(in: directory)
+        await microphone.setMicrophoneInputRouteChanges([
+            airPodsInitialRate,
+            airPodsHeadsetRate,
+            builtInAfterDisconnect
+        ])
+        _ = try await coordinator.stopRecording()
+
+        let manifest = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(
+            manifest.microphoneInputRouteChanges,
+            [airPodsInitialRate, airPodsHeadsetRate, builtInAfterDisconnect]
+        )
+        XCTAssertEqual(
+            manifest.microphoneInputDevice,
+            builtInAfterDisconnect.device
+        )
+    }
+
     func testNormalizesOffsetWhenSystemProducesFirstSampleFirst()
         async throws
     {
@@ -486,6 +554,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     let startupStageTimings: [SystemAudioStartupStageTiming]
     let graphPreparation: SystemAudioGraphPreparation?
     let microphoneInputDevice: MicrophoneInputDeviceIdentity?
+    private var inputRouteChanges: [MicrophoneInputRouteChange]
     let startOrder: CaptureStartOrder?
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -499,6 +568,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         startupStageTimings: [SystemAudioStartupStageTiming] = [],
         graphPreparation: SystemAudioGraphPreparation? = nil,
         microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil,
+        microphoneInputRouteChanges: [MicrophoneInputRouteChange] = [],
         startOrder: CaptureStartOrder? = nil
     ) {
         self.source = source
@@ -508,6 +578,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         self.startupStageTimings = startupStageTimings
         self.graphPreparation = graphPreparation
         self.microphoneInputDevice = microphoneInputDevice
+        self.inputRouteChanges = microphoneInputRouteChanges
         self.startOrder = startOrder
     }
 
@@ -550,6 +621,16 @@ private actor FakeTrackCapture: AudioTrackCapturing {
 
     func microphoneInputDeviceIdentity() -> MicrophoneInputDeviceIdentity? {
         microphoneInputDevice
+    }
+
+    func microphoneInputRouteChanges() -> [MicrophoneInputRouteChange] {
+        inputRouteChanges
+    }
+
+    func setMicrophoneInputRouteChanges(
+        _ changes: [MicrophoneInputRouteChange]
+    ) {
+        inputRouteChanges = changes
     }
 }
 

@@ -169,6 +169,8 @@ public actor DualTrackRecordingCoordinator {
             await systemCapture.systemAudioGraphPreparation()
         let microphoneInputDevice =
             await microphoneCapture.microphoneInputDeviceIdentity()
+        let microphoneInputRouteChanges =
+            await microphoneCapture.microphoneInputRouteChanges()
         do {
             let manifest: CaptureSessionManifest
             if !FileManager.default.fileExists(
@@ -198,6 +200,12 @@ public actor DualTrackRecordingCoordinator {
             if let microphoneInputDevice {
                 manifestWithCaptureDiagnostics = manifestWithCaptureDiagnostics
                     .replacingMicrophoneInputDevice(microphoneInputDevice)
+            }
+            if !microphoneInputRouteChanges.isEmpty {
+                manifestWithCaptureDiagnostics = manifestWithCaptureDiagnostics
+                    .replacingMicrophoneInputRouteChanges(
+                        microphoneInputRouteChanges
+                    )
             }
             try manifestWithCaptureDiagnostics.write(
                 to: paths.sessionDirectory
@@ -303,6 +311,8 @@ public actor DualTrackRecordingCoordinator {
         }
 
         do {
+            let microphoneInputRouteChanges =
+                await microphoneCapture.microphoneInputRouteChanges()
             let offsets = AudioHostTime.normalizedCanonicalOffsets(
                 microphoneHostTime: microphoneResult.firstSampleHostTime,
                 systemHostTime: systemResult.firstSampleHostTime
@@ -311,6 +321,8 @@ public actor DualTrackRecordingCoordinator {
                 .replaceTrackOffsets(
                     microphone: offsets.microphone,
                     system: offsets.system,
+                    microphoneInputRouteChanges:
+                        microphoneInputRouteChanges,
                     in: paths.sessionDirectory
                 )
         } catch {
