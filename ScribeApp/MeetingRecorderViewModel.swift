@@ -795,6 +795,9 @@ final class MeetingRecorderViewModel: ObservableObject {
             case .requested:
                 break
             }
+            if let coverageWarning = result.coverageWarning {
+                return coverageWarning
+            }
             let dropped = result.microphone.droppedSampleCount
                 + result.system.droppedSampleCount
             return dropped == 0

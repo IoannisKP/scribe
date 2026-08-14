@@ -267,6 +267,24 @@ final class CoreAudioSystemTapGraph: @unchecked Sendable {
         return sampleRate
     }
 
+    /// Whether the private aggregate is still alive.
+    func isAggregateAlive() -> Bool {
+        guard aggregateDeviceID != kAudioObjectUnknown else {
+            return false
+        }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var isAlive = UInt32(0)
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(
+            aggregateDeviceID, &address, 0, nil, &size, &isAlive
+        )
+        return status == noErr && isAlive != 0
+    }
+
     func start() throws {
         guard
             aggregateDeviceID != kAudioObjectUnknown,

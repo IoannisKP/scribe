@@ -31,6 +31,12 @@ actor CanonicalAudioFileConsumer {
         self.liveSink = liveSink
     }
 
+    /// Canonical 16 kHz samples written so far. Comparable to elapsed
+    /// recording time, unlike a count of pre-resample input frames.
+    var canonicalSampleCount: UInt64 {
+        emittedSampleCount
+    }
+
     func processAvailable() async throws -> Int {
         guard !isFinished else {
             return 0

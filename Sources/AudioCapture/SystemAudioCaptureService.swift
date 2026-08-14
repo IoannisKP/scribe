@@ -40,6 +40,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
 
     private var ringBuffer: FloatRingBuffer?
     private var consumer: CanonicalAudioFileConsumer?
+    private var configuredInputSampleRate: Double = 0
     private var drainTask: Task<Void, Never>?
     private var graph: CoreAudioSystemTapGraph?
     private var realtimeRouter: SystemAudioRealtimeRouter?
@@ -144,6 +145,7 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             // aggregate clocks off the output subdevice, so read that.
             try graph.refreshTapFormat()
             let tapSampleRate = try graph.currentDeliveredSampleRate()
+            configuredInputSampleRate = tapSampleRate
             let consumer = try CanonicalAudioFileConsumer(
                 source: .system,
                 ringBuffer: ringBuffer,
@@ -229,11 +231,13 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
         }
 
         let droppedSampleCount = ringBuffer?.droppedSampleCount ?? 0
+        let capturedSampleCount = await consumer?.canonicalSampleCount ?? 0
         let capturedFirstSampleHostTime = firstSampleTime?.value
         let result = AudioTrackCaptureResult(
             source: .system,
             outputURL: outputURL,
             droppedSampleCount: droppedSampleCount,
+            capturedSampleCount: capturedSampleCount,
             firstSampleHostTime: capturedFirstSampleHostTime
         )
         if !failures.isEmpty {
@@ -572,10 +576,41 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             return
         }
         if state.isActive {
+            guard graphNeedsRecovery() else {
+                // One physical event, such as a Bluetooth output switching
+                // into headset mode, fires several of these listeners, and
+                // rebuilding re-registers them on a fresh tap and aggregate.
+                // Without this check each redundant notification costs another
+                // teardown, and every teardown drops the samples that arrive
+                // while the aggregate is being recreated.
+                return
+            }
             await recoverGraph(reason: reason)
         } else {
             await rebuildPreparedGraph(reason: reason)
         }
+    }
+
+    /// Whether the running graph actually diverges from the hardware, rather
+    /// than the notification merely describing a change already applied.
+    private func graphNeedsRecovery() -> Bool {
+        guard let graph, graph.isStarted, graph.isAggregateAlive() else {
+            return true
+        }
+        guard
+            let currentOutputDevice = try? CoreAudioProperties
+                .defaultOutputDevice(),
+            currentOutputDevice == graph.outputDeviceID
+        else {
+            return true
+        }
+        guard
+            let deliveredRate = try? graph.currentDeliveredSampleRate(),
+            deliveredRate == configuredInputSampleRate
+        else {
+            return true
+        }
+        return false
     }
 
     private func handleWillSleep() async {
@@ -696,11 +731,13 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
                 realtimeRouter: replacementRouter
             )
             try replacementGraph.prepare()
+            let replacementRate = (
+                try? replacementGraph.currentDeliveredSampleRate()
+            ) ?? replacementGraph.sampleRate
             try await consumer.reconfigure(
-                inputSampleRate: (
-                    try? replacementGraph.currentDeliveredSampleRate()
-                ) ?? replacementGraph.sampleRate
+                inputSampleRate: replacementRate
             )
+            configuredInputSampleRate = replacementRate
             self.realtimeRouter = replacementRouter
             self.graph = replacementGraph
             try registerCoreAudioListeners(for: replacementGraph)

@@ -133,6 +133,64 @@ final class CaptureCoverageAuditTests: XCTestCase {
         XCTAssertEqual(ratio, 0.5, accuracy: 0.05)
     }
 
+    // MARK: - What the session reports at stop
+
+    private func result(
+        microphone: TrackCoverageVerdict,
+        system: TrackCoverageVerdict
+    ) -> DualTrackCaptureResult {
+        let paths = DualTrackRecordingPaths(
+            sessionDirectory: URL(fileURLWithPath: "/tmp/coverage")
+        )
+        return DualTrackCaptureResult(
+            paths: paths,
+            microphone: AudioTrackCaptureResult(
+                source: .microphone,
+                outputURL: paths.microphoneURL,
+                droppedSampleCount: 0
+            ),
+            system: AudioTrackCaptureResult(
+                source: .system,
+                outputURL: paths.systemURL,
+                droppedSampleCount: 0
+            ),
+            microphoneCoverage: microphone,
+            systemCoverage: system
+        )
+    }
+
+    func testCompleteSessionReportsNoCoverageWarning() {
+        XCTAssertNil(
+            result(microphone: .complete, system: .complete).coverageWarning
+        )
+    }
+
+    /// The 08.21 shape: the system track held 55% of the session.
+    func testShortSystemTrackIsReportedAtStop() {
+        let warning = result(
+            microphone: .complete,
+            system: .undersampled(ratio: 0.554)
+        ).coverageWarning
+        let message = try? XCTUnwrap(warning)
+        XCTAssertTrue(message?.contains("system audio 55%") == true, "\(warning ?? "nil")")
+    }
+
+    func testShortMicrophoneTrackIsReportedAtStop() {
+        let warning = result(
+            microphone: .undersampled(ratio: 0.9),
+            system: .complete
+        ).coverageWarning
+        XCTAssertTrue(warning?.contains("microphone 90%") == true)
+    }
+
+    /// A meeting where the remote side never speaks is a valid recording, so
+    /// an empty system track must not produce a warning.
+    func testEmptySystemTrackIsNotReportedAsLostAudio() {
+        XCTAssertNil(
+            result(microphone: .complete, system: .empty).coverageWarning
+        )
+    }
+
     // MARK: - Support
 
     private func writeTrack(

@@ -163,7 +163,6 @@ public actor MicrophoneCaptureService {
         stopEngineAndRemoveTap()
         unregisterForInterruptions()
 
-        capturedSampleCount = acceptedFrameCounter?.value ?? 0
         drainTask?.cancel()
         if let drainTask {
             await drainTask.value
@@ -182,6 +181,7 @@ public actor MicrophoneCaptureService {
         }
 
         let droppedSampleCount = ringBuffer?.droppedSampleCount ?? 0
+        capturedSampleCount = await consumer?.canonicalSampleCount ?? 0
         clearPipelineReferences()
         state = .stopped(
             outputURL: outputURL,

@@ -29,16 +29,51 @@ public struct DualTrackCaptureResult: Equatable, Sendable {
     public let system: AudioTrackCaptureResult
     public let stopReason: DualTrackRecordingStopReason
 
+    /// How well each track's written samples account for the recording's
+    /// duration. Surfaced rather than thrown, because a short track still
+    /// holds usable audio and discarding it would be worse than reporting it.
+    public let microphoneCoverage: TrackCoverageVerdict
+    public let systemCoverage: TrackCoverageVerdict
+
     public init(
         paths: DualTrackRecordingPaths,
         microphone: AudioTrackCaptureResult,
         system: AudioTrackCaptureResult,
-        stopReason: DualTrackRecordingStopReason = .requested
+        stopReason: DualTrackRecordingStopReason = .requested,
+        microphoneCoverage: TrackCoverageVerdict = .complete,
+        systemCoverage: TrackCoverageVerdict = .complete
     ) {
         self.paths = paths
         self.microphone = microphone
         self.system = system
         self.stopReason = stopReason
+        self.microphoneCoverage = microphoneCoverage
+        self.systemCoverage = systemCoverage
+    }
+
+    /// A human-readable warning when a track is short, or nil when both
+    /// tracks account for the recording. An empty system track is not a
+    /// warning: a meeting where the remote side never speaks is valid.
+    public var coverageWarning: String? {
+        var shortTracks: [String] = []
+        if case let .undersampled(ratio) = microphoneCoverage {
+            shortTracks.append(
+                "microphone \(Self.percentage(ratio))"
+            )
+        }
+        if case let .undersampled(ratio) = systemCoverage {
+            shortTracks.append("system audio \(Self.percentage(ratio))")
+        }
+        guard !shortTracks.isEmpty else {
+            return nil
+        }
+        return "Some audio was lost during recording: "
+            + shortTracks.joined(separator: ", ")
+            + " of the session was captured."
+    }
+
+    private static func percentage(_ ratio: Double) -> String {
+        "\(Int((ratio * 100).rounded()))%"
     }
 }
 
@@ -74,6 +109,8 @@ public actor DualTrackRecordingCoordinator {
     private let freeSpaceProvider: any RecordingFreeSpaceProviding
     private let diskSpaceConfiguration: RecordingDiskSpaceConfiguration
     private var activePaths: DualTrackRecordingPaths?
+    private var recordingStartedAt: Date?
+    private let coverageAudit = CaptureCoverageAudit()
     private var diskMonitorTask: Task<Void, Never>?
 
     public init(
@@ -229,6 +266,7 @@ public actor DualTrackRecordingCoordinator {
         }
 
         state = .recording(paths: paths)
+        recordingStartedAt = Date()
         startDiskMonitoring()
         return paths
     }
@@ -297,7 +335,11 @@ public actor DualTrackRecordingCoordinator {
             failures.append(error.localizedDescription)
         }
 
+        let recordedDuration = recordingStartedAt.map {
+            Date().timeIntervalSince($0)
+        } ?? 0
         activePaths = nil
+        recordingStartedAt = nil
         guard
             failures.isEmpty,
             let microphoneResult,
@@ -351,7 +393,15 @@ public actor DualTrackRecordingCoordinator {
             paths: paths,
             microphone: microphoneResult,
             system: systemResult,
-            stopReason: reason
+            stopReason: reason,
+            microphoneCoverage: coverageAudit.verdict(
+                capturedSampleCount: microphoneResult.capturedSampleCount,
+                duration: recordedDuration
+            ),
+            systemCoverage: coverageAudit.verdict(
+                capturedSampleCount: systemResult.capturedSampleCount,
+                duration: recordedDuration
+            )
         )
         state = .stopped(result: result)
         return result
