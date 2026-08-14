@@ -44,6 +44,13 @@ void scribe_atomic_counter_increment(ScribeAtomicCounter *counter) {
     atomic_fetch_add_explicit(&counter->value, 1, memory_order_relaxed);
 }
 
+void scribe_atomic_counter_add(ScribeAtomicCounter *counter, uint64_t amount) {
+    if (counter == NULL) {
+        return;
+    }
+    atomic_fetch_add_explicit(&counter->value, amount, memory_order_relaxed);
+}
+
 uint64_t scribe_atomic_counter_load(const ScribeAtomicCounter *counter) {
     if (counter == NULL) {
         return 0;

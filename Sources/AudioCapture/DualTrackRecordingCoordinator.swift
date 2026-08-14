@@ -332,6 +332,21 @@ public actor DualTrackRecordingCoordinator {
             throw AudioCaptureError.dualTrackStopFailed(message)
         }
 
+        // A silent system track is legitimate: a meeting where the remote side
+        // never speaks is a valid recording. A microphone track that received
+        // no samples at all is always a fault, because a working input delivers
+        // frames even when the room is silent. Both WAVs and the session
+        // metadata are already finalized above, so failing here preserves
+        // everything that was captured while refusing to report success.
+        guard microphoneResult.capturedSampleCount > 0 else {
+            let error = AudioCaptureError.microphoneCapturedNoAudio
+            state = .failed(
+                message: error.localizedDescription,
+                paths: paths
+            )
+            throw error
+        }
+
         let result = DualTrackCaptureResult(
             paths: paths,
             microphone: microphoneResult,

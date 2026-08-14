@@ -16,6 +16,10 @@ let package = Package(
         .executable(
             name: "ProviderEndpointProbe",
             targets: ["ProviderEndpointProbe"]
+        ),
+        .executable(
+            name: "MicrophoneRouteProbe",
+            targets: ["MicrophoneRouteProbe"]
         )
     ],
     dependencies: [
@@ -94,6 +98,14 @@ let package = Package(
             name: "ProviderEndpointProbe",
             dependencies: ["Intelligence"],
             path: "Sources/ProviderEndpointProbe",
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        ),
+        .executableTarget(
+            name: "MicrophoneRouteProbe",
+            dependencies: ["AudioCapture"],
+            path: "Sources/MicrophoneRouteProbe",
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")
             ]

@@ -46,6 +46,11 @@ final class RealtimeCallbackCounter: @unchecked Sendable {
         scribe_atomic_counter_increment(storage)
     }
 
+    /// Realtime safe: a single relaxed atomic add, no allocation or locking.
+    func add(_ amount: UInt64) {
+        scribe_atomic_counter_add(storage, amount)
+    }
+
     var value: UInt64 {
         scribe_atomic_counter_load(storage)
     }

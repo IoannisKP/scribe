@@ -3,6 +3,99 @@ import Foundation
 import XCTest
 
 final class DualTrackRecordingCoordinatorTests: XCTestCase {
+    /// The reported Bluetooth failure finished a whole session, wrote a
+    /// 44-byte microphone.wav containing only a WAV header, and reported
+    /// success. A microphone track that received no samples at all is always a
+    /// fault, because a working input delivers frames even in a silent room.
+    func testMicrophoneThatCapturedNoSamplesFailsInsteadOfReportingSuccess()
+        async throws
+    {
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            firstSampleHostTime: nil,
+            capturedSampleCount: 0
+        )
+        let system = FakeTrackCapture(
+            source: .system,
+            firstSampleHostTime: 2_000_000
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer {
+            removeTestDirectory(directory)
+        }
+
+        _ = try await coordinator.startRecording(in: directory)
+
+        do {
+            _ = try await coordinator.stopRecording()
+            XCTFail("A microphone track with zero samples reported success.")
+        } catch let error as AudioCaptureError {
+            XCTAssertEqual(error, .microphoneCapturedNoAudio)
+        }
+
+        let state = await coordinator.state
+        guard case let .failed(message, _) = state else {
+            XCTFail("Expected a failed state; got \(state).")
+            return
+        }
+        XCTAssertFalse(message.isEmpty)
+
+        // Both tracks were still finalized and the session metadata written,
+        // so nothing that was captured is thrown away by the failure.
+        let microphoneStops = await microphone.stopCount
+        let systemStops = await system.stopCount
+        XCTAssertEqual(microphoneStops, 1)
+        XCTAssertEqual(systemStops, 1)
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent(
+                    CaptureSessionManifest.fileName
+                ).path
+            )
+        )
+    }
+
+    /// A meeting where the remote side never speaks is a valid recording, and
+    /// a 44-byte system.wav is correct behaviour the codebase handles
+    /// deliberately. Only the microphone rule is new.
+    func testSystemTrackThatCapturedNoSamplesStillSucceeds() async throws {
+        let microphone = FakeTrackCapture(
+            source: .microphone,
+            firstSampleHostTime: 1_000_000
+        )
+        let system = FakeTrackCapture(
+            source: .system,
+            firstSampleHostTime: nil,
+            capturedSampleCount: 0
+        )
+        let coordinator = DualTrackRecordingCoordinator(
+            microphoneCapture: microphone,
+            systemCapture: system,
+            freeSpaceProvider: MutableFreeSpaceProvider(
+                availableBytes: .max
+            ),
+            diskSpaceConfiguration: testDiskConfiguration()
+        )
+        let directory = testDirectory()
+        defer {
+            removeTestDirectory(directory)
+        }
+
+        _ = try await coordinator.startRecording(in: directory)
+        let result = try await coordinator.stopRecording()
+
+        XCTAssertEqual(result.system.capturedSampleCount, 0)
+        XCTAssertGreaterThan(result.microphone.capturedSampleCount, 0)
+    }
+
     func testStartsAndStopsIndependentTrackFiles() async throws {
         let microphone = FakeTrackCapture(
             source: .microphone,
@@ -558,6 +651,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
     let startOrder: CaptureStartOrder?
     private(set) var startCount = 0
     private(set) var stopCount = 0
+    private let capturedSampleCount: UInt64
     private var outputURL: URL?
 
     init(
@@ -569,7 +663,8 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         graphPreparation: SystemAudioGraphPreparation? = nil,
         microphoneInputDevice: MicrophoneInputDeviceIdentity? = nil,
         microphoneInputRouteChanges: [MicrophoneInputRouteChange] = [],
-        startOrder: CaptureStartOrder? = nil
+        startOrder: CaptureStartOrder? = nil,
+        capturedSampleCount: UInt64 = 16_000
     ) {
         self.source = source
         self.startFailure = startFailure
@@ -580,6 +675,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
         self.microphoneInputDevice = microphoneInputDevice
         self.inputRouteChanges = microphoneInputRouteChanges
         self.startOrder = startOrder
+        self.capturedSampleCount = capturedSampleCount
     }
 
     func startRecording(to outputURL: URL) async throws {
@@ -607,6 +703,7 @@ private actor FakeTrackCapture: AudioTrackCapturing {
             source: source,
             outputURL: outputURL,
             droppedSampleCount: 0,
+            capturedSampleCount: capturedSampleCount,
             firstSampleHostTime: capturedFirstSampleHostTime
         )
     }

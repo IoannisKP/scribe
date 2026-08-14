@@ -1395,3 +1395,56 @@ leaves the Mac. Structured, append-only provenance keeps a six-month-old result
 auditable and supports any provider name. A separate Part 1 commit remains a
 complete short-transcript feature if implementation or API usage limits stop
 work before map-reduce.
+
+## 2026-08-14 — Prove microphone capture with frames, not with properties
+
+**Decision:** Treat arriving frames as the only trustworthy evidence that a
+microphone tap works. The realtime sink adds each accepted frame to a lock-free
+atomic counter; a watchdog polls that counter against `MicrophoneLivenessPolicy`
+and rebuilds the input route when an installed tap delivers nothing past its
+grace period, recording the rebuild as a `captureDeliveredNoAudio` route change.
+Exhausting the rebuild budget fails the recording. Carry
+`capturedSampleCount` on `AudioTrackCaptureResult` and fail a dual-track stop
+whose microphone track captured nothing, after both WAVs and the session
+metadata are finalized.
+
+**Alternatives:** Wait a fixed delay for the Bluetooth route to settle before
+installing the tap; gate installation on `kAudioDevicePropertyNominalSampleRate`
+matching `kAudioDevicePropertyAvailableNominalSampleRates`; require the rate to
+hold steady for a quiet window; rely on `AVAudioEngineConfigurationChange`;
+prewarm the microphone route at launch as the system tap does; detect the empty
+track by measuring signal energy.
+
+**Reasoning:** Measured on the affected hardware, the AirPods input device
+(whose only supported rate is 24 kHz) reports nominal 48 kHz for about 2.1
+seconds while macOS switches it into headset mode, and reports
+`available [48000]` for that whole window. Every static property is therefore
+self-consistent and wrong, which rules out the property-gating and
+quiet-window alternatives; a fixed delay would have to exceed the longest
+transition on any device and would still be a guess. The tap installed inside
+that window kept `AVAudioEngine.isRunning` true and delivered zero callbacks
+with no error, and the configuration-change notification did not fire for the
+settle in the three affected sessions, whose route history contains only
+`recordingStarted`. Frames are the one signal that cannot be self-consistently
+wrong, and they arrive during silence too, so an empty microphone track is
+always a fault and never a quiet room. That also makes energy measurement
+unnecessary and unsafe, since a legitimately quiet speaker would trip it.
+
+Launch prewarming was rejected for the microphone even though it is the
+established pattern for the system tap: binding an input device forces AirPods
+into headset mode, so prewarming would degrade the user's music whenever Scribe
+was running. Paying a sub-second rebuild at record time is the smaller cost.
+
+A silent system track stays a success. A meeting where the remote side never
+speaks is a valid recording, and a 44-byte `system.wav` is correct behaviour.
+The microphone is the local user's own input, and its total absence across a
+session while the user is present is always a fault.
+
+**Verification:** The transient, the dead tap, and the recovery were reproduced
+and measured on the affected AirPods through `MicrophoneRouteProbe`. The
+watchdog was then confirmed on the same hardware with configuration-change
+recovery disabled, reproducing the affected sessions' conditions: one rebuild
+254 ms after the fault was detected, 309600 frames captured, 412822-byte WAV
+against the 44-byte failure. The zero-sample stop rule is covered synthetically
+only; it has not been observed on hardware since the capture fix removes its
+trigger.

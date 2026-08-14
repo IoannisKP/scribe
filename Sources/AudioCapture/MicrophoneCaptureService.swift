@@ -28,17 +28,24 @@ public actor MicrophoneCaptureService {
 
     private let permissionAuthorizer: any MicrophonePermissionAuthorizing
     private let liveSink: (any CanonicalAudioBlockSink)?
+    private let livenessPolicy: MicrophoneLivenessPolicy
     private let engine = AVAudioEngine()
 
     private var ringBuffer: FloatRingBuffer?
     private var realtimeSink: MicrophoneRealtimeSink?
     private var firstSampleTime: FirstSampleHostTime?
+    private var acceptedFrameCounter: RealtimeCallbackCounter?
     private var consumer: CanonicalAudioFileConsumer?
     private var drainTask: Task<Void, Never>?
+    private var livenessTask: Task<Void, Never>?
     private var outputURL: URL?
     private var isTapInstalled = false
     private var isRecovering = false
     private var isSleeping = false
+    private var lastAcceptedFrameCount: UInt64 = 0
+    private var lastFrameProgressAt: ContinuousClock.Instant?
+    private var consecutiveRebuilds = 0
+    private var capturedSampleCount: UInt64 = 0
     private var selectedInputDevice: MicrophoneInputDeviceIdentity?
     private var inputRouteChanges: [MicrophoneInputRouteChange] = []
     private var observerRegistrations: [ObserverRegistration] = []
@@ -46,10 +53,12 @@ public actor MicrophoneCaptureService {
     public init(
         permissionAuthorizer: any MicrophonePermissionAuthorizing =
             SystemMicrophonePermissionAuthorizer(),
-        liveSink: (any CanonicalAudioBlockSink)? = nil
+        liveSink: (any CanonicalAudioBlockSink)? = nil,
+        livenessPolicy: MicrophoneLivenessPolicy = MicrophoneLivenessPolicy()
     ) {
         self.permissionAuthorizer = permissionAuthorizer
         self.liveSink = liveSink
+        self.livenessPolicy = livenessPolicy
     }
 
     public func permissionStatus() async -> MicrophoneAuthorizationStatus {
@@ -89,6 +98,7 @@ public actor MicrophoneCaptureService {
         state = .starting
         selectedInputDevice = nil
         inputRouteChanges = []
+        capturedSampleCount = 0
         do {
             let resolvedRoute = try currentCaptureRoute(
                 reason: .recordingStarted
@@ -106,15 +116,18 @@ public actor MicrophoneCaptureService {
                 liveSink: liveSink
             )
             let firstSampleTime = try FirstSampleHostTime()
+            let acceptedFrameCounter = try RealtimeCallbackCounter()
             let realtimeSink = MicrophoneRealtimeSink(
                 ringBuffer: ringBuffer,
-                firstSampleTime: firstSampleTime
+                firstSampleTime: firstSampleTime,
+                acceptedFrameCounter: acceptedFrameCounter
             )
 
             self.ringBuffer = ringBuffer
             self.consumer = consumer
             self.realtimeSink = realtimeSink
             self.firstSampleTime = firstSampleTime
+            self.acceptedFrameCounter = acceptedFrameCounter
             self.outputURL = outputURL
             startDrainTask(consumer: consumer)
             try installTap(format: captureFormat, sink: realtimeSink)
@@ -122,6 +135,7 @@ public actor MicrophoneCaptureService {
             engine.prepare()
             try engine.start()
             state = .recording(outputURL: outputURL)
+            startLivenessMonitoring()
         } catch {
             let cleanupMessage = await shutDownPipelineAfterFailure()
             let originalMessage = error.localizedDescription
@@ -144,9 +158,12 @@ public actor MicrophoneCaptureService {
         }
 
         state = .stopping
+        livenessTask?.cancel()
+        livenessTask = nil
         stopEngineAndRemoveTap()
         unregisterForInterruptions()
 
+        capturedSampleCount = acceptedFrameCounter?.value ?? 0
         drainTask?.cancel()
         if let drainTask {
             await drainTask.value
@@ -250,6 +267,107 @@ public actor MicrophoneCaptureService {
         }
     }
 
+    /// Watches the realtime accepted-frame counter and rebuilds the input route
+    /// when the installed tap is not delivering.
+    ///
+    /// A tap installed against a Bluetooth device that is still switching into
+    /// headset mode reports no error and keeps `AVAudioEngine.isRunning` true
+    /// while delivering nothing, and no Core Audio property distinguishes that
+    /// transient state from a settled one. Arriving frames are the only
+    /// trustworthy evidence that capture works, and they arrive in silence too,
+    /// so this never mistakes a quiet room for a fault.
+    private func startLivenessMonitoring() {
+        livenessTask?.cancel()
+        lastAcceptedFrameCount = 0
+        lastFrameProgressAt = ContinuousClock.now
+        consecutiveRebuilds = 0
+
+        let interval = livenessPolicy.pollInterval
+        livenessTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
+                guard let self else {
+                    return
+                }
+                await self.evaluateCaptureLiveness()
+            }
+        }
+    }
+
+    private func evaluateCaptureLiveness() async {
+        guard
+            case .recording = state,
+            !isRecovering,
+            !isSleeping,
+            let acceptedFrameCounter,
+            let lastProgress = lastFrameProgressAt
+        else {
+            return
+        }
+
+        let acceptedFrameCount = acceptedFrameCounter.value
+        if acceptedFrameCount > lastAcceptedFrameCount {
+            lastAcceptedFrameCount = acceptedFrameCount
+            lastFrameProgressAt = ContinuousClock.now
+            consecutiveRebuilds = 0
+            return
+        }
+
+        let decision = livenessPolicy.decide(
+            hasCapturedAudio: acceptedFrameCount > 0,
+            sinceLastAcceptedFrame: ContinuousClock.now - lastProgress,
+            consecutiveRebuilds: consecutiveRebuilds
+        )
+
+        switch decision {
+        case .keepWaiting:
+            return
+        case .rebuildRoute:
+            consecutiveRebuilds += 1
+            await recoverAfterInterruption(
+                reason: acceptedFrameCount > 0
+                    ? "The microphone stopped sending audio. Rebuilding the input route."
+                    : "Waiting for the microphone to start sending audio.",
+                routeReason: .captureDeliveredNoAudio
+            )
+            // The rebuilt tap earns its own grace period.
+            lastFrameProgressAt = ContinuousClock.now
+        case .failNoAudio:
+            await failBecauseMicrophoneDeliveredNoAudio()
+        }
+    }
+
+    private func failBecauseMicrophoneDeliveredNoAudio() async {
+        let attempts = consecutiveRebuilds
+        livenessTask?.cancel()
+        livenessTask = nil
+        stopEngineAndRemoveTap()
+        unregisterForInterruptions()
+        drainTask?.cancel()
+        if let drainTask {
+            await drainTask.value
+        }
+
+        var message = AudioCaptureError
+            .microphoneDeliveredNoAudio(rebuildAttempts: attempts)
+            .localizedDescription
+        if let consumer {
+            do {
+                try await consumer.finish()
+            } catch {
+                message += " Finalizing the captured audio also failed: \(error.localizedDescription)"
+            }
+        }
+
+        capturedSampleCount = acceptedFrameCounter?.value ?? 0
+        clearPipelineReferences()
+        state = .failed(message: message)
+    }
+
     private func handleConsumerFailure(message: String) async {
         switch state {
         case .recording, .recovering:
@@ -270,6 +388,7 @@ public actor MicrophoneCaptureService {
             }
         }
 
+        capturedSampleCount = acceptedFrameCounter?.value ?? 0
         clearPipelineReferences()
         state = .failed(
             message: AudioCaptureError
@@ -482,6 +601,8 @@ public actor MicrophoneCaptureService {
     }
 
     private func failAfterRecovery(message: String) async {
+        livenessTask?.cancel()
+        livenessTask = nil
         stopEngineAndRemoveTap()
         unregisterForInterruptions()
         drainTask?.cancel()
@@ -498,6 +619,7 @@ public actor MicrophoneCaptureService {
             }
         }
 
+        capturedSampleCount = acceptedFrameCounter?.value ?? 0
         clearPipelineReferences()
         isRecovering = false
         state = .failed(
@@ -508,6 +630,8 @@ public actor MicrophoneCaptureService {
     }
 
     private func shutDownPipelineAfterFailure() async -> String? {
+        livenessTask?.cancel()
+        livenessTask = nil
         stopEngineAndRemoveTap()
         unregisterForInterruptions()
         drainTask?.cancel()
@@ -523,19 +647,26 @@ public actor MicrophoneCaptureService {
                 cleanupMessage = error.localizedDescription
             }
         }
+        capturedSampleCount = acceptedFrameCounter?.value ?? 0
         clearPipelineReferences()
         return cleanupMessage
     }
 
     private func clearPipelineReferences() {
+        livenessTask?.cancel()
+        livenessTask = nil
         ringBuffer = nil
         realtimeSink = nil
         firstSampleTime = nil
+        acceptedFrameCounter = nil
         consumer = nil
         drainTask = nil
         outputURL = nil
         isSleeping = false
         isRecovering = false
+        lastAcceptedFrameCount = 0
+        lastFrameProgressAt = nil
+        consecutiveRebuilds = 0
     }
 }
 
@@ -608,13 +739,16 @@ struct MicrophoneInputRouteResolver {
 private final class MicrophoneRealtimeSink: @unchecked Sendable {
     private let ringBuffer: FloatRingBuffer
     private let firstSampleTime: FirstSampleHostTime
+    private let acceptedFrameCounter: RealtimeCallbackCounter
 
     init(
         ringBuffer: FloatRingBuffer,
-        firstSampleTime: FirstSampleHostTime
+        firstSampleTime: FirstSampleHostTime,
+        acceptedFrameCounter: RealtimeCallbackCounter
     ) {
         self.ringBuffer = ringBuffer
         self.firstSampleTime = firstSampleTime
+        self.acceptedFrameCounter = acceptedFrameCounter
     }
 
     func receive(_ buffer: AVAudioPCMBuffer, time: AVAudioTime) {
@@ -631,8 +765,11 @@ private final class MicrophoneRealtimeSink: @unchecked Sendable {
             channelCount: Int(buffer.format.channelCount),
             frameCount: Int(buffer.frameLength)
         )
-        if written > 0, time.isHostTimeValid {
-            firstSampleTime.capture(time.hostTime)
+        if written > 0 {
+            acceptedFrameCounter.add(UInt64(written))
+            if time.isHostTimeValid {
+                firstSampleTime.capture(time.hostTime)
+            }
         }
     }
 }
@@ -672,6 +809,7 @@ extension MicrophoneCaptureService: AudioTrackCapturing {
             source: .microphone,
             outputURL: outputURL,
             droppedSampleCount: droppedSampleCount,
+            capturedSampleCount: capturedSampleCount,
             firstSampleHostTime: capturedFirstSampleHostTime
         )
     }

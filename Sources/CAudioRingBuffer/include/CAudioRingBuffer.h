@@ -24,6 +24,7 @@ typedef struct ScribeAtomicPointer ScribeAtomicPointer;
 ScribeAtomicCounter * _Nullable scribe_atomic_counter_create(void);
 void scribe_atomic_counter_destroy(ScribeAtomicCounter *counter);
 void scribe_atomic_counter_increment(ScribeAtomicCounter *counter);
+void scribe_atomic_counter_add(ScribeAtomicCounter *counter, uint64_t amount);
 uint64_t scribe_atomic_counter_load(const ScribeAtomicCounter *counter);
 
 /// A lock-free pointer slot used to attach a prepared IOProc to its realtime

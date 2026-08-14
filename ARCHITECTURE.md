@@ -356,6 +356,26 @@ The service observes:
 - `NSWorkspace.willSleepNotification`;
 - `NSWorkspace.didWakeNotification`.
 
+Notifications alone are not sufficient. A Bluetooth input reports a complete,
+self-consistent format while it is still switching into headset mode, and a tap
+installed against that transient format delivers nothing once the route
+settles, with `AVAudioEngine.isRunning` still true and no notification or error
+raised. The service therefore also watches evidence rather than properties: the
+realtime sink adds every accepted frame to a lock-free atomic counter, and a
+watchdog polls it against `MicrophoneLivenessPolicy`. A tap that delivers
+nothing past its grace period is rebuilt through the same route-recovery path
+under the `captureDeliveredNoAudio` reason; consecutive rebuilds beyond the
+budget fail the recording instead of retrying forever. Because a working input
+delivers frames even in a silent room, an absence of frames is unambiguously a
+fault and the watchdog never inspects signal level.
+
+Zero captured frames is reported, not hidden. `AudioTrackCaptureResult` carries
+`capturedSampleCount`, and the dual-track coordinator fails a stop whose
+microphone track captured nothing, after both WAVs and the session metadata are
+finalized so no captured audio is discarded by the failure. The same rule is
+deliberately not applied to the system track: a meeting where the remote side
+never speaks is a valid recording.
+
 Recovery stops and removes the old tap, lets already captured frames drain,
 binds the current concrete device, reads its new input format, creates a
 converter for that rate, then reinstalls and restarts the tap. Transient route

@@ -758,6 +758,15 @@ final class MeetingRecorderViewModel: ObservableObject {
     }
 
     var statusText: String {
+        // A microphone that stops delivering fails only its own service, so
+        // without this the main status keeps claiming both tracks are
+        // recording while nothing reaches microphone.wav.
+        if
+            captureState.isActive,
+            case let .failed(message) = microphoneCaptureState
+        {
+            return "Microphone recording failed: \(message)"
+        }
         if case let .recovering(reason, _) = microphoneCaptureState {
             return "Recovering microphone: \(reason)"
         }

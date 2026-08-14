@@ -32,6 +32,12 @@ public enum MicrophoneInputRouteChangeReason: String, Codable, Sendable {
     case recordingStarted
     case inputConfigurationChanged
     case wakeRecovery
+
+    /// The installed tap stopped delivering frames, or never delivered any, so
+    /// the route was rebound and the tap reinstalled. A Bluetooth input that is
+    /// still switching into headset mode reports a transient format that is
+    /// valid when read and dead once the route settles.
+    case captureDeliveredNoAudio
 }
 
 public struct MicrophoneInputRouteChange: Codable, Equatable, Sendable {
@@ -68,17 +74,24 @@ public struct AudioTrackCaptureResult: Equatable, Sendable {
     public let source: AudioSource
     public let outputURL: URL
     public let droppedSampleCount: UInt64
+
+    /// Frames accepted from the realtime callback across the whole session,
+    /// including recovery. Zero means the capture callback never delivered
+    /// anything, which is distinct from delivering silence.
+    public let capturedSampleCount: UInt64
     public let firstSampleHostTime: UInt64?
 
     public init(
         source: AudioSource,
         outputURL: URL,
         droppedSampleCount: UInt64,
+        capturedSampleCount: UInt64 = 0,
         firstSampleHostTime: UInt64? = nil
     ) {
         self.source = source
         self.outputURL = outputURL
         self.droppedSampleCount = droppedSampleCount
+        self.capturedSampleCount = capturedSampleCount
         self.firstSampleHostTime = firstSampleHostTime
     }
 }
@@ -265,6 +278,8 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
     case microphoneCaptureNotRunning
     case microphoneEngineStartFailed(String)
     case microphoneRecoveryFailed(String)
+    case microphoneDeliveredNoAudio(rebuildAttempts: Int)
+    case microphoneCapturedNoAudio
     case microphoneConsumerFailed(String)
     case audioConsumerFailed(String)
     case audioFormatChangedBeforeBufferedSamplesDrained
@@ -341,6 +356,10 @@ public enum AudioCaptureError: Error, Equatable, LocalizedError, Sendable {
             "The microphone audio engine could not start: \(message)"
         case let .microphoneRecoveryFailed(message):
             "Microphone recording could not recover after an audio-device interruption: \(message)"
+        case let .microphoneDeliveredNoAudio(rebuildAttempts):
+            "The microphone stopped sending audio to Scribe and did not recover after \(rebuildAttempts) attempts to rebuild the input route. If you are using Bluetooth headphones, disconnect them or select a different microphone, then record again."
+        case .microphoneCapturedNoAudio:
+            "The microphone recorded no audio at all for this session, so only the system-audio track is usable. This is usually a Bluetooth input that never finished switching into headset mode. Select a different microphone, or reconnect the headset, then record again."
         case let .microphoneConsumerFailed(message):
             "Microphone audio could not be processed or written: \(message)"
         case let .audioConsumerFailed(message):
