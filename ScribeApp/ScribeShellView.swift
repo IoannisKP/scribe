@@ -906,12 +906,11 @@ private struct SidebarRecordingControl: View {
             .padding(11)
             // glassEffect defaults to a capsule, which on this tall control
             // renders as a circular blob spilling outside the sidebar.
+            // Neutral on purpose. The red belongs to the Stop button, and a
+            // tinted panel behind it competes with the one thing the user
+            // needs to find while a recording is running.
             .glassEffect(
-                recorder.isRecording
-                    ? .regular
-                        .tint(ScribePalette.recordingActive.opacity(0.14))
-                        .interactive()
-                    : .regular.interactive(),
+                .regular.interactive(),
                 in: .rect(cornerRadius: 12)
             )
         }
