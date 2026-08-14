@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CaptureSessionManifest: Codable, Equatable, Sendable {
-    public static let currentVersion = 7
+    public static let currentVersion = 8
     public static let fileName = "session.json"
     public static let legacyFileName = "capture-session.json"
 
@@ -252,6 +252,11 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public let version: Int
     public let sessionID: UUID
     public let title: String
+
+    /// Where `title` came from, so an automatic pass never overwrites a
+    /// title the user chose. Absent in manifests written before schema 8,
+    /// which are treated as date-and-time titles.
+    public let titleSource: SessionTitleSource
     public let createdAt: Date
     public let source: SessionSource
     public let sampleRate: Double
@@ -274,6 +279,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         version: Int = Self.currentVersion,
         sessionID: UUID = UUID(),
         title: String = "Untitled Session",
+        titleSource: SessionTitleSource = .dateTime,
         createdAt: Date = Date(),
         source: SessionSource = .liveCapture,
         sampleRate: Double = CanonicalAudioFormat.sampleRate,
@@ -295,6 +301,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         self.version = version
         self.sessionID = sessionID
         self.title = title
+        self.titleSource = titleSource
         self.createdAt = createdAt
         self.source = source
         self.sampleRate = sampleRate
@@ -531,6 +538,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
     public func replacing(
         sessionID: UUID? = nil,
         title: String? = nil,
+        titleSource: SessionTitleSource? = nil,
         tracks: [Track]? = nil,
         speakerIdentities: [SpeakerIdentity]? = nil,
         artifacts: [Artifact]? = nil,
@@ -548,6 +556,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             version: Self.currentVersion,
             sessionID: sessionID ?? self.sessionID,
             title: title ?? self.title,
+            titleSource: titleSource ?? self.titleSource,
             createdAt: createdAt,
             source: source,
             sampleRate: sampleRate,
@@ -736,6 +745,7 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
         case version
         case sessionID
         case title
+        case titleSource
         case createdAt
         case source
         case sampleRate
@@ -761,6 +771,10 @@ public struct CaptureSessionManifest: Codable, Equatable, Sendable {
             ?? UUID()
         title = try container.decodeIfPresent(String.self, forKey: .title)
             ?? "Recovered Session"
+        titleSource = try container.decodeIfPresent(
+            SessionTitleSource.self,
+            forKey: .titleSource
+        ) ?? .dateTime
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
             ?? Date(timeIntervalSince1970: 0)
         source = try container.decodeIfPresent(SessionSource.self, forKey: .source)
@@ -983,11 +997,31 @@ public actor CaptureSessionManifestStore {
 
     public func replaceTitle(
         _ title: String,
+        source: SessionTitleSource = .userSet,
         in sessionDirectory: URL
     ) throws -> CaptureSessionManifest {
         let manifest = try CaptureSessionManifest.load(
             from: sessionDirectory
-        ).replacing(title: title)
+        ).replacing(title: title, titleSource: source)
+        try manifest.write(to: sessionDirectory)
+        return manifest
+    }
+
+    /// Applies a generated title only when the stored title is still one that
+    /// generation is allowed to replace. Returns nil when the existing title
+    /// must be preserved, so callers cannot overwrite a user's own title by
+    /// forgetting to check.
+    @discardableResult
+    public func applyGeneratedTitle(
+        _ title: String,
+        source: SessionTitleSource,
+        in sessionDirectory: URL
+    ) throws -> CaptureSessionManifest? {
+        let existing = try CaptureSessionManifest.load(from: sessionDirectory)
+        guard existing.titleSource.isReplaceableByGeneration else {
+            return nil
+        }
+        let manifest = existing.replacing(title: title, titleSource: source)
         try manifest.write(to: sessionDirectory)
         return manifest
     }

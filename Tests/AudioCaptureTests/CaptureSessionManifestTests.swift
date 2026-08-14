@@ -3,6 +3,124 @@ import Foundation
 import XCTest
 
 final class CaptureSessionManifestTests: XCTestCase {
+    // MARK: - Generated titles never overwrite the user's own
+
+    private func manifestDirectory() -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("title-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: url, withIntermediateDirectories: true
+        )
+        return url
+    }
+
+    private func writeManifest(
+        title: String,
+        titleSource: SessionTitleSource,
+        to directory: URL
+    ) throws {
+        try CaptureSessionManifest(
+            title: title,
+            titleSource: titleSource,
+            tracks: [
+                CaptureSessionManifest.Track(
+                    source: .microphone,
+                    relativePath: "microphone.wav",
+                    startSampleOffset: 0,
+                    timingPrecision: .sampleAccurate
+                ),
+                CaptureSessionManifest.Track(
+                    source: .system,
+                    relativePath: "system.wav",
+                    startSampleOffset: 0,
+                    timingPrecision: .sampleAccurate
+                )
+            ]
+        ).write(to: directory)
+    }
+
+    func testGeneratedTitleReplacesADateTimeTitle() async throws {
+        let directory = manifestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeManifest(
+            title: "2026-08-14 08.53", titleSource: .dateTime, to: directory
+        )
+
+        let updated = try await CaptureSessionManifestStore.shared
+            .applyGeneratedTitle(
+                "Pricing page rebuild",
+                source: .keywords,
+                in: directory
+            )
+
+        XCTAssertEqual(updated?.title, "Pricing page rebuild")
+        XCTAssertEqual(updated?.titleSource, .keywords)
+    }
+
+    func testGeneratedTitleNeverOverwritesAUserSetTitle() async throws {
+        let directory = manifestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeManifest(
+            title: "Board sync", titleSource: .userSet, to: directory
+        )
+
+        let updated = try await CaptureSessionManifestStore.shared
+            .applyGeneratedTitle(
+                "Yeah think actually",
+                source: .keywords,
+                in: directory
+            )
+
+        XCTAssertNil(updated, "Generation overwrote a user-set title.")
+        let reloaded = try CaptureSessionManifest.load(from: directory)
+        XCTAssertEqual(reloaded.title, "Board sync")
+        XCTAssertEqual(reloaded.titleSource, .userSet)
+    }
+
+    /// A better source may replace a weaker generated one, but a summary title
+    /// is not re-derived from keywords afterwards.
+    func testKeywordTitleIsReplaceableButSummaryTitleIsNot() async throws {
+        let directory = manifestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeManifest(
+            title: "Invoice approval", titleSource: .keywords, to: directory
+        )
+        let upgraded = try await CaptureSessionManifestStore.shared
+            .applyGeneratedTitle(
+                "Invoice approval workflow",
+                source: .summary,
+                in: directory
+            )
+        XCTAssertEqual(upgraded?.titleSource, .summary)
+
+        let downgraded = try await CaptureSessionManifestStore.shared
+            .applyGeneratedTitle(
+                "Something weaker",
+                source: .keywords,
+                in: directory
+            )
+        XCTAssertNil(downgraded)
+    }
+
+    /// Manifests written before schema 8 carry no title source and must be
+    /// treated as date-and-time titles, so they can still be improved.
+    func testManifestsWithoutATitleSourceDecodeAsDateTime() throws {
+        let json = """
+        {"version":7,"title":"2026-08-13 22.39","sampleRate":16000,
+         "channelCount":1,"createdAt":0,
+         "tracks":[{"source":"microphone","relativePath":"microphone.wav",
+                    "timingPrecision":"unavailable"},
+                   {"source":"system","relativePath":"system.wav",
+                    "timingPrecision":"unavailable"}]}
+        """
+        let manifest = try JSONDecoder().decode(
+            CaptureSessionManifest.self,
+            from: Data(json.utf8)
+        )
+        XCTAssertEqual(manifest.titleSource, .dateTime)
+        XCTAssertTrue(manifest.titleSource.isReplaceableByGeneration)
+    }
+
     func testRoundTripsCanonicalDualTrackTimeline() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

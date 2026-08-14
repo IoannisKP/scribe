@@ -87,6 +87,7 @@
 		10000000000000000000004C /* GlobalHotKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004B /* GlobalHotKeyMonitor.swift */; };
 		10000000000000000000004D /* SessionLibraryPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004C /* SessionLibraryPresentation.swift */; };
 		10000000000000000000004E /* SessionReadingPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004D /* SessionReadingPresentation.swift */; };
+		100000000000000000000061 /* SessionTitleDerivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000060 /* SessionTitleDerivation.swift */; };
 		10000000000000000000004F /* SessionReadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004E /* SessionReadingView.swift */; };
 		100000000000000000000050 /* ScribeInterfaceStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000004F /* ScribeInterfaceStyle.swift */; };
 		100000000000000000000051 /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000050 /* ProviderSettingsView.swift */; };
@@ -239,6 +240,7 @@
 		11000000000000000000004B /* GlobalHotKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKeyMonitor.swift; sourceTree = "<group>"; };
 		11000000000000000000004C /* SessionLibraryPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryPresentation.swift; sourceTree = "<group>"; };
 		11000000000000000000004D /* SessionReadingPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReadingPresentation.swift; sourceTree = "<group>"; };
+		110000000000000000000060 /* SessionTitleDerivation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTitleDerivation.swift; sourceTree = "<group>"; };
 		11000000000000000000004E /* SessionReadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReadingView.swift; sourceTree = "<group>"; };
 		11000000000000000000004F /* ScribeInterfaceStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeInterfaceStyle.swift; sourceTree = "<group>"; };
 		110000000000000000000050 /* ProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsView.swift; sourceTree = "<group>"; };
@@ -451,6 +453,7 @@
 				11000000000000000000004A /* ScribeShellPresentation.swift */,
 				11000000000000000000004C /* SessionLibraryPresentation.swift */,
 				11000000000000000000004D /* SessionReadingPresentation.swift */,
+				110000000000000000000060 /* SessionTitleDerivation.swift */,
 				110000000000000000000058 /* SummaryTemplate.swift */,
 				110000000000000000000059 /* SummaryTemplateStore.swift */,
 				11000000000000000000005B /* SummaryGeneration.swift */,
@@ -672,6 +675,7 @@
 				10000000000000000000004B /* ScribeShellPresentation.swift in Sources */,
 				10000000000000000000004D /* SessionLibraryPresentation.swift in Sources */,
 				10000000000000000000004E /* SessionReadingPresentation.swift in Sources */,
+				100000000000000000000061 /* SessionTitleDerivation.swift in Sources */,
 				10000000000000000000003E /* TranscriptArtifactWriter.swift in Sources */,
 				10000000000000000000003F /* LegacySessionMigrator.swift in Sources */,
 				100000000000000000000040 /* SessionLibraryMonitor.swift in Sources */,
