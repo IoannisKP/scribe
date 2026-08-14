@@ -674,15 +674,19 @@ func runSystemTapMode() async {
 
     snapshot("BEFORE ")
 
-    // Force the headset-mode switch exactly as recording does.
-    timeline.log("binding the microphone input to force headset mode")
-    guard bindDefaultInput() != nil else { return }
-    let tapFormat = engine.inputNode.inputFormat(forBus: 0)
-    engine.inputNode.installTap(onBus: 0, bufferSize: 1_024, format: tapFormat) { @Sendable buffer, _ in
-        counters.record(buffer)
+    // Force the headset-mode switch through the production service, which is
+    // what reliably drives AirPods into headset mode.
+    timeline.log("starting MicrophoneCaptureService to force headset mode")
+    let micURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("systemtap-mic-\(UUID().uuidString).wav")
+    let service = MicrophoneCaptureService()
+    do {
+        try await service.startRecording(to: micURL)
+        timeline.log("microphone service started")
+    } catch {
+        timeline.log("microphone service FAILED \(error.localizedDescription)")
+        return
     }
-    engine.prepare()
-    try? engine.start()
 
     var lastLine = ""
     for _ in 0..<(watchSeconds * 4) {
@@ -701,8 +705,16 @@ func runSystemTapMode() async {
         }
     }
 
-    engine.stop()
-    engine.inputNode.removeTap(onBus: 0)
+    if let result = try? await service.stopCapture() {
+        timeline.log("microphone captured \(result.capturedSampleCount) frames")
+    }
+    for route in await service.microphoneInputRouteChanges() {
+        timeline.log(
+            "mic route \(route.reason.rawValue)"
+                + String(format: " @ %.0f Hz", route.inputSampleRate)
+        )
+    }
+    try? FileManager.default.removeItem(at: micURL)
     snapshot("AFTER  ")
     timeline.log(
         sawTapFormatChange

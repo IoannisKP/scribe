@@ -139,10 +139,11 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             recordedStartupStageTimings.append(
                 contentsOf: serviceProfiler.timings
             )
-            // prepare() ran at launch; the tap's rate may have moved since,
-            // notably when a Bluetooth output switches into headset mode
-            // without changing which device is default.
-            let tapSampleRate = try graph.refreshTapFormat()
+            // prepare() ran at launch, and the tap's advertised format does
+            // not track a Bluetooth output switching into headset mode. The
+            // aggregate clocks off the output subdevice, so read that.
+            try graph.refreshTapFormat()
+            let tapSampleRate = try graph.currentDeliveredSampleRate()
             let consumer = try CanonicalAudioFileConsumer(
                 source: .system,
                 ringBuffer: ringBuffer,
@@ -436,6 +437,15 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             reason: "The private system-audio aggregate device changed."
         )
         try addCoreAudioListener(
+            objectID: graph.outputDeviceID,
+            address: AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyNominalSampleRate,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            ),
+            reason: "The output device changed sample rate."
+        )
+        try addCoreAudioListener(
             objectID: graph.tapID,
             address: AudioObjectPropertyAddress(
                 mSelector: kAudioTapPropertyFormat,
@@ -687,7 +697,9 @@ public actor SystemAudioCaptureService: AudioTrackCapturing {
             )
             try replacementGraph.prepare()
             try await consumer.reconfigure(
-                inputSampleRate: replacementGraph.sampleRate
+                inputSampleRate: (
+                    try? replacementGraph.currentDeliveredSampleRate()
+                ) ?? replacementGraph.sampleRate
             )
             self.realtimeRouter = replacementRouter
             self.graph = replacementGraph

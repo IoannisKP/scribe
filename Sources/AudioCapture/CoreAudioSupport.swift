@@ -101,6 +101,39 @@ enum CoreAudioProperties {
         return deviceID
     }
 
+    /// The device's current nominal sample rate.
+    ///
+    /// For a Bluetooth output switching into headset mode this tracks reality
+    /// while `kAudioTapPropertyFormat` does not: measured on the affected
+    /// AirPods, the output device moved 48000 -> 24000 while the tap kept
+    /// reporting 48000 and its format listener never fired.
+    static func nominalSampleRate(
+        _ deviceID: AudioDeviceID
+    ) throws -> Double {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var sampleRate = Double(0)
+        var size = UInt32(MemoryLayout<Double>.size)
+        try CoreAudioCallError.check(
+            AudioObjectGetPropertyData(
+                deviceID,
+                &address,
+                0,
+                nil,
+                &size,
+                &sampleRate
+            ),
+            operation: "Reading the audio device nominal sample rate"
+        )
+        guard sampleRate.isFinite, sampleRate > 0 else {
+            throw AudioCaptureError.systemTapFormatUnsupported
+        }
+        return sampleRate
+    }
+
     static func deviceUID(_ deviceID: AudioDeviceID) throws -> String {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,

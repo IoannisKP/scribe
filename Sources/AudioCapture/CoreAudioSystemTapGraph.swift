@@ -217,6 +217,23 @@ final class CoreAudioSystemTapGraph: @unchecked Sendable {
         )
     }
 
+    /// The rate the aggregate is actually clocking at, which is the rate the
+    /// IOProc delivers frames at.
+    ///
+    /// Deliberately reads the output device rather than the tap. Measured on
+    /// the affected AirPods, when the device switched into headset mode the
+    /// output device moved 48000 -> 24000 while `kAudioTapPropertyFormat` kept
+    /// reporting 48000 and its listener never fired. The aggregate clocks off
+    /// this output subdevice, so its rate is what the resampler must be
+    /// configured from; the tap's advertised format is not trustworthy for
+    /// this purpose.
+    func currentDeliveredSampleRate() throws -> Double {
+        guard outputDeviceID != kAudioObjectUnknown else {
+            throw AudioCaptureError.systemCaptureNotRunning
+        }
+        return try CoreAudioProperties.nominalSampleRate(outputDeviceID)
+    }
+
     /// Re-reads `kAudioTapPropertyFormat` and returns the tap's current rate.
     ///
     /// `prepare()` runs at launch, so the rate it captured describes whichever
