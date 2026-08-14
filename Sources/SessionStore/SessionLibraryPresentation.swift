@@ -448,6 +448,31 @@ public struct SessionLibraryOperations: @unchecked Sendable {
         return try trash.move(session.directory)
     }
 
+    /// Renames a session folder to match a title, without touching the
+    /// manifest. Used by automatic titling, which has already stored the title
+    /// and must not lose it if the directory cannot be moved.
+    @discardableResult
+    public func renameDirectory(
+        at directory: URL,
+        to proposedTitle: String,
+        createdAt: Date
+    ) throws -> URL {
+        let title = cleanTitle(proposedTitle)
+        guard !title.isEmpty else {
+            throw SessionLibraryOperationError.invalidTitle
+        }
+        let parent = directory.deletingLastPathComponent()
+        let baseName = folderBaseName(title: title, date: createdAt)
+        let destination = availableDirectory(in: parent, baseName: baseName)
+        guard
+            destination.standardizedFileURL != directory.standardizedFileURL
+        else {
+            return directory
+        }
+        try fileManager.moveItem(at: directory, to: destination)
+        return destination
+    }
+
     private func cleanTitle(_ title: String) -> String {
         title.components(separatedBy: CharacterSet(charactersIn: "/:"))
             .joined(separator: "-")

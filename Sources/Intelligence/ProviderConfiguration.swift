@@ -125,6 +125,17 @@ public enum IntelligenceProviderPresets {
     }
 }
 
+/// Whether a provider runs on this Mac.
+///
+/// Host locality, not key requirement, decides whether meeting text leaves the
+/// machine: a keyless remote endpoint is still remote.
+public enum IntelligenceProviderLocality {
+    public static func isLocal(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+}
+
 public struct CustomIntelligenceProvider: Codable, Hashable, Identifiable,
     Sendable
 {

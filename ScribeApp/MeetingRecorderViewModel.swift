@@ -1400,6 +1400,10 @@ final class MeetingRecorderViewModel: ObservableObject {
                     to: sessionDirectory
                 )
                 transcriptSegments = completedSegments
+                await titleSessionIfNeeded(
+                    in: sessionDirectory,
+                    transcript: completedSegments
+                )
                 await reconcileSessionLibrary()
             } catch is CancellationError {
                 transcriptionState = .failed(message: "Cancelled")
@@ -1411,6 +1415,191 @@ final class MeetingRecorderViewModel: ObservableObject {
                 await refreshSuggestedAvailableModel(for: selection)
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    // MARK: - Session titles
+
+    /// Sessions whose title an automatic pass is still allowed to replace.
+    /// Existing sessions are never rewritten on launch; this backs an explicit
+    /// action with a confirmation naming how many folders will be renamed.
+    var sessionsAwaitingTitles: [SessionLibraryItem] {
+        sessionLibraryItems.filter { session in
+            guard
+                session.isAvailable,
+                let manifest = try? CaptureSessionManifest.load(
+                    from: session.directory
+                )
+            else { return false }
+            return manifest.titleSource.isReplaceableByGeneration
+        }
+    }
+
+    @Published var isGeneratingSessionTitles = false
+
+    func generateTitlesForUntitledSessions() {
+        guard !isGeneratingSessionTitles else { return }
+        let candidates = sessionsAwaitingTitles
+        guard !candidates.isEmpty else {
+            errorMessage = ScribeCopy.SessionTitles.noUntitledSessions
+            return
+        }
+
+        isGeneratingSessionTitles = true
+        Task {
+            var renamed = 0
+            for session in candidates {
+                let before = try? CaptureSessionManifest.load(
+                    from: session.directory
+                )
+                let segments = (
+                    try? SessionReadingPresentation().loadSegments(
+                        from: session.directory.appendingPathComponent(
+                            "transcript.json"
+                        )
+                    )
+                ) ?? []
+                guard !segments.isEmpty else { continue }
+                await titleSessionIfNeeded(
+                    in: session.directory,
+                    transcript: segments
+                )
+                let after = try? CaptureSessionManifest.load(
+                    from: session.directory
+                )
+                if before?.title != after?.title { renamed += 1 }
+            }
+            isGeneratingSessionTitles = false
+            errorMessage = ScribeCopy.SessionTitles.generated(renamed)
+            await reconcileSessionLibrary()
+        }
+    }
+
+
+    @AppStorage("Scribe.sessionTitles.allowsCloud")
+    var allowsCloudTitling = false
+
+    /// Names a session from its own content once a transcript exists.
+    ///
+    /// Never blocks or fails the session: any failure leaves the
+    /// date-and-time title in place and nothing else is affected.
+    func titleSessionIfNeeded(
+        in directory: URL,
+        transcript: [TranscriptSegment]
+    ) async {
+        guard let manifest = try? CaptureSessionManifest.load(from: directory)
+        else { return }
+        guard manifest.titleSource.isReplaceableByGeneration else { return }
+
+        let summaryURL = directory.appendingPathComponent(
+            "summary.md",
+            isDirectory: false
+        )
+        let summaryMarkdown = try? String(
+            contentsOf: summaryURL,
+            encoding: .utf8
+        )
+
+        let policy = SessionTitlingPolicy(
+            settings: SessionTitlingSettings(
+                allowsCloudTitling: allowsCloudTitling
+            ),
+            localCompletion: titlingCompletion(requiringLocal: true),
+            cloudCompletion: allowsCloudTitling
+                ? titlingCompletion(requiringLocal: false)
+                : nil
+        )
+
+        let input = SessionTitlingInput(
+            summaryMarkdown: summaryMarkdown,
+            transcript: transcript,
+            currentTitleSource: manifest.titleSource
+        )
+        guard let derived = await policy.derivedTitle(for: input) else {
+            return
+        }
+
+        let createdAt = manifest.createdAt
+        let applier = SessionTitleApplier { sessionDirectory, title in
+            try SessionLibraryOperations().renameDirectory(
+                at: sessionDirectory,
+                to: title,
+                createdAt: createdAt
+            )
+        }
+        guard
+            let outcome = try? await applier.apply(derived, to: directory)
+        else { return }
+
+        if case let .titledButFolderNotRenamed(title, reason) = outcome {
+            errorMessage = ScribeCopy.SessionTitles.folderRenameFailed(
+                title: title.title,
+                reason: reason
+            )
+        }
+        sessionContentRevision &+= 1
+        await reconcileSessionLibrary()
+    }
+
+    /// A completion closure for the configured provider, or nil when that
+    /// provider's locality does not match what the caller allows.
+    private func titlingCompletion(
+        requiringLocal: Bool
+    ) -> SessionTitlingPolicy.Completion? {
+        let settingsStore = IntelligenceProviderSettingsStore()
+        let settings = settingsStore.load()
+        let keyStore = KeychainAPIKeyStore()
+        let providerID = settings.selectedProviderID
+        let credential = keyStore.credential(for: providerID)
+
+        let provider: (any IntelligenceProvider)?
+        let baseURL: URL?
+        if let preset = IntelligenceProviderPresets.all.first(where: {
+            $0.id == providerID
+        }) {
+            provider = preset.provider(credential: credential)
+            baseURL = preset.baseURL
+        } else if let custom = settings.customProviders.first(where: {
+            $0.id == providerID
+        }) {
+            provider = custom.provider(credential: credential)
+            baseURL = custom.baseURL
+        } else {
+            provider = nil
+            baseURL = nil
+        }
+
+        guard let provider, let baseURL else { return nil }
+        let isLocal = IntelligenceProviderLocality.isLocal(baseURL)
+        guard isLocal == requiringLocal else { return nil }
+
+        // Custom providers carry their own model; presets are asked what they
+        // offer. A titling attempt that cannot resolve a model simply does
+        // not run, leaving the date-and-time title in place.
+        let configuredModel = settings.customProviders.first(where: {
+            $0.id == providerID
+        })?.model
+
+        return { prompt in
+            let model: LLMModel
+            if let configuredModel {
+                model = configuredModel
+            } else if let first = try await provider.availableModels().first {
+                model = first
+            } else {
+                throw IntelligenceProviderError.emptyModelList
+            }
+            var reply = ""
+            let stream = provider.complete(
+                system: "You write short factual titles.",
+                messages: [LLMMessage(role: .user, content: prompt)],
+                model: model
+            )
+            for try await chunk in stream {
+                reply += chunk
+                if reply.count > 200 { break }
+            }
+            return reply
         }
     }
 
@@ -1469,6 +1658,10 @@ final class MeetingRecorderViewModel: ObservableObject {
                             preservedPath: $0
                         )
                     } ?? ScribeCopy.Reading.firstTranscriptionComplete
+                )
+                await titleSessionIfNeeded(
+                    in: session.directory,
+                    transcript: segments
                 )
                 sessionContentRevision &+= 1
                 await reconcileSessionLibrary()
@@ -2686,6 +2879,10 @@ final class MeetingRecorderViewModel: ObservableObject {
                         to: sessionDirectory
                     )
                     transcriptSegments = rowsReadyForPersistence.map(\.segment)
+                    await titleSessionIfNeeded(
+                        in: sessionDirectory,
+                        transcript: transcriptSegments
+                    )
                     await reconcileSessionLibrary()
                 } catch {
                     failures.append(

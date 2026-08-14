@@ -14,6 +14,7 @@ public enum ScribeCopy {
         public static let create = "Create"
         public static let cancel = "Cancel"
         public static let settings = "Settings"
+        public static let sessionTitles = "Session titles"
         public static let search = "Search"
         public static let searchShortcut = "⌘K"
         public static let dropToImport = "Drop to import"
@@ -382,6 +383,38 @@ public enum ScribeCopy {
             "Enter a valid provider base URL without credentials, a query, or a fragment."
         public static let insecureProviderURL =
             "Remote providers must use HTTPS. HTTP is allowed only for localhost."
+    }
+
+    public enum SessionTitles {
+        public static let cloudTitlingToggle =
+            "Generate session titles using a cloud provider"
+        public static let cloudTitlingExplanation =
+            "Off by default. Titles are normally built on this Mac, from an existing summary or from the words in the transcript. Turning this on sends the first few minutes of a transcript to the selected cloud provider when no local source can name the session."
+
+        public static let generateForUntitled = "Generate titles for untitled sessions…"
+
+        public static func confirmGenerate(_ count: Int) -> String {
+            count == 1
+                ? "Generate a title for 1 session? Its folder will be renamed."
+                : "Generate titles for \(count) sessions? Their folders will be renamed."
+        }
+
+        public static let confirmGenerateAction = "Generate titles"
+        public static let noUntitledSessions =
+            "Every session already has a title."
+
+        public static func generated(_ count: Int) -> String {
+            count == 1
+                ? "Renamed 1 session."
+                : "Renamed \(count) sessions."
+        }
+
+        public static func folderRenameFailed(
+            title: String,
+            reason: String
+        ) -> String {
+            "Saved the title “\(title)”, but the session folder couldn't be renamed to match: \(reason)"
+        }
     }
 
     public enum SummaryTemplates {

@@ -585,6 +585,8 @@ struct RecordingView: View {
 
                 ProviderSettingsView()
 
+                SessionTitleSettingsView(recorder: recorder)
+
                 SummaryTemplateSettingsView()
 
                 Label(
@@ -1194,5 +1196,49 @@ private struct ErrorMessageView: View {
             .foregroundStyle(.primary)
             .textSelection(.enabled)
             .accessibilityLabel("Error: \(message)")
+    }
+}
+
+
+private struct SessionTitleSettingsView: View {
+    @ObservedObject var recorder: MeetingRecorderViewModel
+    @State private var showsConfirmation = false
+
+    var body: some View {
+        GroupBox(ScribeCopy.Shell.sessionTitles) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Off by default. Titles are built on this Mac unless the
+                // user explicitly allows a cloud provider to see a transcript.
+                Toggle(
+                    ScribeCopy.SessionTitles.cloudTitlingToggle,
+                    isOn: $recorder.allowsCloudTitling
+                )
+                Text(ScribeCopy.SessionTitles.cloudTitlingExplanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                Button(ScribeCopy.SessionTitles.generateForUntitled) {
+                    showsConfirmation = true
+                }
+                .disabled(recorder.isGeneratingSessionTitles)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .confirmationDialog(
+            ScribeCopy.SessionTitles.confirmGenerate(
+                recorder.sessionsAwaitingTitles.count
+            ),
+            isPresented: $showsConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(ScribeCopy.SessionTitles.confirmGenerateAction) {
+                recorder.generateTitlesForUntitledSessions()
+            }
+            Button(ScribeCopy.Shell.cancel, role: .cancel) {}
+        }
     }
 }

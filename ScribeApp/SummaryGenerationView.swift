@@ -228,8 +228,7 @@ final class SummaryGenerationController: ObservableObject {
     }
 
     private static func isLocal(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+        IntelligenceProviderLocality.isLocal(url)
     }
 
     private func preferredModel(in models: [LLMModel]) -> LLMModel? {
